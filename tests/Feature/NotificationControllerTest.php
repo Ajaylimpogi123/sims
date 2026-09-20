@@ -81,4 +81,38 @@ class NotificationControllerTest extends TestCase
     {
         $this->get('/notifications')->assertRedirect(route('login', absolute: false));
     }
+
+    public function test_notifications_with_identical_timestamps_still_return_newest_first(): void
+    {
+        $user = User::factory()->create();
+        $tiedTimestamp = now();
+
+        $first = Notification::factory()->create([
+            'user_id' => $user->id,
+            'title' => 'First',
+            'created_at' => $tiedTimestamp,
+        ]);
+        $second = Notification::factory()->create([
+            'user_id' => $user->id,
+            'title' => 'Second',
+            'created_at' => $tiedTimestamp,
+        ]);
+        $third = Notification::factory()->create([
+            'user_id' => $user->id,
+            'title' => 'Third',
+            'created_at' => $tiedTimestamp,
+        ]);
+
+        $ids = $user->notifications()->pluck('id')->all();
+
+        $this->assertSame([$third->id, $second->id, $first->id], $ids);
+
+        $this->actingAs($user)
+            ->get('/notifications')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('notifications.data.0.id', $third->id)
+                ->where('notifications.data.1.id', $second->id)
+                ->where('notifications.data.2.id', $first->id)
+            );
+    }
 }

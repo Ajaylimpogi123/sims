@@ -40,7 +40,9 @@ class User extends Authenticatable
      */
     public function notifications()
     {
-        return $this->hasMany(Notification::class)->latest();
+        return $this->hasMany(Notification::class)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
     }
 
     public function unreadNotificationsCount(): int

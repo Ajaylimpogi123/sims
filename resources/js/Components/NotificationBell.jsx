@@ -18,15 +18,13 @@ export function NotificationBell() {
     const markRead = (notification, e) => {
         e.preventDefault();
 
-        if (!notification.read_at) {
-            router.patch(
-                route("notifications.read", notification.id),
-                {},
-                { preserveScroll: true },
-            );
-        }
+        if (notification.read_at) return;
 
-        router.visit(route("notifications.index"));
+        router.patch(
+            route("notifications.read", notification.id),
+            {},
+            { preserveScroll: true },
+        );
     };
 
     const markAllRead = (e) => {
