@@ -45,12 +45,17 @@ function reportPeriod(report) {
     return `${formatLongDate(report.period_start)} — ${formatLongDate(report.period_end)}`;
 }
 
+function capitalize(value) {
+    if (!value) return value;
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export default function Index({ reports }) {
     const exportData = reports.map((report) => ({
         student_name: report.student?.user?.name || "-",
-        type: report.type,
+        type: capitalize(report.type),
         period: reportPeriod(report),
-        status: report.status,
+        status: capitalize(report.status),
     }));
 
     return (
