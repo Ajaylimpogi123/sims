@@ -27,25 +27,31 @@ class HandleInertiaRequests extends Middleware
      *
      * @return array<string, mixed>
      */
-
-
     public function share(Request $request): array
-{
-    return [
-        ...parent::share($request),
-        'auth' => [
-            'user' => $request->user(),
-        ],
-        'flash' => fn () => [
-            'success' => $request->session()->get('success'),
-            'error' => $request->session()->get('error'),
-            'sale_id' => $request->session()->get('sale_id'),
-        ],
-        'notifications' => fn () => [
-            'pendingStockTransfers' => $request->user()?->role_id === 2
-                ? \App\Models\StockTransfer::countPendingForApprovers()
+    {
+        return [
+            ...parent::share($request),
+            'auth' => [
+                'user' => $request->user(),
+            ],
+            'flash' => fn () => [
+                'success' => $request->session()->get('success'),
+                'error' => $request->session()->get('error'),
+                'sale_id' => $request->session()->get('sale_id'),
+            ],
+            'pendingApprovalsCount' => fn () => in_array($request->user()?->role_id, [2, 4], true)
+                ? \App\Models\Attendance::query()
+                    ->where(fn ($query) => $query
+                        ->where('time_in_status', 'pending')
+                        ->orWhere('time_out_status', 'pending'))
+                    ->count()
                 : 0,
-        ],
-    ];
-}
+            'unreadNotificationsCount' => fn () => $request->user()
+                ? $request->user()->notifications()->unread()->count()
+                : 0,
+            'recentNotifications' => fn () => $request->user()
+                ? $request->user()->notifications()->limit(5)->get()
+                : [],
+        ];
+    }
 }
