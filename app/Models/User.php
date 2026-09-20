@@ -2,29 +2,19 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use App\Models\Branch;
-use App\Models\Role;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'email',
         'password',
         'role_id',
-        'branch_id',
         'status',
     ];
 
@@ -33,41 +23,44 @@ class User extends Authenticatable
         return $this->belongsTo(Role::class);
     }
 
-    // public function branch()
-    // {
-    //     return $this->belongsTo(Branch::class);
-    // }
+    public function student()
+    {
+        return $this->hasOne(Student::class);
+    }
 
-    
-    public function branch()
-{
-    return $this->belongsTo(Branch::class, 'branch_id');
-}
+    public function supervisedStudents()
+    {
+        return $this->hasMany(Student::class, 'supervisor_id');
+    }
+
+    /**
+     * SIMS uses its own lightweight Notification model/table instead of
+     * Laravel's polymorphic database notifications, so this intentionally
+     * overrides Notifiable::notifications().
+     */
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class)->latest();
+    }
+
+    public function unreadNotificationsCount(): int
+    {
+        return $this->notifications()->unread()->count();
+    }
 
     public function dashboardRouteName(): string
     {
         return match ((int) $this->role_id) {
-            2 => 'admin-dashboard',
-            3 => 'superadmin-dashboard',
+            4 => 'admin-dashboard',
             default => 'dashboard',
         };
     }
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
