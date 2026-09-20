@@ -8,7 +8,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Clock, FileText, Building2 } from "lucide-react";
-import { formatLongDate } from "@/lib/dates";
+import { formatLongDate, formatTime } from "@/lib/dates";
 import StatCard from "./StatCard";
 import HoursProgressBar from "./HoursProgressBar";
 
@@ -80,9 +80,9 @@ export default function StudentSummary({
                 <CardContent>
                     {todayAttendance ? (
                         <p className="text-sm text-muted-foreground">
-                            Time In: {todayAttendance.time_in ?? "—"} (
+                            Time In: {formatTime(todayAttendance.time_in)} (
                             {todayAttendance.time_in_status ?? "not submitted"}) · Time
-                            Out: {todayAttendance.time_out ?? "—"} (
+                            Out: {formatTime(todayAttendance.time_out)} (
                             {todayAttendance.time_out_status ?? "not submitted"})
                         </p>
                     ) : (
