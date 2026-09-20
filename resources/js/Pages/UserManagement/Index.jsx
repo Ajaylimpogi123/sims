@@ -5,7 +5,7 @@ import RegistrationForm from "./Partials/RegistrationForm";
 import UsersTable from "./Partials/UsersTable";
 import { useRegistrationAlerts } from "./Hooks/useRegistrationAlerts";
 
-export default function Index({ branches, roles, users, filters }) {
+export default function Index({ roles, users, filters }) {
     useRegistrationAlerts();
 
     useEffect(() => {
@@ -27,15 +27,13 @@ export default function Index({ branches, roles, users, filters }) {
                             User Management
                         </h1>
                         <p className="mt-2 text-sm text-white">
-                            Register users and manage accounts by role and
-                            branch
+                            Register users and manage accounts by role
                         </p>
                     </div>
 
-                    <RegistrationForm branches={branches} roles={roles} />
+                    <RegistrationForm roles={roles} />
                     <UsersTable
                         users={users}
-                        branches={branches}
                         roles={roles}
                         filters={filters}
                     />

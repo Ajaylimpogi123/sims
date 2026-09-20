@@ -9,7 +9,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/Components/ui/card";
-import StatusBadge from "@/Pages/CustomerManagement/Partials/StatusBadge";
+import StatusBadge from "@/Components/StatusBadge";
 import { router, useForm, usePage } from "@inertiajs/react";
 import { Pencil, UserCheck, UserX } from "lucide-react";
 import { useEffect, useMemo } from "react";
@@ -18,7 +18,7 @@ import EditModal from "./EditModal";
 
 const SUPERADMIN_ROLE_ID = 3;
 
-export default function UsersTable({ users, branches, roles, filters }) {
+export default function UsersTable({ users, roles, filters }) {
     const { auth } = usePage().props;
     const roleId = auth?.user?.role_id;
     const currentUserId = auth?.user?.id;
@@ -42,14 +42,12 @@ export default function UsersTable({ users, branches, roles, filters }) {
     );
     const { data: filterData, setData: setFilterData } = useForm({
         role_id: filters?.role_id || "",
-        branch_id: filters?.branch_id || "",
         status: filters?.status || "",
     });
 
     useEffect(() => {
         setFilterData({
             role_id: filters?.role_id || "",
-            branch_id: filters?.branch_id || "",
             status: filters?.status || "",
         });
     }, [filters]);
@@ -59,7 +57,6 @@ export default function UsersTable({ users, branches, roles, filters }) {
             route("user-management.index"),
             {
                 role_id: overrides.role_id ?? filterData.role_id,
-                branch_id: overrides.branch_id ?? filterData.branch_id,
                 status: overrides.status ?? filterData.status,
             },
             {
@@ -72,7 +69,7 @@ export default function UsersTable({ users, branches, roles, filters }) {
     };
 
     const clearFilters = () => {
-        setFilterData({ role_id: "", branch_id: "", status: "" });
+        setFilterData({ role_id: "", status: "" });
         router.get(
             route("user-management.index"),
             {},
@@ -90,7 +87,6 @@ export default function UsersTable({ users, branches, roles, filters }) {
             route("user-management.index"),
             {
                 role_id: filterData.role_id,
-                branch_id: filterData.branch_id,
                 status: filterData.status,
                 page,
             },
@@ -126,8 +122,7 @@ export default function UsersTable({ users, branches, roles, filters }) {
         });
     };
 
-    const hasActiveFilters =
-        filterData.role_id || filterData.branch_id || filterData.status;
+    const hasActiveFilters = filterData.role_id || filterData.status;
 
     return (
         <Card>
@@ -152,27 +147,6 @@ export default function UsersTable({ users, branches, roles, filters }) {
                             {availableRoles.map((role) => (
                                 <option key={role.id} value={role.id}>
                                     {role.role_name}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="flex-1">
-                        <InputLabel htmlFor="filter_branch" value="Filter by Branch" />
-                        <select
-                            id="filter_branch"
-                            value={filterData.branch_id}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            onChange={(e) => {
-                                const branch_id = e.target.value;
-                                setFilterData("branch_id", branch_id);
-                                applyFilters({ branch_id });
-                            }}
-                        >
-                            <option value="">All Branches</option>
-                            {branches.map((branch) => (
-                                <option key={branch.id} value={branch.id}>
-                                    {branch.branch_name}
                                 </option>
                             ))}
                         </select>
@@ -210,7 +184,6 @@ export default function UsersTable({ users, branches, roles, filters }) {
                                 <TableHead>Name</TableHead>
                                 <TableHead>Email</TableHead>
                                 <TableHead>Role</TableHead>
-                                <TableHead>Branch</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
@@ -230,9 +203,6 @@ export default function UsersTable({ users, branches, roles, filters }) {
                                                 {user.role?.role_name || "-"}
                                             </TableCell>
                                             <TableCell>
-                                                {user.branch?.branch_name || "-"}
-                                            </TableCell>
-                                            <TableCell>
                                                 <StatusBadge
                                                     status={
                                                         user.status || "active"
@@ -243,7 +213,6 @@ export default function UsersTable({ users, branches, roles, filters }) {
                                                 <div className="flex items-center justify-end gap-2">
                                                     <EditModal
                                                         user={user}
-                                                        branches={branches}
                                                         roles={roles}
                                                     >
                                                         <Button
@@ -292,7 +261,7 @@ export default function UsersTable({ users, branches, roles, filters }) {
                                 })
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center">
+                                    <TableCell colSpan={5} className="h-24 text-center">
                                         No users found.
                                     </TableCell>
                                 </TableRow>

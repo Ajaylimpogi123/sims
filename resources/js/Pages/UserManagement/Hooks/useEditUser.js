@@ -7,7 +7,6 @@ export default function useEditUser(user) {
     const { data, setData, patch, errors, processing, reset } = useForm({
         name: "",
         email: "",
-        branch_id: "",
         role_id: "",
         password: "",
         password_confirmation: "",
@@ -19,7 +18,6 @@ export default function useEditUser(user) {
         setData({
             name: user.name || "",
             email: user.email || "",
-            branch_id: user.branch_id ? String(user.branch_id) : "",
             role_id: user.role_id ? String(user.role_id) : "",
             password: "",
             password_confirmation: "",

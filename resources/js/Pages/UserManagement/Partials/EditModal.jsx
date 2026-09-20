@@ -17,7 +17,7 @@ import useEditUser from "../Hooks/useEditUser";
 
 const SUPERADMIN_ROLE_ID = 3;
 
-export default function EditModal({ user, branches, roles, children }) {
+export default function EditModal({ user, roles, children }) {
     const { auth } = usePage().props;
     const roleId = auth?.user?.role_id;
 
@@ -86,36 +86,6 @@ export default function EditModal({ user, branches, roles, children }) {
                                 />
                                 <InputError
                                     message={errors.email}
-                                    className="mt-2"
-                                />
-                            </div>
-
-                            <div>
-                                <InputLabel
-                                    htmlFor="edit_branch_id"
-                                    value="Branch"
-                                />
-                                <select
-                                    id="edit_branch_id"
-                                    value={data.branch_id}
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                    onChange={(e) =>
-                                        setData("branch_id", e.target.value)
-                                    }
-                                    required
-                                >
-                                    <option value="">- Select a Branch -</option>
-                                    {branches.map((branch) => (
-                                        <option
-                                            key={branch.id}
-                                            value={branch.id}
-                                        >
-                                            {branch.branch_name}
-                                        </option>
-                                    ))}
-                                </select>
-                                <InputError
-                                    message={errors.branch_id}
                                     className="mt-2"
                                 />
                             </div>

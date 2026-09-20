@@ -9,7 +9,7 @@ import { showRegistrationError } from "../Hooks/useRegistrationAlerts";
 
 const SUPERADMIN_ROLE_ID = 3;
 
-export default function RegistrationForm({ branches, roles }) {
+export default function RegistrationForm({ roles }) {
     const { auth } = usePage().props;
     const roleId = auth?.user?.role_id;
 
@@ -25,14 +25,13 @@ export default function RegistrationForm({ branches, roles }) {
         email: "",
         password: "",
         password_confirmation: "",
-        branch_id: "",
         role_id: "",
     });
 
     const submit = (e) => {
         e.preventDefault();
 
-        post(route("register"), {
+        post(route("user-management.store"), {
             onError: (formErrors) => {
                 showRegistrationError(formErrors);
             },
@@ -75,31 +74,6 @@ export default function RegistrationForm({ branches, roles }) {
                             required
                         />
                         <InputError message={errors.email} className="mt-2" />
-                    </div>
-
-                    <div className="mt-4">
-                        <InputLabel htmlFor="branch_id" value="Branch" />
-                        <select
-                            id="branch_id"
-                            name="branch_id"
-                            value={data.branch_id}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            onChange={(e) =>
-                                setData("branch_id", e.target.value)
-                            }
-                            required
-                        >
-                            <option value="">- Select a Branch -</option>
-                            {branches.map((branch) => (
-                                <option key={branch.id} value={branch.id}>
-                                    {branch.branch_name}
-                                </option>
-                            ))}
-                        </select>
-                        <InputError
-                            message={errors.branch_id}
-                            className="mt-2"
-                        />
                     </div>
 
                     <div className="mt-4">
