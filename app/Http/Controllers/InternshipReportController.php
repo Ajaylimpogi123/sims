@@ -1,0 +1,126 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\InternshipReport;
+use App\Models\Student;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class InternshipReportController extends Controller
+{
+    public function index(): Response
+    {
+        $student = Auth::user()->student;
+
+        $reports = $student->internshipReports()
+            ->orderByDesc('period_start')
+            ->get();
+
+        return Inertia::render('InternshipReports/Index', [
+            'reports' => $reports,
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $this->validateReport($request);
+
+        $student = Auth::user()->student;
+
+        $this->guardAgainstDuplicate($student, $validated);
+
+        if ($request->hasFile('attachment')) {
+            $validated['attachment_path'] = $request->file('attachment')->store('report-attachments', 'public');
+            $validated['attachment_original_name'] = $request->file('attachment')->getClientOriginalName();
+        }
+
+        $validated['status'] = 'pending';
+
+        $student->internshipReports()->create($validated);
+
+        return redirect()->route('reports.index')
+            ->with('success', 'Report submitted for review.');
+    }
+
+    public function update(Request $request, InternshipReport $report): RedirectResponse
+    {
+        $student = Auth::user()->student;
+
+        abort_unless(
+            $report->student_id === $student->id && $report->status === 'pending',
+            403,
+        );
+
+        $validated = $this->validateReport($request);
+
+        $this->guardAgainstDuplicate($student, $validated, $report->id);
+
+        if ($request->hasFile('attachment')) {
+            if ($report->attachment_path) {
+                Storage::disk('public')->delete($report->attachment_path);
+            }
+
+            $validated['attachment_path'] = $request->file('attachment')->store('report-attachments', 'public');
+            $validated['attachment_original_name'] = $request->file('attachment')->getClientOriginalName();
+        }
+
+        $report->update($validated);
+
+        return redirect()->route('reports.index')
+            ->with('success', 'Report updated.');
+    }
+
+    public function destroy(InternshipReport $report): RedirectResponse
+    {
+        $student = Auth::user()->student;
+
+        abort_unless(
+            $report->student_id === $student->id && $report->status === 'pending',
+            403,
+        );
+
+        if ($report->attachment_path) {
+            Storage::disk('public')->delete($report->attachment_path);
+        }
+
+        $report->delete();
+
+        return redirect()->route('reports.index')
+            ->with('success', 'Report deleted.');
+    }
+
+    private function validateReport(Request $request): array
+    {
+        return $request->validate([
+            'type' => ['required', 'in:daily,weekly'],
+            'period_start' => ['required', 'date'],
+            'period_end' => ['required', 'date', 'after_or_equal:period_start'],
+            'content' => ['required', 'string'],
+            'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+        ]);
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function guardAgainstDuplicate(Student $student, array $validated, ?int $ignoreReportId = null): void
+    {
+        $duplicateExists = $student->internshipReports()
+            ->where('period_start', $validated['period_start'])
+            ->where('type', $validated['type'])
+            ->when($ignoreReportId, fn ($query) => $query->where('id', '!=', $ignoreReportId))
+            ->exists();
+
+        if ($duplicateExists) {
+            throw ValidationException::withMessages([
+                'period_start' => "You've already submitted a {$validated['type']} report for this period.",
+            ]);
+        }
+    }
+}
