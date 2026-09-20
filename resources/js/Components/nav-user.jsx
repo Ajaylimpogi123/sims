@@ -80,6 +80,8 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
 
+            {/* Notifications now live in the bell dropdown in SiteHeader
+                (see NotificationBell.jsx) rather than here. */}
             {/* <DropdownMenuGroup>
               <DropdownMenuItem>
                 <UserCircleIcon />
@@ -88,10 +90,6 @@ export function NavUser({
               <DropdownMenuItem>
                 <CreditCardIcon />
                 Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <BellIcon />
-                Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup> */}
             <DropdownMenuSeparator />
