@@ -91,11 +91,32 @@ class RegistrationTest extends TestCase
         ]);
     }
 
-    public function test_non_admin_cannot_register_a_user_via_user_management(): void
+    public function test_coordinator_can_also_register_a_user_via_user_management(): void
     {
+        // /user-management/* is role:2,4 (Coordinator + Admin), not
+        // Admin-only, despite the name — confirmed intentional.
         $coordinator = User::factory()->create(['role_id' => 2]);
 
-        $this->actingAs($coordinator)
+        $response = $this->actingAs($coordinator)->post('/user-management/create', [
+            'name' => 'New Student',
+            'email' => 'coordinator.created@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'role_id' => 1,
+        ]);
+
+        $response->assertRedirect(route('user-management.index', absolute: false));
+        $this->assertDatabaseHas('users', [
+            'email' => 'coordinator.created@example.com',
+            'role_id' => 1,
+        ]);
+    }
+
+    public function test_student_cannot_register_a_user_via_user_management(): void
+    {
+        $student = User::factory()->create(['role_id' => 1]);
+
+        $this->actingAs($student)
             ->post('/user-management/create', [
                 'name' => 'Should Not Be Created',
                 'email' => 'blocked@example.com',

@@ -35,11 +35,11 @@ class UserManagementTest extends TestCase
         );
     }
 
-    public function test_non_admin_cannot_view_user_management_page(): void
+    public function test_student_cannot_view_user_management_page(): void
     {
-        $coordinator = User::factory()->create(['role_id' => 2]);
+        $student = User::factory()->create(['role_id' => 1]);
 
-        $this->actingAs($coordinator)
+        $this->actingAs($student)
             ->get('/user-management')
             ->assertForbidden();
     }
@@ -102,5 +102,59 @@ class UserManagementTest extends TestCase
         $this->actingAs($admin)
             ->patch("/user-management/{$admin->id}/toggle-status")
             ->assertForbidden();
+    }
+
+    public function test_coordinators_user_list_never_includes_administrator_rows(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $otherAdmin = User::factory()->create(['role_id' => 4]);
+        User::factory()->create(['role_id' => 1]);
+        User::factory()->create(['role_id' => 3]);
+
+        $response = $this->actingAs($coordinator)->get('/user-management');
+
+        $response->assertOk();
+        $response->assertInertia(function (Assert $page) use ($otherAdmin) {
+            $page->component('UserManagement/Index');
+
+            $page->where('roles', fn ($roles) => collect($roles)
+                ->doesntContain(fn ($role) => (int) $role['id'] === 4));
+
+            $page->where('users.data', fn ($users) => collect($users)
+                ->doesntContain(fn ($user) => (int) $user['id'] === $otherAdmin->id
+                    || (int) $user['role_id'] === 4));
+        });
+    }
+
+    public function test_admins_user_list_still_includes_administrator_rows(): void
+    {
+        $admin = User::factory()->create(['role_id' => 4]);
+        $otherAdmin = User::factory()->create(['role_id' => 4]);
+
+        $response = $this->actingAs($admin)->get('/user-management');
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('UserManagement/Index')
+            ->where('users.data', fn ($users) => collect($users)
+                ->contains(fn ($user) => (int) $user['id'] === $otherAdmin->id))
+        );
+    }
+
+    public function test_pagination_total_reflects_the_filtered_count_for_a_coordinator(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        User::factory()->count(2)->create(['role_id' => 1]);
+        User::factory()->count(3)->create(['role_id' => 4]);
+
+        // 1 (coordinator, self) + 2 students = 3 non-admin users total;
+        // the 3 administrators must not count toward the total shown.
+        $response = $this->actingAs($coordinator)->get('/user-management');
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('UserManagement/Index')
+            ->where('users.total', 3)
+        );
     }
 }

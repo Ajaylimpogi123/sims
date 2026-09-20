@@ -12,34 +12,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/Components/ui/card";
 import StatusBadge from "@/Components/StatusBadge";
 import { router, useForm, usePage } from "@inertiajs/react";
 import { Pencil, UserCheck, UserX } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import Swal from "sweetalert2";
 import EditModal from "./EditModal";
 
-const SUPERADMIN_ROLE_ID = 3;
-
 export default function UsersTable({ users, roles, filters }) {
     const { auth } = usePage().props;
-    const roleId = auth?.user?.role_id;
     const currentUserId = auth?.user?.id;
 
     const { patch } = useForm();
 
-    const availableRoles = useMemo(
-        () =>
-            roleId === 2
-                ? roles.filter((role) => role.id !== SUPERADMIN_ROLE_ID)
-                : roles,
-        [roles, roleId],
-    );
+    // Administrator accounts are already excluded server-side (see
+    // UserController::index) whenever the viewer isn't an Administrator
+    // themselves, so `users`/`roles` here never contain them for a
+    // non-admin viewer — no client-side filtering needed (or safe, since
+    // that would only hide data already present in the page, not enforce
+    // anything).
+    const visibleUsers = users.data;
+    const availableRoles = roles;
 
-    const visibleUsers = useMemo(
-        () =>
-            roleId === 2
-                ? users.data.filter((user) => user.role_id !== SUPERADMIN_ROLE_ID)
-                : users.data,
-        [users.data, roleId],
-    );
     const { data: filterData, setData: setFilterData } = useForm({
         role_id: filters?.role_id || "",
         status: filters?.status || "",
@@ -132,7 +123,10 @@ export default function UsersTable({ users, roles, filters }) {
             <CardContent className="space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                     <div className="flex-1">
-                        <InputLabel htmlFor="filter_role" value="Filter by Role" />
+                        <InputLabel
+                            htmlFor="filter_role"
+                            value="Filter by Role"
+                        />
                         <select
                             id="filter_role"
                             value={filterData.role_id}
@@ -153,7 +147,10 @@ export default function UsersTable({ users, roles, filters }) {
                     </div>
 
                     <div className="flex-1">
-                        <InputLabel htmlFor="filter_status" value="Filter by Status" />
+                        <InputLabel
+                            htmlFor="filter_status"
+                            value="Filter by Status"
+                        />
                         <select
                             id="filter_status"
                             value={filterData.status}
@@ -171,7 +168,11 @@ export default function UsersTable({ users, roles, filters }) {
                     </div>
 
                     {hasActiveFilters && (
-                        <Button type="button" variant="outline" onClick={clearFilters}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={clearFilters}
+                        >
                             Clear Filters
                         </Button>
                     )}
@@ -185,7 +186,9 @@ export default function UsersTable({ users, roles, filters }) {
                                 <TableHead>Email</TableHead>
                                 <TableHead>Role</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
+                                <TableHead className="text-right">
+                                    Actions
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -261,7 +264,10 @@ export default function UsersTable({ users, roles, filters }) {
                                 })
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center">
+                                    <TableCell
+                                        colSpan={5}
+                                        className="h-24 text-center"
+                                    >
                                         No users found.
                                     </TableCell>
                                 </TableRow>
