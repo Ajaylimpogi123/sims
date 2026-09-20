@@ -70,4 +70,24 @@ class StudentManagementCapacityTest extends TestCase
             'company_id' => null,
         ]);
     }
+
+    public function test_student_update_succeeds_when_internship_schedule_is_omitted_entirely(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $student = Student::factory()->create(['internship_schedule' => 'Mon-Fri 9AM-5PM']);
+
+        $payload = $this->updatePayload($student, null);
+        unset($payload['internship_schedule']);
+
+        $response = $this->actingAs($coordinator)->patch(
+            "/student-management/{$student->id}",
+            $payload,
+        );
+
+        $response->assertRedirect(route('student-management.index', absolute: false));
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'internship_schedule' => null,
+        ]);
+    }
 }

@@ -72,7 +72,7 @@ class StudentController extends Controller
                 'course' => $validated['course'],
                 'section' => $validated['section'],
                 'company_id' => $validated['company_id'],
-                'internship_schedule' => $validated['internship_schedule'],
+                'internship_schedule' => $validated['internship_schedule'] ?? null,
             ]);
         });
 
