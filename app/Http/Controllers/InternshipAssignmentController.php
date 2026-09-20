@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,6 +14,8 @@ use Inertia\Response;
 
 class InternshipAssignmentController extends Controller
 {
+    public function __construct(private NotificationService $notifications) {}
+
     public function index(): Response
     {
         $students = Student::query()
@@ -67,7 +70,15 @@ class InternshipAssignmentController extends Controller
             }
         }
 
+        $hasChanges = collect($validated)->contains(
+            fn ($value, $key) => (string) $student->{$key} !== (string) $value,
+        );
+
         $student->update($validated);
+
+        if ($hasChanges) {
+            $this->notifications->assignmentUpdated($student->fresh(['user', 'company', 'supervisor']));
+        }
 
         return redirect()->route('internship-assignment.index')
             ->with('success', 'Internship assignment updated successfully.');

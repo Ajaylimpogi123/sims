@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\InternshipReport;
 use App\Models\Student;
+use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,6 +15,8 @@ use Inertia\Response;
 
 class InternshipReportController extends Controller
 {
+    public function __construct(private NotificationService $notifications) {}
+
     public function index(): Response
     {
         $student = Auth::user()->student;
@@ -42,7 +45,9 @@ class InternshipReportController extends Controller
 
         $validated['status'] = 'pending';
 
-        $student->internshipReports()->create($validated);
+        $report = $student->internshipReports()->create($validated);
+
+        $this->notifications->reportSubmitted($report);
 
         return redirect()->route('reports.index')
             ->with('success', 'Report submitted for review.');

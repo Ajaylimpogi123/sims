@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -10,6 +11,8 @@ use Inertia\Response;
 
 class AttendanceController extends Controller
 {
+    public function __construct(private NotificationService $notifications) {}
+
     public function index(): Response
     {
         $student = Auth::user()->student;
@@ -49,6 +52,8 @@ class AttendanceController extends Controller
         $record->recorded_by = Auth::id();
         $record->save();
 
+        $this->notifications->attendanceSubmitted($record, 'time_in');
+
         return redirect()->route('attendance.index')
             ->with('success', 'Time-in submitted for approval.');
     }
@@ -78,6 +83,8 @@ class AttendanceController extends Controller
         $record->note = null;
         $record->recorded_by = Auth::id();
         $record->save();
+
+        $this->notifications->attendanceSubmitted($record, 'time_out');
 
         return redirect()->route('attendance.index')
             ->with('success', 'Time-out submitted for approval.');
@@ -112,6 +119,8 @@ class AttendanceController extends Controller
         $record->note = $validated['note'];
         $record->recorded_by = Auth::id();
         $record->save();
+
+        $this->notifications->attendanceSubmitted($record, 'time_out');
 
         return redirect()->route('attendance.index')
             ->with('success', 'Emergency time-out submitted for approval.');
