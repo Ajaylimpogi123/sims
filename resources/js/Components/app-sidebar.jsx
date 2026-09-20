@@ -16,15 +16,11 @@ import {
     SearchIcon,
     SettingsIcon,
     UsersIcon,
-    UtensilsCrossed,
-    TableIcon,
-    Table,
-    Database,
-    LayoutGrid,
-    ClipboardList,
-    History,
-    Pill,
-    ShoppingCart,
+    Building2,
+    GraduationCap,
+    Handshake,
+    Clock,
+    ClipboardCheck,
 } from "lucide-react";
 
 import { NavDocuments } from "@/components/nav-documents";
@@ -42,17 +38,38 @@ import {
 } from "@/components/ui/sidebar";
 import { usePage } from "@inertiajs/react";
 
+// Role IDs: 1 = Student, 2 = Internship Coordinator, 3 = Supervisor, 4 = Administrator
+
 export function AppSidebar({ ...props }) {
-    const { auth, app, flash } = usePage().props;
+    const { auth, app, flash, pendingApprovalsCount } = usePage().props;
+
+    const pendingApprovalsItem = {
+        title: pendingApprovalsCount
+            ? `Pending Approvals (${pendingApprovalsCount})`
+            : "Pending Approvals",
+        url: route("attendance-approvals.index"),
+        icon: ClipboardCheck,
+    };
+
+    const reportReviewsItem = {
+        title: "Report Reviews",
+        url: route("report-reviews.index"),
+        icon: FileTextIcon,
+    };
+
+    const progressMonitoringItem = {
+        title: "Progress Monitoring",
+        url: route("progress-monitoring.index"),
+        icon: BarChartIcon,
+    };
 
     const userData = {
         name: auth?.user?.name || "Guest",
         email: auth?.user?.email || "guest@example.com",
-        avatar: auth?.user?.avatar || "/images/logo/Westpoint.png",
+        avatar: auth?.user?.avatar || "/images/logo/bcc-logo.jpg",
     };
 
     const roleId = auth?.user?.role_id;
-    // console.log("roleId raw:", roleId, "| type:", typeof roleId);
 
     const defaultNavMain = [
         {
@@ -60,90 +77,44 @@ export function AppSidebar({ ...props }) {
             url: route("dashboard"),
             icon: LayoutDashboardIcon,
         },
-        {
-            title: "Quotation",
-            url: route("quotations.index"),
-            icon: FolderIcon,
-        },
-        {
-            title: "Medicine Inventory",
-            url: route("medicine-inventory.index"),
-            icon: Pill,
-        },
-        {
-            title: "Customer Management",
-            url: route("customer-management.index"),
-            icon: UsersIcon,
-        },
-        {
-            title: "Point of Sale",
-            url: route("pos.index"),
-            icon: ShoppingCart,
-        },
-        {
-            title: "Order History",
-            url: route("history.index"),
-            icon: History,
-        },
-        {
-            title: "Stock Transfer",
-            url: route("stock-transfers.index"),
-            icon: ArrowUpCircleIcon,
-        },
     ];
 
-    //2 = Admin
-    //3 = Superadmin
-
     const roleNavMain =
-        roleId === 3
+        roleId === 4
             ? [
                   {
-                      title: "Branch management",
-                      url: route("branch-management.index"),
+                      title: "Dashboard",
+                      url: route("dashboard"),
                       icon: LayoutDashboardIcon,
                   },
                   {
-                      title: "Quotation",
-                      url: route("quotations.index"),
-                      icon: FolderIcon,
-                  },
-                  {
-                      title: "Medicine Inventory",
-                      url: route("medicine-inventory.index"),
-                      icon: Pill,
-                  },
-                  {
-                      title: "Point of Sale",
-                      url: route("pos.index"),
-                      icon: ShoppingCart,
-                  },
-                  {
-                      title: "Order History",
-                      url: route("history.index"),
-                      icon: History,
-                  },
-                  {
-                      title: "Stock Transfer",
-                      url: route("stock-transfers.index"),
-                      icon: ArrowUpCircleIcon,
-                  },
-                  {
-                      title: "Quotation",
-                      url: route("quotations.index"),
-                      icon: FolderIcon,
-                  },
-                  {
-                      title: "Reports",
-                      url: route("reports.index"),
-                      icon: BarChartIcon,
-                  },
-                  {
                       title: "User Management",
-                      url:
-                          route("user-management.index") + "#user-registration",
+                      url: route("user-management.index"),
                       icon: UserRound,
                   },
+                  {
+                      title: "Company Management",
+                      url: route("company-management.index"),
+                      icon: Building2,
+                  },
+                  {
+                      title: "Student Management",
+                      url: route("student-management.index"),
+                      icon: GraduationCap,
+                  },
+                  {
+                      title: "Internship Assignment",
+                      url: route("internship-assignment.index"),
+                      icon: Handshake,
+                  },
+                  {
+                      title: "Attendance Monitoring",
+                      url: route("attendance-monitoring.index"),
+                      icon: Clock,
+                  },
+                  pendingApprovalsItem,
+                  reportReviewsItem,
+                  progressMonitoringItem,
               ]
             : roleId === 2
               ? [
@@ -153,53 +124,66 @@ export function AppSidebar({ ...props }) {
                         icon: LayoutDashboardIcon,
                     },
                     {
-                        title: "Quotation",
-                        url: route("quotations.index"),
-                        icon: FolderIcon,
+                        title: "Company Management",
+                        url: route("company-management.index"),
+                        icon: Building2,
                     },
                     {
-                        title: "Medicine Inventory",
-                        url: route("medicine-inventory.index"),
-                        icon: Pill,
+                        title: "Student Management",
+                        url: route("student-management.index"),
+                        icon: GraduationCap,
                     },
                     {
-                        title: "Customer Management",
-                        url: route("customer-management.index"),
-                        icon: UsersIcon,
+                        title: "Internship Assignment",
+                        url: route("internship-assignment.index"),
+                        icon: Handshake,
                     },
                     {
-                        title: "Point of Sale",
-                        url: route("pos.index"),
-                        icon: ShoppingCart,
+                        title: "Attendance Monitoring",
+                        url: route("attendance-monitoring.index"),
+                        icon: Clock,
                     },
-                    {
-                        title: "Order History",
-                        url: route("history.index"),
-                        icon: History,
-                    },
-                    {
-                        title: "Stock Transfer",
-                        url: route("stock-transfers.index"),
-                        icon: ArrowUpCircleIcon,
-                    },
-                    {
-                        title: "Reports",
-                        url: route("reports.index"),
-                        icon: BarChartIcon,
-                    },
-                    {
-                        title: "User Management",
-                        url:
-                            route("user-management.index") +
-                            "#user-registration",
-                        icon: UserRound,
-                    },
+                    pendingApprovalsItem,
+                    reportReviewsItem,
+                    progressMonitoringItem,
                 ]
-              : defaultNavMain;
+              : roleId === 1
+                ? [
+                      {
+                          title: "Dashboard",
+                          url: route("dashboard"),
+                          icon: LayoutDashboardIcon,
+                      },
+                      {
+                          title: "My Attendance",
+                          url: route("attendance.index"),
+                          icon: Clock,
+                      },
+                      {
+                          title: "My Reports",
+                          url: route("reports.index"),
+                          icon: FileTextIcon,
+                      },
+                  ]
+                : roleId === 3
+                  ? [
+                        {
+                            title: "Dashboard",
+                            url: route("dashboard"),
+                            icon: LayoutDashboardIcon,
+                        },
+                        {
+                            title: "Attendance Monitoring",
+                            url: route("attendance-monitoring.index"),
+                            icon: Clock,
+                        },
+                        reportReviewsItem,
+                        progressMonitoringItem,
+                    ]
+                  : defaultNavMain;
 
     const navItems = {
         user: userData,
-
         navMain: roleNavMain,
         navClouds: [
             {
@@ -208,14 +192,8 @@ export function AppSidebar({ ...props }) {
                 isActive: true,
                 url: "#",
                 items: [
-                    {
-                        title: "Active Proposals",
-                        url: "#",
-                    },
-                    {
-                        title: "Archived",
-                        url: "#",
-                    },
+                    { title: "Active Proposals", url: "#" },
+                    { title: "Archived", url: "#" },
                 ],
             },
             {
@@ -223,14 +201,8 @@ export function AppSidebar({ ...props }) {
                 icon: FileTextIcon,
                 url: "#",
                 items: [
-                    {
-                        title: "Active Proposals",
-                        url: "#",
-                    },
-                    {
-                        title: "Archived",
-                        url: "#",
-                    },
+                    { title: "Active Proposals", url: "#" },
+                    { title: "Archived", url: "#" },
                 ],
             },
             {
@@ -238,50 +210,23 @@ export function AppSidebar({ ...props }) {
                 icon: FileCodeIcon,
                 url: "#",
                 items: [
-                    {
-                        title: "Active Proposals",
-                        url: "#",
-                    },
-                    {
-                        title: "Archived",
-                        url: "#",
-                    },
+                    { title: "Active Proposals", url: "#" },
+                    { title: "Archived", url: "#" },
                 ],
             },
         ],
         navSecondary: [
-            {
-                title: "Settings",
-                url: "#",
-                icon: SettingsIcon,
-            },
-            {
-                title: "Get Help",
-                url: "#",
-                icon: HelpCircleIcon,
-            },
-            {
-                title: "Search",
-                url: "#",
-                icon: SearchIcon,
-            },
+            { title: "Settings", url: "#", icon: SettingsIcon },
+            { title: "Get Help", url: "#", icon: HelpCircleIcon },
+            { title: "Search", url: "#", icon: SearchIcon },
         ],
-        documents: [1, 2, 3].includes(roleId)
-            ? []
-            : [
-                  {
-                      name: "Users",
-                      url: route("user-management.index"),
-                      icon: UserRound,
-                  },
-              ],
+        documents: [],
     };
-
-    // Log the user data to verify it's working
 
     if (flash?.success) {
         console.log("Flash success:", flash.success);
     }
+
     return (
         <Sidebar collapsible="offcanvas" {...props}>
             <SidebarHeader>
@@ -293,8 +238,8 @@ export function AppSidebar({ ...props }) {
                         >
                             <a href="#">
                                 <img
-                                    src="/images/logo/Westpoint.png"
-                                    alt="Tiumai"
+                                    src="/images/logo/bcc-logo.jpg"
+                                    alt="Bacolod City College"
                                     className="object-contain"
                                 />
                             </a>
@@ -307,7 +252,6 @@ export function AppSidebar({ ...props }) {
                 {navItems.documents.length > 0 && (
                     <NavDocuments items={navItems.documents} />
                 )}
-                {/* <NavSecondary items={data.navSecondary} className="mt-auto" /> */}
             </SidebarContent>
             <SidebarFooter>
                 <NavUser user={navItems.user} />
@@ -315,4 +259,3 @@ export function AppSidebar({ ...props }) {
         </Sidebar>
     );
 }
-// console.log("data", navItems.user);
