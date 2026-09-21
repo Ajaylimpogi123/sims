@@ -71,6 +71,55 @@ class EvaluationTest extends TestCase
         $this->assertDatabaseCount('evaluation_responses', EvaluationCriteria::where('is_active', true)->count());
     }
 
+    public function test_duplicate_evaluation_criteria_id_in_responses_is_rejected_with_a_validation_error(): void
+    {
+        // Regression test: evaluation_responses has a DB-level unique
+        // constraint on (evaluation_id, evaluation_criteria_id); before the
+        // `distinct` rule was added, a duplicate criteria id in the payload
+        // passed validation and then blew up with an unhandled 500 from the
+        // DB constraint instead of a clean 422.
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $student = $this->makeAssignedStudent($supervisor);
+        $criterion = EvaluationCriteria::factory()->create();
+
+        $response = $this->actingAs($supervisor)->post('/supervisor-evaluations', [
+            'student_id' => $student->id,
+            'evaluation_period_start' => '2026-01-01',
+            'evaluation_period_end' => '2026-01-31',
+            'responses' => [
+                ['evaluation_criteria_id' => $criterion->id, 'rating' => 1],
+                ['evaluation_criteria_id' => $criterion->id, 'rating' => 5],
+            ],
+        ]);
+
+        $response->assertSessionHasErrors('responses.0.evaluation_criteria_id');
+        $this->assertDatabaseMissing('evaluations', ['student_id' => $student->id]);
+    }
+
+    public function test_duplicate_evaluation_criteria_id_on_update_is_rejected_with_a_validation_error(): void
+    {
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $student = $this->makeAssignedStudent($supervisor);
+        $criterion = EvaluationCriteria::factory()->create();
+
+        $evaluation = Evaluation::factory()->create([
+            'student_id' => $student->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+
+        $response = $this->actingAs($supervisor)->patch("/supervisor-evaluations/{$evaluation->id}", [
+            'evaluation_period_start' => '2026-01-01',
+            'evaluation_period_end' => '2026-01-31',
+            'responses' => [
+                ['evaluation_criteria_id' => $criterion->id, 'rating' => 1],
+                ['evaluation_criteria_id' => $criterion->id, 'rating' => 5],
+            ],
+        ]);
+
+        $response->assertSessionHasErrors('responses.0.evaluation_criteria_id');
+        $this->assertDatabaseCount('evaluation_responses', 0);
+    }
+
     public function test_supervisor_can_submit_a_draft_evaluation_once_all_active_criteria_are_rated(): void
     {
         $supervisor = User::factory()->create(['role_id' => 3]);

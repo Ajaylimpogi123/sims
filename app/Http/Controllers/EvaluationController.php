@@ -221,7 +221,7 @@ class EvaluationController extends Controller
             'recommendations' => ['nullable', 'string', 'max:5000'],
             'supervisor_remarks' => ['nullable', 'string', 'max:5000'],
             'responses' => ['nullable', 'array'],
-            'responses.*.evaluation_criteria_id' => ['required', 'integer', 'exists:evaluation_criteria,id'],
+            'responses.*.evaluation_criteria_id' => ['required', 'integer', 'exists:evaluation_criteria,id', 'distinct'],
             'responses.*.rating' => ['required', 'integer', 'min:1', 'max:5'],
             'responses.*.comment' => ['nullable', 'string', 'max:2000'],
         ];
