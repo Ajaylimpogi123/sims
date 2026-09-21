@@ -12,6 +12,9 @@ import {
 import ReviewModal from "./Partials/ReviewModal";
 import { formatLongDate } from "@/lib/dates";
 import ExportButtons from "@/Components/ExportButtons";
+import { usePage } from "@inertiajs/react";
+
+const SUPERVISOR_ROLE_ID = 3;
 
 const STATUS_STYLES = {
     pending: "bg-amber-100 text-amber-700",
@@ -51,6 +54,9 @@ function capitalize(value) {
 }
 
 export default function Index({ reports }) {
+    const { auth } = usePage().props;
+    const canReview = auth?.user?.role_id !== SUPERVISOR_ROLE_ID;
+
     const exportData = reports.map((report) => ({
         student_name: report.student?.user?.name || "-",
         type: capitalize(report.type),
@@ -140,8 +146,9 @@ export default function Index({ reports }) {
                                                         report={report}
                                                     >
                                                         <Button size="sm">
-                                                            {report.status ===
-                                                            "pending"
+                                                            {canReview &&
+                                                            report.status ===
+                                                                "pending"
                                                                 ? "Review"
                                                                 : "View"}
                                                         </Button>
