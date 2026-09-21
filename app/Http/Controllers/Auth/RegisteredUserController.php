@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -12,29 +11,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
-use Inertia\Inertia;
-use Inertia\Response;
 
 class RegisteredUserController extends Controller
 {
     private const ADMIN_ROLE_ID = 4;
 
-    /**
-     * Display the registration view.
-     */
-    public function create(): Response
-    {
-        $viewerIsAdmin = (int) Auth::user()?->role_id === self::ADMIN_ROLE_ID;
-
-        $roles = Role::query()
-            ->when(! $viewerIsAdmin, fn ($query) => $query->where('id', '!=', self::ADMIN_ROLE_ID))
-            ->get(['id', 'role_name']);
-
-        return Inertia::render('Auth/Register', [
-
-            'roles' => $roles,
-        ]);
-    }
+    private const STUDENT_ROLE_ID = 1;
 
     /**
      * Handle an incoming registration request.
@@ -53,7 +35,12 @@ class RegisteredUserController extends Controller
             'role_id' => [
                 'required',
                 'exists:roles,id',
-                Rule::notIn($viewerIsAdmin ? [] : [self::ADMIN_ROLE_ID]),
+                // Students may only originate via the separate self-registration
+                // flow (StudentRegisteredUserController), which also creates the
+                // matching Student profile row. This admin-driven flow never
+                // collects student profile fields, so Student must never be
+                // selectable here.
+                Rule::notIn($viewerIsAdmin ? [self::STUDENT_ROLE_ID] : [self::STUDENT_ROLE_ID, self::ADMIN_ROLE_ID]),
             ],
         ]);
 

@@ -15,11 +15,18 @@ use Inertia\Response;
 
 class InternshipReportController extends Controller
 {
+    private const NO_PROFILE_MESSAGE = 'No student profile is linked to your account yet. Please contact your coordinator.';
+
     public function __construct(private NotificationService $notifications) {}
 
-    public function index(): Response
+    public function index(): Response|RedirectResponse
     {
         $student = Auth::user()->student;
+
+        if (! $student) {
+            return redirect()->route('dashboard')
+                ->with('error', self::NO_PROFILE_MESSAGE);
+        }
 
         $reports = $student->internshipReports()
             ->orderByDesc('period_start')
@@ -35,6 +42,11 @@ class InternshipReportController extends Controller
         $validated = $this->validateReport($request);
 
         $student = Auth::user()->student;
+
+        if (! $student) {
+            return redirect()->route('dashboard')
+                ->with('error', self::NO_PROFILE_MESSAGE);
+        }
 
         $this->guardAgainstDuplicate($student, $validated);
 
@@ -56,6 +68,11 @@ class InternshipReportController extends Controller
     public function update(Request $request, InternshipReport $report): RedirectResponse
     {
         $student = Auth::user()->student;
+
+        if (! $student) {
+            return redirect()->route('dashboard')
+                ->with('error', self::NO_PROFILE_MESSAGE);
+        }
 
         abort_unless(
             $report->student_id === $student->id && $report->status === 'pending',
@@ -84,6 +101,11 @@ class InternshipReportController extends Controller
     public function destroy(InternshipReport $report): RedirectResponse
     {
         $student = Auth::user()->student;
+
+        if (! $student) {
+            return redirect()->route('dashboard')
+                ->with('error', self::NO_PROFILE_MESSAGE);
+        }
 
         abort_unless(
             $report->student_id === $student->id && $report->status === 'pending',

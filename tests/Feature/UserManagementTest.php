@@ -158,6 +158,50 @@ class UserManagementTest extends TestCase
         );
     }
 
+    public function test_admin_cannot_promote_an_existing_user_to_student(): void
+    {
+        // Students may only originate via the separate self-registration flow,
+        // which also creates the matching Student profile row. Promoting an
+        // existing non-student user to role_id=1 here would leave them
+        // without one, crashing /my-attendance and /my-reports.
+        $admin = User::factory()->create(['role_id' => 4]);
+        $target = User::factory()->create(['role_id' => 2]);
+
+        $response = $this->actingAs($admin)->patch("/user-management/{$target->id}", [
+            'name' => $target->name,
+            'email' => $target->email,
+            'role_id' => 1,
+        ]);
+
+        $response->assertSessionHasErrors('role_id');
+        $this->assertDatabaseHas('users', [
+            'id' => $target->id,
+            'role_id' => 2,
+        ]);
+    }
+
+    public function test_admin_can_still_edit_an_existing_students_details_without_changing_their_role(): void
+    {
+        // A user who is already a Student (e.g. via self-registration) must
+        // still be editable without the notIn(Student) guard tripping on
+        // their own unchanged role_id.
+        $admin = User::factory()->create(['role_id' => 4]);
+        $target = User::factory()->create(['role_id' => 1, 'name' => 'Original Name']);
+
+        $response = $this->actingAs($admin)->patch("/user-management/{$target->id}", [
+            'name' => 'Updated Name',
+            'email' => $target->email,
+            'role_id' => 1,
+        ]);
+
+        $response->assertRedirect(route('user-management.index', absolute: false));
+        $this->assertDatabaseHas('users', [
+            'id' => $target->id,
+            'name' => 'Updated Name',
+            'role_id' => 1,
+        ]);
+    }
+
     public function test_coordinator_cannot_promote_an_existing_user_to_administrator(): void
     {
         $coordinator = User::factory()->create(['role_id' => 2]);

@@ -13,10 +13,22 @@ import {
 } from "@/components/ui/dialog";
 import useEditUser from "../Hooks/useEditUser";
 
+// Kept in sync with UserController::update()'s server-side rejection:
+// Student is only a valid selection here when the user being edited is
+// already a Student (e.g. via self-registration) — promoting a different
+// user into Student would leave them without the profile row that
+// self-registration normally creates.
+const STUDENT_ROLE_ID = 1;
+
 export default function EditModal({ user, roles, children }) {
     // The Administrator role is already excluded from `roles` server-side
     // (UserController::index) whenever the viewer isn't an Administrator
     // themselves, so no client-side filtering is needed here.
+    const userIsStudent = Number(user.role_id) === STUDENT_ROLE_ID;
+    const selectableRoles = roles.filter(
+        (role) => Number(role.id) !== STUDENT_ROLE_ID || userIsStudent,
+    );
+
     const {
         open,
         openModal,
@@ -93,7 +105,7 @@ export default function EditModal({ user, roles, children }) {
                                     required
                                 >
                                     <option value="">- Select a Role -</option>
-                                    {roles.map((role) => (
+                                    {selectableRoles.map((role) => (
                                         <option key={role.id} value={role.id}>
                                             {role.role_name}
                                         </option>

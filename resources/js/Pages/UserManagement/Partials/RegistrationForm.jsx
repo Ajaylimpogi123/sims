@@ -6,10 +6,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/Components/ui/card";
 import { useForm } from "@inertiajs/react";
 import { showRegistrationError } from "../Hooks/useRegistrationAlerts";
 
+// Students may only originate via the separate self-registration flow
+// (which also creates the matching Student profile row) — this admin-driven
+// form never collects student profile fields, so Student must never be
+// selectable here, even though `roles` (shared with the filter dropdown)
+// still includes it. Kept in sync with the server-side rejection in
+// RegisteredUserController::store().
+const STUDENT_ROLE_ID = 1;
+
 export default function RegistrationForm({ roles }) {
     // The Administrator role is already excluded from `roles` server-side
     // (UserController::index) whenever the viewer isn't an Administrator
     // themselves, so no client-side filtering is needed here.
+    const selectableRoles = roles.filter(
+        (role) => Number(role.id) !== STUDENT_ROLE_ID,
+    );
+
     const { data, setData, post, processing, errors, reset } = useForm({
         name: "",
         email: "",
@@ -77,7 +89,7 @@ export default function RegistrationForm({ roles }) {
                             required
                         >
                             <option value="">- Select a Role -</option>
-                            {roles.map((role) => (
+                            {selectableRoles.map((role) => (
                                 <option key={role.id} value={role.id}>
                                     {role.role_name}
                                 </option>

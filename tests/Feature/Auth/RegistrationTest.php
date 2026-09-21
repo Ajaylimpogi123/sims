@@ -98,18 +98,56 @@ class RegistrationTest extends TestCase
         $coordinator = User::factory()->create(['role_id' => 2]);
 
         $response = $this->actingAs($coordinator)->post('/user-management/create', [
-            'name' => 'New Student',
+            'name' => 'New Supervisor',
             'email' => 'coordinator.created@example.com',
             'password' => 'password',
             'password_confirmation' => 'password',
-            'role_id' => 1,
+            'role_id' => 3,
         ]);
 
         $response->assertRedirect(route('user-management.index', absolute: false));
         $this->assertDatabaseHas('users', [
             'email' => 'coordinator.created@example.com',
+            'role_id' => 3,
+        ]);
+    }
+
+    public function test_coordinator_cannot_register_a_student_via_user_management(): void
+    {
+        // Students may only originate via the separate self-registration flow
+        // (/register), which also creates the matching Student profile row.
+        // This admin-driven flow never collects student profile fields, so a
+        // role_id=1 submission must be rejected, not silently create a
+        // profile-less account that later crashes on /my-attendance and
+        // /my-reports.
+        $coordinator = User::factory()->create(['role_id' => 2]);
+
+        $response = $this->actingAs($coordinator)->post('/user-management/create', [
+            'name' => 'New Student',
+            'email' => 'coordinator.blocked-student@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
             'role_id' => 1,
         ]);
+
+        $response->assertSessionHasErrors('role_id');
+        $this->assertDatabaseMissing('users', ['email' => 'coordinator.blocked-student@example.com']);
+    }
+
+    public function test_admin_cannot_register_a_student_via_user_management(): void
+    {
+        $admin = User::factory()->create(['role_id' => 4]);
+
+        $response = $this->actingAs($admin)->post('/user-management/create', [
+            'name' => 'New Student',
+            'email' => 'admin.blocked-student@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'role_id' => 1,
+        ]);
+
+        $response->assertSessionHasErrors('role_id');
+        $this->assertDatabaseMissing('users', ['email' => 'admin.blocked-student@example.com']);
     }
 
     public function test_student_cannot_register_a_user_via_user_management(): void
@@ -164,27 +202,18 @@ class RegistrationTest extends TestCase
         ]);
     }
 
-    public function test_coordinators_create_user_form_excludes_administrator_role_option(): void
+    public function test_get_user_management_create_is_removed_as_dead_scaffolding(): void
     {
-        $coordinator = User::factory()->create(['role_id' => 2]);
-
-        $this->actingAs($coordinator)
-            ->get('/user-management/create')
-            ->assertInertia(fn ($page) => $page
-                ->where('roles', fn ($roles) => collect($roles)
-                    ->doesntContain(fn ($role) => (int) $role['id'] === 4))
-            );
-    }
-
-    public function test_admins_create_user_form_still_includes_administrator_role_option(): void
-    {
+        // Creation is handled inline on /user-management via POST
+        // user-management.store; this GET route rendered the wrong (public
+        // self-registration) component and was linked from nowhere in the
+        // UI, so it has been removed. The path itself still exists for POST
+        // (user-management.store), so GET now correctly 405s instead of
+        // rendering the dead page.
         $admin = User::factory()->create(['role_id' => 4]);
 
         $this->actingAs($admin)
             ->get('/user-management/create')
-            ->assertInertia(fn ($page) => $page
-                ->where('roles', fn ($roles) => collect($roles)
-                    ->contains(fn ($role) => (int) $role['id'] === 4))
-            );
+            ->assertStatus(405);
     }
 }

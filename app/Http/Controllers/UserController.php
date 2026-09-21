@@ -16,6 +16,8 @@ class UserController extends Controller
 {
     private const ADMIN_ROLE_ID = 4;
 
+    private const STUDENT_ROLE_ID = 1;
+
     public function index(Request $request): Response
     {
         $viewerIsAdmin = (int) $request->user()->role_id === self::ADMIN_ROLE_ID;
@@ -51,13 +53,24 @@ class UserController extends Controller
             abort(403, 'You cannot manage an Administrator account.');
         }
 
+        // Student is not a selectable role in this admin-driven flow: promoting
+        // an existing non-student user to Student would leave them without the
+        // Student profile row that self-registration normally creates. Editing
+        // a user who is already a Student (e.g. via self-registration) without
+        // changing their role is still allowed.
+        $forbiddenRoles = $actorIsAdmin ? [] : [self::ADMIN_ROLE_ID];
+
+        if ((int) $user->role_id !== self::STUDENT_ROLE_ID) {
+            $forbiddenRoles[] = self::STUDENT_ROLE_ID;
+        }
+
         $rules = [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,'.$user->id],
             'role_id' => [
                 'required',
                 'exists:roles,id',
-                Rule::notIn($actorIsAdmin ? [] : [self::ADMIN_ROLE_ID]),
+                Rule::notIn($forbiddenRoles),
             ],
         ];
 
