@@ -183,4 +183,34 @@ class NotificationService
     {
         return User::whereIn('role_id', self::STAFF_ROLE_IDS)->get();
     }
+
+    /**
+     * Recent Activity feed for the Dashboard's Overview tab. Reuses the
+     * existing per-recipient Notification inbox rather than a new
+     * activity/audit table.
+     *
+     * Admin/Coordinator: their own notification inbox.
+     * Supervisor: their own inbox, unioned with notifications belonging to
+     * their supervised students' user accounts — scoped via
+     * supervisedStudents(), never the company_supervisors roster pivot, so
+     * a supervisor never sees another supervisor's students' events.
+     *
+     * @return Collection<int, Notification>
+     */
+    public function recentActivity(User $user, int $limit = 10): Collection
+    {
+        if ((int) $user->role_id === 3) {
+            $studentUserIds = $user->supervisedStudents()->pluck('user_id');
+
+            return Notification::query()
+                ->where('user_id', $user->id)
+                ->orWhereIn('user_id', $studentUserIds)
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->limit($limit)
+                ->get();
+        }
+
+        return $user->notifications()->limit($limit)->get();
+    }
 }
