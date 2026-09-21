@@ -20,6 +20,8 @@ import {
     Handshake,
     Clock,
     ClipboardCheck,
+    Star,
+    SlidersHorizontal,
 } from "lucide-react";
 
 import { NavDocuments } from "@/components/nav-documents";
@@ -60,6 +62,18 @@ export function AppSidebar({ ...props }) {
         title: "Progress Monitoring",
         url: route("progress-monitoring.index"),
         icon: BarChartIcon,
+    };
+
+    const supervisorEvaluationsItem = {
+        title: "Supervisor Monitoring & Feedback",
+        url: route("supervisor-evaluations.index"),
+        icon: Star,
+    };
+
+    const evaluationCriteriaItem = {
+        title: "Evaluation Criteria",
+        url: route("evaluation-criteria.index"),
+        icon: SlidersHorizontal,
     };
 
     const userData = {
@@ -109,6 +123,8 @@ export function AppSidebar({ ...props }) {
                   pendingApprovalsItem,
                   reportReviewsItem,
                   progressMonitoringItem,
+                  supervisorEvaluationsItem,
+                  evaluationCriteriaItem,
               ]
             : roleId === 2
               ? [
@@ -139,6 +155,7 @@ export function AppSidebar({ ...props }) {
                     },
                     reportReviewsItem,
                     progressMonitoringItem,
+                    supervisorEvaluationsItem,
                 ]
               : roleId === 1
                 ? [
@@ -157,6 +174,11 @@ export function AppSidebar({ ...props }) {
                           url: route("reports.index"),
                           icon: FileTextIcon,
                       },
+                      {
+                          title: "My Feedback",
+                          url: route("my-feedback.index"),
+                          icon: Star,
+                      },
                   ]
                 : roleId === 3
                   ? [
@@ -173,6 +195,7 @@ export function AppSidebar({ ...props }) {
                         pendingApprovalsItem,
                         reportReviewsItem,
                         progressMonitoringItem,
+                        supervisorEvaluationsItem,
                     ]
                   : defaultNavMain;
 
