@@ -124,6 +124,11 @@ class NotificationTriggersTest extends TestCase
         $student = $this->studentWithUser();
 
         $this->actingAs($coordinator)->patch("/internship-assignment/{$student->id}", [
+            'name' => $student->user->name,
+            'email' => $student->user->email,
+            'student_number' => $student->student_number,
+            'course' => $student->course,
+            'section' => $student->section,
             'company_id' => $company->id,
             'supervisor_id' => $supervisor->id,
             'internship_status' => 'ongoing',
@@ -145,6 +150,11 @@ class NotificationTriggersTest extends TestCase
         $student = $this->studentWithUser(['internship_status' => 'ongoing']);
 
         $this->actingAs($coordinator)->patch("/internship-assignment/{$student->id}", [
+            'name' => $student->user->name,
+            'email' => $student->user->email,
+            'student_number' => $student->student_number,
+            'course' => $student->course,
+            'section' => $student->section,
             'company_id' => '',
             'supervisor_id' => '',
             'internship_status' => 'ongoing',
