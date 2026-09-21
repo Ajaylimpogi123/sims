@@ -1,5 +1,5 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
-import { Head } from "@inertiajs/react";
+import { Head, usePage } from "@inertiajs/react";
 import { DataTable } from "./Partials/DataTable";
 import { getColumns } from "./Partials/Columns";
 import ExportButtons from "@/Components/ExportButtons";
@@ -13,7 +13,9 @@ const EXPORT_COLUMNS = [
 ];
 
 export default function Index({ students }) {
-    const columns = getColumns();
+    const { auth } = usePage().props;
+    const canWrite = [3, 4].includes(auth?.user?.role_id);
+    const columns = getColumns(canWrite);
 
     const studentData =
         students.map((student) => {

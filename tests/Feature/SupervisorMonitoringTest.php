@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Attendance;
 use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
@@ -104,6 +105,106 @@ class SupervisorMonitoringTest extends TestCase
                 ->get('/attendance-monitoring')
                 ->assertOk()
                 ->assertInertia(fn (Assert $page) => $page->has('students', 3));
+        }
+    }
+
+    public function test_coordinator_can_still_view_attendance_monitoring(): void
+    {
+        Student::factory()->create();
+        $coordinator = User::factory()->create(['role_id' => 2]);
+
+        $this->actingAs($coordinator)
+            ->get('/attendance-monitoring')
+            ->assertOk();
+    }
+
+    public function test_coordinator_cannot_set_required_hours(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $student = Student::factory()->create();
+
+        $this->actingAs($coordinator)
+            ->patch("/attendance-monitoring/{$student->id}/required-hours", [
+                'required_hours' => 100,
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('students', [
+            'id' => $student->id,
+            'required_hours' => 100,
+        ]);
+    }
+
+    public function test_coordinator_cannot_add_an_attendance_entry(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $student = Student::factory()->create();
+
+        $this->actingAs($coordinator)
+            ->post("/attendance-monitoring/{$student->id}/attendances", [
+                'date' => '2026-01-05',
+                'time_in' => '08:00',
+                'time_out' => '17:00',
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('attendances', [
+            'student_id' => $student->id,
+            'date' => '2026-01-05',
+        ]);
+    }
+
+    public function test_coordinator_cannot_update_an_attendance_entry(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $student = Student::factory()->create();
+        $attendance = Attendance::factory()->create([
+            'student_id' => $student->id,
+            'date' => '2026-01-05',
+        ]);
+
+        $this->actingAs($coordinator)
+            ->patch("/attendance-monitoring/attendances/{$attendance->id}", [
+                'date' => '2026-01-05',
+                'time_in' => '09:00',
+                'time_out' => '18:00',
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_coordinator_cannot_delete_an_attendance_entry(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $student = Student::factory()->create();
+        $attendance = Attendance::factory()->create([
+            'student_id' => $student->id,
+        ]);
+
+        $this->actingAs($coordinator)
+            ->delete("/attendance-monitoring/attendances/{$attendance->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('attendances', ['id' => $attendance->id]);
+    }
+
+    public function test_supervisor_and_admin_can_still_set_required_hours(): void
+    {
+        foreach ([3, 4] as $roleId) {
+            $user = User::factory()->create(['role_id' => $roleId]);
+            $student = Student::factory()->create(
+                $roleId === 3 ? ['supervisor_id' => $user->id] : [],
+            );
+
+            $response = $this->actingAs($user)->patch(
+                "/attendance-monitoring/{$student->id}/required-hours",
+                ['required_hours' => 200],
+            );
+
+            $response->assertRedirect(route('attendance-monitoring.index', absolute: false));
+            $this->assertDatabaseHas('students', [
+                'id' => $student->id,
+                'required_hours' => 200,
+            ]);
         }
     }
 }
