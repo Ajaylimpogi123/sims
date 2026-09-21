@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import InputError from "@/Components/InputError";
 import useManageStudent from "../Hooks/useManageStudent";
+import { useMemo } from "react";
 
 const UNASSIGNED = "unassigned";
 
@@ -28,7 +29,7 @@ const STATUS_OPTIONS = [
     { value: "completed", label: "Completed" },
 ];
 
-export default function StudentModal({ student, companies, supervisors, children }) {
+export default function StudentModal({ student, companies, children }) {
     const {
         open,
         openModal,
@@ -39,6 +40,36 @@ export default function StudentModal({ student, companies, supervisors, children
         processing,
         handleSubmit,
     } = useManageStudent(student);
+
+    // The supervisor dropdown is dependent on the selected company — only
+    // supervisors on that company's roster (Company Management) are
+    // selectable, not every role-3 user system-wide.
+    const selectedCompany = useMemo(
+        () => companies.find((c) => String(c.id) === data.company_id),
+        [companies, data.company_id],
+    );
+    const rosterSupervisors = selectedCompany?.supervisors || [];
+
+    const handleCompanyChange = (value) => {
+        const newCompanyId = value === UNASSIGNED ? "" : value;
+        const newCompany = companies.find(
+            (c) => String(c.id) === newCompanyId,
+        );
+        const newRoster = newCompany?.supervisors || [];
+        const supervisorStillValid = newRoster.some(
+            (supervisor) => String(supervisor.id) === data.supervisor_id,
+        );
+
+        setData({
+            ...data,
+            company_id: newCompanyId,
+            // Changing the company can invalidate the previously-selected
+            // supervisor (they may not be on the new company's roster) —
+            // only auto-clear when the user actually changes the company
+            // themselves, not on the modal's initial data load.
+            supervisor_id: supervisorStillValid ? data.supervisor_id : "",
+        });
+    };
 
     return (
         <>
@@ -137,14 +168,7 @@ export default function StudentModal({ student, companies, supervisors, children
                                     <Label>Company</Label>
                                     <Select
                                         value={data.company_id || UNASSIGNED}
-                                        onValueChange={(value) =>
-                                            setData(
-                                                "company_id",
-                                                value === UNASSIGNED
-                                                    ? ""
-                                                    : value,
-                                            )
-                                        }
+                                        onValueChange={handleCompanyChange}
                                     >
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select a company" />
@@ -183,24 +207,40 @@ export default function StudentModal({ student, companies, supervisors, children
                                                     : value,
                                             )
                                         }
+                                        disabled={!selectedCompany}
                                     >
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Select a supervisor" />
+                                            <SelectValue
+                                                placeholder={
+                                                    selectedCompany
+                                                        ? "Select a supervisor"
+                                                        : "Assign a company first"
+                                                }
+                                            />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value={UNASSIGNED}>
                                                 Unassigned
                                             </SelectItem>
-                                            {supervisors.map((supervisor) => (
-                                                <SelectItem
-                                                    key={supervisor.id}
-                                                    value={String(
-                                                        supervisor.id,
-                                                    )}
-                                                >
-                                                    {supervisor.name}
-                                                </SelectItem>
-                                            ))}
+                                            {rosterSupervisors.length ===
+                                                0 && selectedCompany && (
+                                                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                                    No supervisors on this
+                                                    company's roster yet
+                                                </div>
+                                            )}
+                                            {rosterSupervisors.map(
+                                                (supervisor) => (
+                                                    <SelectItem
+                                                        key={supervisor.id}
+                                                        value={String(
+                                                            supervisor.id,
+                                                        )}
+                                                    >
+                                                        {supervisor.name}
+                                                    </SelectItem>
+                                                ),
+                                            )}
                                         </SelectContent>
                                     </Select>
                                     <InputError

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use App\Models\Student;
-use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,18 +32,13 @@ class InternshipAssignmentController extends Controller
 
         $companies = Company::query()
             ->withCount('students')
+            ->with('supervisors:id,name,email')
             ->orderBy('company_name')
             ->get(['id', 'company_name', 'slots']);
-
-        $supervisors = User::query()
-            ->where('role_id', 3)
-            ->orderBy('name')
-            ->get(['id', 'name', 'email']);
 
         return Inertia::render('InternshipAssignment/Index', [
             'students' => $students,
             'companies' => $companies,
-            'supervisors' => $supervisors,
         ]);
     }
 
@@ -61,6 +55,12 @@ class InternshipAssignmentController extends Controller
             'supervisor_id' => $request->supervisor_id ?: null,
         ]);
 
+        // The company this student will end up with once this request is
+        // applied — supervisor_id must be validated against *this*, not
+        // the student's current (possibly different/about-to-change)
+        // company_id, so changing both fields in the same request works.
+        $resultingCompanyId = $request->input('company_id');
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,'.$student->user_id],
@@ -68,7 +68,29 @@ class InternshipAssignmentController extends Controller
             'course' => ['required', 'string', 'max:255'],
             'section' => ['required', 'string', 'max:255'],
             'company_id' => ['nullable', 'exists:companies,id'],
-            'supervisor_id' => ['nullable', Rule::exists('users', 'id')->where('role_id', 3)],
+            'supervisor_id' => [
+                'nullable',
+                Rule::exists('users', 'id')->where('role_id', 3),
+                function (string $attribute, mixed $value, \Closure $fail) use ($resultingCompanyId) {
+                    if (! $value) {
+                        return;
+                    }
+
+                    if (! $resultingCompanyId) {
+                        $fail('Assign a company before assigning a supervisor.');
+
+                        return;
+                    }
+
+                    $onRoster = Company::whereKey($resultingCompanyId)
+                        ->whereHas('supervisors', fn ($query) => $query->whereKey($value))
+                        ->exists();
+
+                    if (! $onRoster) {
+                        $fail('This supervisor is not on the selected company\'s roster.');
+                    }
+                },
+            ],
             'internship_status' => ['required', 'in:not_started,ongoing,completed'],
             'internship_schedule' => ['nullable', 'string', 'max:255'],
         ]);

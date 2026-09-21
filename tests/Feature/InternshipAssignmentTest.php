@@ -186,6 +186,187 @@ class InternshipAssignmentTest extends TestCase
         $response->assertSessionHasErrors('supervisor_id');
     }
 
+    public function test_supervisor_must_be_on_the_companys_roster_to_be_assigned(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        // Deliberately NOT attached to $company's roster.
+        $student = Student::factory()->create(['company_id' => $company->id]);
+
+        $response = $this->actingAs($coordinator)->patch(
+            "/internship-assignment/{$student->id}",
+            $this->updatePayload($student, [
+                'company_id' => $company->id,
+                'supervisor_id' => $supervisor->id,
+            ]),
+        );
+
+        $response->assertSessionHasErrors('supervisor_id');
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'supervisor_id' => null,
+        ]);
+    }
+
+    public function test_supervisor_on_the_companys_roster_can_be_assigned(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $company->supervisors()->attach($supervisor->id);
+        $student = Student::factory()->create(['company_id' => $company->id]);
+
+        $response = $this->actingAs($coordinator)->patch(
+            "/internship-assignment/{$student->id}",
+            $this->updatePayload($student, [
+                'company_id' => $company->id,
+                'supervisor_id' => $supervisor->id,
+            ]),
+        );
+
+        $response->assertSessionDoesntHaveErrors('supervisor_id');
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+    }
+
+    public function test_a_company_with_no_roster_supervisors_rejects_any_supervisor_assignment(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisorElsewhere = User::factory()->create(['role_id' => 3]);
+        $otherCompany = Company::factory()->create();
+        $otherCompany->supervisors()->attach($supervisorElsewhere->id);
+        $student = Student::factory()->create(['company_id' => $company->id]);
+
+        $response = $this->actingAs($coordinator)->patch(
+            "/internship-assignment/{$student->id}",
+            $this->updatePayload($student, [
+                'company_id' => $company->id,
+                'supervisor_id' => $supervisorElsewhere->id,
+            ]),
+        );
+
+        $response->assertSessionHasErrors('supervisor_id');
+    }
+
+    public function test_supervisor_validated_against_the_resulting_company_when_both_change_together(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $oldCompany = Company::factory()->create(['slots' => 5]);
+        $newCompany = Company::factory()->create(['slots' => 5]);
+        $oldSupervisor = User::factory()->create(['role_id' => 3]);
+        $newSupervisor = User::factory()->create(['role_id' => 3]);
+        $oldCompany->supervisors()->attach($oldSupervisor->id);
+        $newCompany->supervisors()->attach($newSupervisor->id);
+
+        $student = Student::factory()->create([
+            'company_id' => $oldCompany->id,
+            'supervisor_id' => $oldSupervisor->id,
+        ]);
+
+        // Changing to the new company AND the new company's own supervisor
+        // in the same request must succeed — validated against the
+        // resulting (new) company, not the student's current one.
+        $response = $this->actingAs($coordinator)->patch(
+            "/internship-assignment/{$student->id}",
+            $this->updatePayload($student, [
+                'company_id' => $newCompany->id,
+                'supervisor_id' => $newSupervisor->id,
+            ]),
+        );
+
+        $response->assertSessionDoesntHaveErrors('supervisor_id');
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'company_id' => $newCompany->id,
+            'supervisor_id' => $newSupervisor->id,
+        ]);
+    }
+
+    public function test_keeping_the_old_supervisor_while_changing_company_is_rejected(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $oldCompany = Company::factory()->create(['slots' => 5]);
+        $newCompany = Company::factory()->create(['slots' => 5]);
+        $oldSupervisor = User::factory()->create(['role_id' => 3]);
+        $oldCompany->supervisors()->attach($oldSupervisor->id);
+        // $oldSupervisor is NOT on $newCompany's roster.
+
+        $student = Student::factory()->create([
+            'company_id' => $oldCompany->id,
+            'supervisor_id' => $oldSupervisor->id,
+        ]);
+
+        $response = $this->actingAs($coordinator)->patch(
+            "/internship-assignment/{$student->id}",
+            $this->updatePayload($student, [
+                'company_id' => $newCompany->id,
+                // supervisor_id left as the old supervisor on purpose
+            ]),
+        );
+
+        $response->assertSessionHasErrors('supervisor_id');
+    }
+
+    public function test_clearing_the_company_while_keeping_a_supervisor_is_rejected(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $company->supervisors()->attach($supervisor->id);
+
+        $student = Student::factory()->create([
+            'company_id' => $company->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+
+        $response = $this->actingAs($coordinator)->patch(
+            "/internship-assignment/{$student->id}",
+            $this->updatePayload($student, [
+                'company_id' => '',
+                'supervisor_id' => $supervisor->id,
+            ]),
+        );
+
+        $response->assertSessionHasErrors('supervisor_id');
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'company_id' => $company->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+    }
+
+    public function test_clearing_both_company_and_supervisor_together_succeeds(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $company->supervisors()->attach($supervisor->id);
+
+        $student = Student::factory()->create([
+            'company_id' => $company->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+
+        $response = $this->actingAs($coordinator)->patch(
+            "/internship-assignment/{$student->id}",
+            $this->updatePayload($student, [
+                'company_id' => '',
+                'supervisor_id' => '',
+            ]),
+        );
+
+        $response->assertSessionDoesntHaveErrors('supervisor_id');
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'company_id' => null,
+            'supervisor_id' => null,
+        ]);
+    }
+
     public function test_updating_only_profile_fields_does_not_fire_an_assignment_notification(): void
     {
         $coordinator = User::factory()->create(['role_id' => 2]);

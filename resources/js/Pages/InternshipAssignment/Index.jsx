@@ -3,8 +3,8 @@ import { Head } from "@inertiajs/react";
 import { DataTable } from "./Partials/DataTable";
 import { getColumns } from "./Partials/Columns";
 
-export default function Index({ students, companies, supervisors }) {
-    const columns = getColumns(companies, supervisors);
+export default function Index({ students, companies }) {
+    const columns = getColumns(companies);
 
     const studentData =
         students.map((student) => ({

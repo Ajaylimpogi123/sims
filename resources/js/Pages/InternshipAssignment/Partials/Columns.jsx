@@ -30,7 +30,7 @@ const handleToggleStatus = (student) => {
     );
 };
 
-export function getColumns(companies, supervisors) {
+export function getColumns(companies) {
     return [
         {
             accessorKey: "name",
@@ -103,7 +103,6 @@ export function getColumns(companies, supervisors) {
                                 <StudentModal
                                     student={student}
                                     companies={companies}
-                                    supervisors={supervisors}
                                 >
                                     Edit
                                 </StudentModal>
