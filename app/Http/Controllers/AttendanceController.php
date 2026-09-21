@@ -11,11 +11,18 @@ use Inertia\Response;
 
 class AttendanceController extends Controller
 {
+    private const NO_PROFILE_MESSAGE = 'No student profile is linked to your account yet. Please contact your coordinator.';
+
     public function __construct(private NotificationService $notifications) {}
 
-    public function index(): Response
+    public function index(): Response|RedirectResponse
     {
         $student = Auth::user()->student;
+
+        if (! $student) {
+            return redirect()->route('dashboard')
+                ->with('error', self::NO_PROFILE_MESSAGE);
+        }
 
         $attendances = $student->attendances()
             ->orderByDesc('date')
@@ -36,6 +43,11 @@ class AttendanceController extends Controller
     public function timeIn(): RedirectResponse
     {
         $student = Auth::user()->student;
+
+        if (! $student) {
+            return redirect()->route('dashboard')
+                ->with('error', self::NO_PROFILE_MESSAGE);
+        }
 
         $record = $student->attendances()->firstOrNew([
             'date' => today()->toDateString(),
@@ -61,6 +73,11 @@ class AttendanceController extends Controller
     public function timeOut(): RedirectResponse
     {
         $student = Auth::user()->student;
+
+        if (! $student) {
+            return redirect()->route('dashboard')
+                ->with('error', self::NO_PROFILE_MESSAGE);
+        }
 
         $record = $student->attendances()
             ->where('date', today()->toDateString())
@@ -98,6 +115,11 @@ class AttendanceController extends Controller
 
         $student = Auth::user()->student;
 
+        if (! $student) {
+            return redirect()->route('dashboard')
+                ->with('error', self::NO_PROFILE_MESSAGE);
+        }
+
         $record = $student->attendances()->firstOrNew([
             'date' => today()->toDateString(),
         ]);
@@ -105,6 +127,11 @@ class AttendanceController extends Controller
         if (! $record->exists || empty($record->time_in)) {
             return redirect()->route('attendance.index')
                 ->with('error', 'You must time in before using emergency time-out.');
+        }
+
+        if ($record->time_in_status === 'rejected') {
+            return redirect()->route('attendance.index')
+                ->with('error', 'Your time-in was rejected. Emergency time-out requires a non-rejected time-in.');
         }
 
         if (in_array($record->time_out_status, ['pending', 'approved'], true)) {

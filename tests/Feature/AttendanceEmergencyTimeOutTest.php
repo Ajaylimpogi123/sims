@@ -95,4 +95,36 @@ class AttendanceEmergencyTimeOutTest extends TestCase
         $response->assertRedirect(route('attendance.index', absolute: false));
         $response->assertSessionHas('success');
     }
+
+    public function test_emergency_time_out_is_blocked_when_time_in_was_rejected(): void
+    {
+        // Regression test: unlike the normal time-out flow (which requires
+        // time_in_status === 'approved'), emergency time-out previously only
+        // checked that time_in was non-empty, letting a rejected time-in be
+        // "fixed" via an approvable emergency time-out request.
+        $user = $this->studentUser();
+        $student = $user->student;
+
+        Attendance::factory()->create([
+            'student_id' => $student->id,
+            'date' => today()->toDateString(),
+            'time_in' => '08:00:00',
+            'time_in_status' => 'rejected',
+            'time_out' => null,
+            'time_out_status' => null,
+        ]);
+
+        $response = $this->actingAs($user)->post('/my-attendance/emergency-time-out', [
+            'note' => 'Trying to work around a rejected time-in.',
+        ]);
+
+        $response->assertRedirect(route('attendance.index', absolute: false));
+        $response->assertSessionHas('error');
+        $this->assertDatabaseHas('attendances', [
+            'student_id' => $student->id,
+            'date' => today()->toDateString(),
+            'time_in_status' => 'rejected',
+            'time_out_status' => null,
+        ]);
+    }
 }
