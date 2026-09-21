@@ -46,7 +46,13 @@ export default function StudentSummary({
                 <StatCard
                     title="Internship Status"
                     value={STATUS_LABELS[student.internship_status] ?? "Not Started"}
-                    subtitle={student.company_name ?? "No company assigned yet"}
+                    subtitle={
+                        student.company_name
+                            ? student.supervisor_name
+                                ? `${student.company_name} · Supervisor: ${student.supervisor_name}`
+                                : student.company_name
+                            : "No company assigned yet"
+                    }
                     icon={Building2}
                     iconColor="text-blue-600"
                     iconBg="bg-blue-50"

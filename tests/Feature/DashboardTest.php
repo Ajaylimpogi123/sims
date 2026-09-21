@@ -46,6 +46,27 @@ class DashboardTest extends TestCase
             );
     }
 
+    public function test_student_sees_their_assigned_company_and_supervisor_names(): void
+    {
+        $user = User::factory()->create(['role_id' => 1]);
+        $supervisor = User::factory()->create(['role_id' => 3, 'name' => 'Jane Supervisor']);
+        $company = Company::factory()->create(['company_name' => 'Acme Corp']);
+        Student::factory()->create([
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Dashboard/Index')
+                ->where('student.company_name', 'Acme Corp')
+                ->where('student.supervisor_name', 'Jane Supervisor')
+            );
+    }
+
     public function test_student_without_profile_sees_no_profile_notice(): void
     {
         $user = User::factory()->create(['role_id' => 1]);
