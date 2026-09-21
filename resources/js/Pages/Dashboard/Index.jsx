@@ -1,8 +1,14 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
-import { Head, usePage } from "@inertiajs/react";
+import { Deferred, Head, usePage } from "@inertiajs/react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import StudentSummary from "./Partials/StudentSummary";
-import StaffSummary from "./Partials/StaffSummary";
+import AdminSummary from "./Partials/AdminSummary";
+import CoordinatorSummary from "./Partials/CoordinatorSummary";
 import SupervisorSummary from "./Partials/SupervisorSummary";
+import ActionItems from "./Partials/ActionItems";
+import RecentActivity from "./Partials/RecentActivity";
+import AnalyticsTab from "./Partials/AnalyticsTab";
+import AnalyticsSkeleton from "./Partials/AnalyticsSkeleton";
 
 const ROLE_TITLES = {
     1: "My Dashboard",
@@ -10,6 +16,10 @@ const ROLE_TITLES = {
     3: "Supervisor Dashboard",
     4: "Administrator Dashboard",
 };
+
+// Analytics tab is Admin/Coordinator/Supervisor only — the Student
+// dashboard branch is untouched by this module.
+const HAS_ANALYTICS = [2, 3, 4];
 
 export default function Index(props) {
     const { auth } = usePage().props;
@@ -49,15 +59,44 @@ export default function Index(props) {
                         />
                     )}
 
-                    {(roleId === 2 || roleId === 4) && (
-                        <StaffSummary counts={props.counts} />
-                    )}
+                    {HAS_ANALYTICS.includes(roleId) && (
+                        <Tabs defaultValue="overview" className="w-full">
+                            <TabsList>
+                                <TabsTrigger value="overview">Overview</TabsTrigger>
+                                <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                            </TabsList>
 
-                    {roleId === 3 && (
-                        <SupervisorSummary
-                            counts={props.counts}
-                            supervisedStudents={props.supervisedStudents}
-                        />
+                            <TabsContent value="overview" className="space-y-6">
+                                {roleId === 4 && (
+                                    <AdminSummary kpis={props.kpis} />
+                                )}
+                                {roleId === 2 && (
+                                    <CoordinatorSummary kpis={props.kpis} />
+                                )}
+                                {roleId === 3 && (
+                                    <SupervisorSummary
+                                        kpis={props.kpis}
+                                        supervisedStudents={props.supervisedStudents}
+                                    />
+                                )}
+
+                                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                                    <ActionItems actionItems={props.actionItems ?? []} />
+                                    <RecentActivity
+                                        recentActivity={props.recentActivity ?? []}
+                                    />
+                                </div>
+                            </TabsContent>
+
+                            <TabsContent value="analytics">
+                                <Deferred data="analytics" fallback={<AnalyticsSkeleton />}>
+                                    <AnalyticsTab
+                                        roleId={roleId}
+                                        filterOptions={props.filterOptions}
+                                    />
+                                </Deferred>
+                            </TabsContent>
+                        </Tabs>
                     )}
                 </div>
             </div>
