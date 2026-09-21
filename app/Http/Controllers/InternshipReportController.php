@@ -12,10 +12,17 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InternshipReportController extends Controller
 {
     private const NO_PROFILE_MESSAGE = 'No student profile is linked to your account yet. Please contact your coordinator.';
+
+    // Attachments are stored on the private `local` disk (not `public`), and
+    // only ever served back out through downloadAttachment() below, after an
+    // ownership check — never via a direct /storage/... URL, which would
+    // bypass authorization entirely.
+    private const ATTACHMENT_DISK = 'local';
 
     public function __construct(private NotificationService $notifications) {}
 
@@ -51,7 +58,7 @@ class InternshipReportController extends Controller
         $this->guardAgainstDuplicate($student, $validated);
 
         if ($request->hasFile('attachment')) {
-            $validated['attachment_path'] = $request->file('attachment')->store('report-attachments', 'public');
+            $validated['attachment_path'] = $request->file('attachment')->store('report-attachments', self::ATTACHMENT_DISK);
             $validated['attachment_original_name'] = $request->file('attachment')->getClientOriginalName();
         }
 
@@ -85,10 +92,10 @@ class InternshipReportController extends Controller
 
         if ($request->hasFile('attachment')) {
             if ($report->attachment_path) {
-                Storage::disk('public')->delete($report->attachment_path);
+                Storage::disk(self::ATTACHMENT_DISK)->delete($report->attachment_path);
             }
 
-            $validated['attachment_path'] = $request->file('attachment')->store('report-attachments', 'public');
+            $validated['attachment_path'] = $request->file('attachment')->store('report-attachments', self::ATTACHMENT_DISK);
             $validated['attachment_original_name'] = $request->file('attachment')->getClientOriginalName();
         }
 
@@ -113,13 +120,31 @@ class InternshipReportController extends Controller
         );
 
         if ($report->attachment_path) {
-            Storage::disk('public')->delete($report->attachment_path);
+            Storage::disk(self::ATTACHMENT_DISK)->delete($report->attachment_path);
         }
 
         $report->delete();
 
         return redirect()->route('reports.index')
             ->with('success', 'Report deleted.');
+    }
+
+    /**
+     * Stream a report's attachment to its owning student only. Attachments
+     * are never linked to directly from the frontend (which would bypass
+     * this ownership check via a raw /storage/... URL).
+     */
+    public function downloadAttachment(InternshipReport $report): StreamedResponse
+    {
+        $student = Auth::user()->student;
+
+        abort_if(! $student || $report->student_id !== $student->id, 403);
+        abort_unless($report->attachment_path, 404);
+
+        return Storage::disk(self::ATTACHMENT_DISK)->response(
+            $report->attachment_path,
+            $report->attachment_original_name,
+        );
     }
 
     private function validateReport(Request $request): array

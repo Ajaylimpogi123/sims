@@ -59,7 +59,10 @@ export default function ReviewModal({ report, children }) {
 
                             {report.attachment_path && (
                                 <a
-                                    href={`/storage/${report.attachment_path}`}
+                                    href={route(
+                                        "report-reviews.attachment",
+                                        report.id,
+                                    )}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="text-sm text-blue-600 underline"
