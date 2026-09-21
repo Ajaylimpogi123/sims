@@ -91,6 +91,12 @@ class UserController extends Controller
             abort(403, 'You cannot change your own account status.');
         }
 
+        $actorIsAdmin = (int) $request->user()->role_id === self::ADMIN_ROLE_ID;
+
+        if (! $actorIsAdmin && (int) $user->role_id === self::ADMIN_ROLE_ID) {
+            abort(403, 'You cannot manage an Administrator account.');
+        }
+
         $newStatus = $user->status === 'active' ? 'inactive' : 'active';
         $user->update(['status' => $newStatus]);
 

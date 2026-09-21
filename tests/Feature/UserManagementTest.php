@@ -229,4 +229,33 @@ class UserManagementTest extends TestCase
             'name' => 'Renamed By Admin',
         ]);
     }
+
+    public function test_coordinator_cannot_toggle_an_administrators_status(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $admin = User::factory()->create(['role_id' => 4, 'status' => 'active']);
+
+        $this->actingAs($coordinator)
+            ->patch("/user-management/{$admin->id}/toggle-status")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('users', [
+            'id' => $admin->id,
+            'status' => 'active',
+        ]);
+    }
+
+    public function test_admin_can_still_toggle_another_administrators_status(): void
+    {
+        $admin = User::factory()->create(['role_id' => 4]);
+        $otherAdmin = User::factory()->create(['role_id' => 4, 'status' => 'active']);
+
+        $response = $this->actingAs($admin)->patch("/user-management/{$otherAdmin->id}/toggle-status");
+
+        $response->assertRedirect(route('user-management.index', absolute: false));
+        $this->assertDatabaseHas('users', [
+            'id' => $otherAdmin->id,
+            'status' => 'inactive',
+        ]);
+    }
 }
