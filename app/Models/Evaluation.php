@@ -29,8 +29,8 @@ class Evaluation extends Model
     protected function casts(): array
     {
         return [
-            'evaluation_period_start' => 'date',
-            'evaluation_period_end' => 'date',
+            'evaluation_period_start' => 'date:Y-m-d',
+            'evaluation_period_end' => 'date:Y-m-d',
             'overall_rating' => 'decimal:2',
             'submitted_at' => 'datetime',
             'locked_at' => 'datetime',
