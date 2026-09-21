@@ -23,7 +23,6 @@ Route::middleware('auth')->group(function () {
 require __DIR__.'/auth.php';
 require __DIR__.'/user.php';
 require __DIR__.'/company.php';
-require __DIR__.'/student.php';
 require __DIR__.'/internship-assignment.php';
 require __DIR__.'/attendance.php';
 require __DIR__.'/attendance-monitoring.php';

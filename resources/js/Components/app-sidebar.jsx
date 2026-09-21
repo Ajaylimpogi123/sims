@@ -17,7 +17,6 @@ import {
     SettingsIcon,
     UsersIcon,
     Building2,
-    GraduationCap,
     Handshake,
     Clock,
     ClipboardCheck,
@@ -98,11 +97,6 @@ export function AppSidebar({ ...props }) {
                       icon: Building2,
                   },
                   {
-                      title: "Student Management",
-                      url: route("student-management.index"),
-                      icon: GraduationCap,
-                  },
-                  {
                       title: "Internship Assignment",
                       url: route("internship-assignment.index"),
                       icon: Handshake,
@@ -124,14 +118,14 @@ export function AppSidebar({ ...props }) {
                         icon: LayoutDashboardIcon,
                     },
                     {
+                        title: "User Management",
+                        url: route("user-management.index"),
+                        icon: UserRound,
+                    },
+                    {
                         title: "Company Management",
                         url: route("company-management.index"),
                         icon: Building2,
-                    },
-                    {
-                        title: "Student Management",
-                        url: route("student-management.index"),
-                        icon: GraduationCap,
                     },
                     {
                         title: "Internship Assignment",
