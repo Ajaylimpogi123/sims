@@ -33,6 +33,11 @@ class User extends Authenticatable
         return $this->hasMany(Student::class, 'supervisor_id');
     }
 
+    public function supervisedCompanies()
+    {
+        return $this->belongsToMany(Company::class, 'company_supervisors')->withTimestamps();
+    }
+
     /**
      * SIMS uses its own lightweight Notification model/table instead of
      * Laravel's polymorphic database notifications, so this intentionally
