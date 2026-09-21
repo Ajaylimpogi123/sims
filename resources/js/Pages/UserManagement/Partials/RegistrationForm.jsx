@@ -3,23 +3,13 @@ import InputLabel from "@/Components/InputLabel";
 import PrimaryButton from "@/Components/PrimaryButton";
 import TextInput from "@/Components/TextInput";
 import { Card, CardContent, CardHeader, CardTitle } from "@/Components/ui/card";
-import { useForm, usePage } from "@inertiajs/react";
-import { useMemo } from "react";
+import { useForm } from "@inertiajs/react";
 import { showRegistrationError } from "../Hooks/useRegistrationAlerts";
 
-const SUPERADMIN_ROLE_ID = 3;
-
 export default function RegistrationForm({ roles }) {
-    const { auth } = usePage().props;
-    const roleId = auth?.user?.role_id;
-
-    const availableRoles = useMemo(
-        () =>
-            roleId === 2
-                ? roles.filter((role) => role.id !== SUPERADMIN_ROLE_ID)
-                : roles,
-        [roles, roleId],
-    );
+    // The Administrator role is already excluded from `roles` server-side
+    // (UserController::index) whenever the viewer isn't an Administrator
+    // themselves, so no client-side filtering is needed here.
     const { data, setData, post, processing, errors, reset } = useForm({
         name: "",
         email: "",
@@ -87,7 +77,7 @@ export default function RegistrationForm({ roles }) {
                             required
                         >
                             <option value="">- Select a Role -</option>
-                            {availableRoles.map((role) => (
+                            {roles.map((role) => (
                                 <option key={role.id} value={role.id}>
                                     {role.role_name}
                                 </option>

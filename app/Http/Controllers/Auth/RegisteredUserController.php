@@ -10,18 +10,25 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class RegisteredUserController extends Controller
 {
+    private const ADMIN_ROLE_ID = 4;
+
     /**
      * Display the registration view.
      */
     public function create(): Response
     {
-        $roles = Role::all(['id', 'role_name']);
+        $viewerIsAdmin = (int) Auth::user()?->role_id === self::ADMIN_ROLE_ID;
+
+        $roles = Role::query()
+            ->when(! $viewerIsAdmin, fn ($query) => $query->where('id', '!=', self::ADMIN_ROLE_ID))
+            ->get(['id', 'role_name']);
 
         return Inertia::render('Auth/Register', [
 
@@ -36,12 +43,18 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        $viewerIsAdmin = (int) Auth::user()?->role_id === self::ADMIN_ROLE_ID;
+
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
 
-            'role_id' => 'required|exists:roles,id',
+            'role_id' => [
+                'required',
+                'exists:roles,id',
+                Rule::notIn($viewerIsAdmin ? [] : [self::ADMIN_ROLE_ID]),
+            ],
         ]);
 
         $user = User::create([

@@ -157,4 +157,76 @@ class UserManagementTest extends TestCase
             ->where('users.total', 3)
         );
     }
+
+    public function test_coordinator_cannot_promote_an_existing_user_to_administrator(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $target = User::factory()->create(['role_id' => 1]);
+
+        $response = $this->actingAs($coordinator)->patch("/user-management/{$target->id}", [
+            'name' => $target->name,
+            'email' => $target->email,
+            'role_id' => 4,
+        ]);
+
+        $response->assertSessionHasErrors('role_id');
+        $this->assertDatabaseHas('users', [
+            'id' => $target->id,
+            'role_id' => 1,
+        ]);
+    }
+
+    public function test_coordinator_cannot_edit_an_existing_administrators_account(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $admin = User::factory()->create(['role_id' => 4, 'name' => 'Original Admin']);
+
+        $response = $this->actingAs($coordinator)->patch("/user-management/{$admin->id}", [
+            'name' => 'Renamed By Coordinator',
+            'email' => $admin->email,
+            'role_id' => 4,
+        ]);
+
+        $response->assertForbidden();
+        $this->assertDatabaseHas('users', [
+            'id' => $admin->id,
+            'name' => 'Original Admin',
+        ]);
+    }
+
+    public function test_admin_can_still_promote_a_user_to_administrator(): void
+    {
+        $admin = User::factory()->create(['role_id' => 4]);
+        $target = User::factory()->create(['role_id' => 2]);
+
+        $response = $this->actingAs($admin)->patch("/user-management/{$target->id}", [
+            'name' => $target->name,
+            'email' => $target->email,
+            'role_id' => 4,
+        ]);
+
+        $response->assertRedirect(route('user-management.index', absolute: false));
+        $this->assertDatabaseHas('users', [
+            'id' => $target->id,
+            'role_id' => 4,
+        ]);
+    }
+
+    public function test_admin_can_still_edit_another_administrators_account(): void
+    {
+        $admin = User::factory()->create(['role_id' => 4]);
+        $otherAdmin = User::factory()->create(['role_id' => 4, 'name' => 'Original Admin']);
+
+        $response = $this->actingAs($admin)->patch("/user-management/{$otherAdmin->id}", [
+            'name' => 'Renamed By Admin',
+            'email' => $otherAdmin->email,
+            'role_id' => 4,
+        ]);
+
+        $response->assertRedirect(route('user-management.index', absolute: false));
+        $this->assertDatabaseHas('users', [
+            'id' => $otherAdmin->id,
+            'name' => 'Renamed By Admin',
+        ]);
+    }
 }

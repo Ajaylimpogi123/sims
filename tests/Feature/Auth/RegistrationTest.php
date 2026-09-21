@@ -128,4 +128,63 @@ class RegistrationTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['email' => 'blocked@example.com']);
     }
+
+    public function test_coordinator_cannot_register_a_new_administrator(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+
+        $response = $this->actingAs($coordinator)->post('/user-management/create', [
+            'name' => 'Should Not Become Admin',
+            'email' => 'escalation@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'role_id' => 4,
+        ]);
+
+        $response->assertSessionHasErrors('role_id');
+        $this->assertDatabaseMissing('users', ['email' => 'escalation@example.com']);
+    }
+
+    public function test_admin_can_still_register_a_new_administrator(): void
+    {
+        $admin = User::factory()->create(['role_id' => 4]);
+
+        $response = $this->actingAs($admin)->post('/user-management/create', [
+            'name' => 'New Admin',
+            'email' => 'new.admin@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'role_id' => 4,
+        ]);
+
+        $response->assertRedirect(route('user-management.index', absolute: false));
+        $this->assertDatabaseHas('users', [
+            'email' => 'new.admin@example.com',
+            'role_id' => 4,
+        ]);
+    }
+
+    public function test_coordinators_create_user_form_excludes_administrator_role_option(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+
+        $this->actingAs($coordinator)
+            ->get('/user-management/create')
+            ->assertInertia(fn ($page) => $page
+                ->where('roles', fn ($roles) => collect($roles)
+                    ->doesntContain(fn ($role) => (int) $role['id'] === 4))
+            );
+    }
+
+    public function test_admins_create_user_form_still_includes_administrator_role_option(): void
+    {
+        $admin = User::factory()->create(['role_id' => 4]);
+
+        $this->actingAs($admin)
+            ->get('/user-management/create')
+            ->assertInertia(fn ($page) => $page
+                ->where('roles', fn ($roles) => collect($roles)
+                    ->contains(fn ($role) => (int) $role['id'] === 4))
+            );
+    }
 }

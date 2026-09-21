@@ -11,24 +11,12 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog";
-import { useMemo } from "react";
-import { usePage } from "@inertiajs/react";
 import useEditUser from "../Hooks/useEditUser";
 
-const SUPERADMIN_ROLE_ID = 3;
-
 export default function EditModal({ user, roles, children }) {
-    const { auth } = usePage().props;
-    const roleId = auth?.user?.role_id;
-
-    const availableRoles = useMemo(
-        () =>
-            roleId === 2
-                ? roles.filter((role) => role.id !== SUPERADMIN_ROLE_ID)
-                : roles,
-        [roles, roleId],
-    );
-
+    // The Administrator role is already excluded from `roles` server-side
+    // (UserController::index) whenever the viewer isn't an Administrator
+    // themselves, so no client-side filtering is needed here.
     const {
         open,
         openModal,
@@ -105,7 +93,7 @@ export default function EditModal({ user, roles, children }) {
                                     required
                                 >
                                     <option value="">- Select a Role -</option>
-                                    {availableRoles.map((role) => (
+                                    {roles.map((role) => (
                                         <option key={role.id} value={role.id}>
                                             {role.role_name}
                                         </option>

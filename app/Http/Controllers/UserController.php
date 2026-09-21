@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -44,11 +45,20 @@ class UserController extends Controller
     public function update(Request $request, int $id): RedirectResponse
     {
         $user = User::findOrFail($id);
+        $actorIsAdmin = (int) $request->user()->role_id === self::ADMIN_ROLE_ID;
+
+        if (! $actorIsAdmin && (int) $user->role_id === self::ADMIN_ROLE_ID) {
+            abort(403, 'You cannot manage an Administrator account.');
+        }
 
         $rules = [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,'.$user->id],
-            'role_id' => ['required', 'exists:roles,id'],
+            'role_id' => [
+                'required',
+                'exists:roles,id',
+                Rule::notIn($actorIsAdmin ? [] : [self::ADMIN_ROLE_ID]),
+            ],
         ];
 
         if ($request->filled('password')) {
