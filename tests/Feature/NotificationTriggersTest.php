@@ -53,7 +53,9 @@ class NotificationTriggersTest extends TestCase
 
     public function test_approving_a_time_in_notifies_the_student(): void
     {
-        $coordinator = User::factory()->create(['role_id' => 2]);
+        // /attendance-approvals is role:3,4 (Supervisor + Admin) —
+        // Coordinator no longer has access here.
+        $admin = User::factory()->create(['role_id' => 4]);
         $student = $this->studentWithUser();
 
         $attendance = Attendance::factory()->create([
@@ -65,7 +67,7 @@ class NotificationTriggersTest extends TestCase
             'time_out_status' => null,
         ]);
 
-        $this->actingAs($coordinator)->patch("/attendance-approvals/{$attendance->id}/approve-time-in");
+        $this->actingAs($admin)->patch("/attendance-approvals/{$attendance->id}/approve-time-in");
 
         $this->assertDatabaseHas('notifications', [
             'user_id' => $student->user_id,

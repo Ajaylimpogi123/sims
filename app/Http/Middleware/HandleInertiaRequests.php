@@ -39,11 +39,18 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
                 'sale_id' => $request->session()->get('sale_id'),
             ],
-            'pendingApprovalsCount' => fn () => in_array($request->user()?->role_id, [2, 4], true)
+            'pendingApprovalsCount' => fn () => in_array($request->user()?->role_id, [3, 4], true)
                 ? \App\Models\Attendance::query()
                     ->where(fn ($query) => $query
                         ->where('time_in_status', 'pending')
                         ->orWhere('time_out_status', 'pending'))
+                    ->when(
+                        $request->user()->role_id === 3,
+                        fn ($query) => $query->whereHas(
+                            'student',
+                            fn ($q) => $q->where('supervisor_id', $request->user()->id),
+                        ),
+                    )
                     ->count()
                 : 0,
             'unreadNotificationsCount' => fn () => $request->user()

@@ -137,7 +137,6 @@ export function AppSidebar({ ...props }) {
                         url: route("attendance-monitoring.index"),
                         icon: Clock,
                     },
-                    pendingApprovalsItem,
                     reportReviewsItem,
                     progressMonitoringItem,
                 ]
@@ -171,6 +170,7 @@ export function AppSidebar({ ...props }) {
                             url: route("attendance-monitoring.index"),
                             icon: Clock,
                         },
+                        pendingApprovalsItem,
                         reportReviewsItem,
                         progressMonitoringItem,
                     ]
