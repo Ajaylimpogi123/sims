@@ -367,6 +367,77 @@ class InternshipAssignmentTest extends TestCase
         ]);
     }
 
+    public function test_editing_an_unrelated_field_still_works_after_supervisor_leaves_the_roster(): void
+    {
+        // Regression test (Finding 6): the company roster
+        // (company_supervisors pivot, "available for assignment") and a
+        // student's actual assignment (students.supervisor_id) are
+        // separate mechanisms and can legitimately drift apart — e.g. a
+        // supervisor detached from a company's roster while still actively
+        // assigned to a student there. Saving unrelated fields (here: just
+        // the student's name) must not be blocked by re-validating roster
+        // membership for a supervisor_id that isn't actually changing in
+        // this request.
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $company->supervisors()->attach($supervisor->id);
+
+        $student = Student::factory()->create([
+            'company_id' => $company->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+
+        // Supervisor detached from the roster while still assigned to the student.
+        $company->supervisors()->detach($supervisor->id);
+
+        $response = $this->actingAs($coordinator)->patch(
+            "/internship-assignment/{$student->id}",
+            $this->updatePayload($student, ['name' => 'Updated Name']),
+        );
+
+        $response->assertSessionDoesntHaveErrors('supervisor_id');
+        $response->assertRedirect(route('internship-assignment.index', absolute: false));
+        $this->assertDatabaseHas('users', [
+            'id' => $student->user_id,
+            'name' => 'Updated Name',
+        ]);
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+    }
+
+    public function test_reassigning_to_a_different_supervisor_still_requires_roster_membership_after_drift(): void
+    {
+        // Same drifted setup as above, but this request actually tries to
+        // change the supervisor — roster membership must still be enforced
+        // for that new value.
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $company->supervisors()->attach($supervisor->id);
+        $otherSupervisor = User::factory()->create(['role_id' => 3]); // not on roster
+
+        $student = Student::factory()->create([
+            'company_id' => $company->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+
+        $company->supervisors()->detach($supervisor->id);
+
+        $response = $this->actingAs($coordinator)->patch(
+            "/internship-assignment/{$student->id}",
+            $this->updatePayload($student, ['supervisor_id' => $otherSupervisor->id]),
+        );
+
+        $response->assertSessionHasErrors('supervisor_id');
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'supervisor_id' => $supervisor->id,
+        ]);
+    }
+
     public function test_updating_only_profile_fields_does_not_fire_an_assignment_notification(): void
     {
         $coordinator = User::factory()->create(['role_id' => 2]);

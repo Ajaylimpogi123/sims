@@ -71,8 +71,26 @@ class InternshipAssignmentController extends Controller
             'supervisor_id' => [
                 'nullable',
                 Rule::exists('users', 'id')->where('role_id', 3),
-                function (string $attribute, mixed $value, \Closure $fail) use ($resultingCompanyId) {
+                function (string $attribute, mixed $value, \Closure $fail) use ($resultingCompanyId, $student) {
                     if (! $value) {
+                        return;
+                    }
+
+                    // The company roster (company_supervisors pivot, "who's
+                    // available to be assigned here") and a student's actual
+                    // assignment (students.supervisor_id) are intentionally
+                    // separate mechanisms and can legitimately drift apart —
+                    // e.g. a supervisor detached from a company's roster
+                    // while still actively assigned to a student there.
+                    // Only re-validate roster membership when this request
+                    // is actually changing the supervisor or company;
+                    // otherwise an unrelated field edit (name, status, etc.)
+                    // would be blocked by a pre-existing, already-accepted
+                    // assignment every time the form round-trips it unchanged.
+                    $supervisorUnchanged = (string) $value === (string) $student->supervisor_id;
+                    $companyUnchanged = (string) $resultingCompanyId === (string) $student->company_id;
+
+                    if ($supervisorUnchanged && $companyUnchanged) {
                         return;
                     }
 
