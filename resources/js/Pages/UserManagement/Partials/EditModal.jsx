@@ -54,7 +54,7 @@ export default function EditModal({ user, roles, children }) {
                             </DialogDescription>
                         </DialogHeader>
 
-                        <div className="grid gap-4 py-4">
+                        <div className="grid max-h-[65vh] gap-4 overflow-y-auto py-4 pr-1">
                             <div>
                                 <InputLabel htmlFor="edit_name" value="Name" />
                                 <TextInput

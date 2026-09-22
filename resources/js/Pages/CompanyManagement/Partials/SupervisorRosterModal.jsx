@@ -56,7 +56,7 @@ export default function SupervisorRosterModal({
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-2">
+                    <div className="max-h-[40vh] space-y-2 overflow-y-auto pr-1">
                         {roster.length ? (
                             roster.map((supervisor) => (
                                 <div

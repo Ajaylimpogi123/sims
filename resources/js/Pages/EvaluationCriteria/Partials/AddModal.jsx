@@ -40,7 +40,7 @@ export default function AddModal({ children }) {
                             </DialogDescription>
                         </DialogHeader>
 
-                        <div className="grid gap-4">
+                        <div className="grid gap-4 max-h-[65vh] overflow-y-auto pr-1 py-2">
                             <div className="grid gap-3">
                                 <Label>Category</Label>
                                 <Input
