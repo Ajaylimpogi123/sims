@@ -2,8 +2,12 @@
 
 namespace App\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class AppServiceProvider extends ServiceProvider
@@ -22,6 +26,25 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+
+        $this->configureApiRateLimiting();
+    }
+
+    /**
+     * Named rate limiters for the mobile API (routes/api.php). Defined here,
+     * not in the routing callback, so they still exist when routes are cached.
+     */
+    protected function configureApiRateLimiting(): void
+    {
+        // Mobile login: 5 attempts per minute per email + IP.
+        RateLimiter::for('api-login', fn (Request $request) => Limit::perMinute(5)->by(
+            Str::transliterate(Str::lower((string) $request->input('email'))).'|'.$request->ip()
+        ));
+
+        // General ceiling for authenticated mobile API calls.
+        RateLimiter::for('api', fn (Request $request) => Limit::perMinute(120)->by(
+            (string) ($request->user()?->id ?: $request->ip())
+        ));
     }
 
     /**

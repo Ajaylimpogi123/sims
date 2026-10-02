@@ -4,10 +4,13 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
@@ -19,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRoleMiddleware::class,
+            'mobile' => \App\Http\Middleware\EnsureMobileAppAccess::class,
         ]);
 
         // Trust reverse proxies (e.g. ngrok) so Laravel detects the
@@ -30,5 +34,34 @@ return Application::configure(basePath: dirname(__DIR__))
             Request::HEADER_X_FORWARDED_PROTO);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $isApi = fn (Request $request): bool => $request->is('api', 'api/*');
+
+        // The mobile API never answers with HTML or a redirect: 401
+        // (unauthenticated) and 422 (validation) use Laravel's JSON shapes,
+        // {message} and {message, errors}.
+        $exceptions->shouldRenderJsonWhen(
+            fn (Request $request) => $isApi($request) || $request->expectsJson()
+        );
+
+        // Every other HTTP error on the API is {message}, with a stable
+        // message for 404/405 that doesn't leak model class names or routes.
+        // ModelNotFoundException / AuthorizationException arrive here already
+        // converted to 404 / 403 HTTP exceptions.
+        $exceptions->render(function (HttpExceptionInterface $e, Request $request) use ($isApi) {
+            if (! $isApi($request)) {
+                return null;
+            }
+
+            $status = $e->getStatusCode();
+
+            $message = match ($status) {
+                404 => 'Not found.',
+                405 => 'Method not allowed.',
+                default => $e->getMessage() !== ''
+                    ? $e->getMessage()
+                    : (Response::$statusTexts[$status] ?? 'Error.'),
+            };
+
+            return response()->json(['message' => $message], $status, $e->getHeaders());
+        });
     })->create();

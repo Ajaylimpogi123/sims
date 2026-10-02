@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Closure;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -17,6 +18,12 @@ class CheckRoleMiddleware
     public function handle(Request $request, Closure $next, ...$roles): Response
     {
         if (! auth()->check()) {
+            // API clients get a JSON 401 from the exception handler instead
+            // of an HTML redirect to the web login page.
+            if ($request->is('api', 'api/*') || $request->expectsJson()) {
+                throw new AuthenticationException;
+            }
+
             return redirect('/login');
         }
 
