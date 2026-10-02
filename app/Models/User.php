@@ -40,6 +40,16 @@ class User extends Authenticatable
             && (int) $student->supervisor_id === (int) $this->id;
     }
 
+    /**
+     * Delete every mobile API (Sanctum) token this user holds, so the app is
+     * signed out on its next request (401). Called when staff deactivate the
+     * account or change its role on the website.
+     */
+    public function revokeApiTokens(): void
+    {
+        $this->tokens()->delete();
+    }
+
     public function canUseMobileApp(): bool
     {
         return in_array((int) $this->role_id, self::MOBILE_ROLE_IDS, true);

@@ -90,7 +90,15 @@ class UserController extends Controller
             $updateData['password'] = Hash::make($validated['password']);
         }
 
+        $roleChanged = (int) $validated['role_id'] !== (int) $user->role_id;
+
         $user->update($updateData);
+
+        // A role change re-scopes everything the user can reach, so sign the
+        // mobile app out now rather than letting an old token keep working.
+        if ($roleChanged) {
+            $user->revokeApiTokens();
+        }
 
         return redirect()->route('user-management.index')
             ->with('success', 'User updated successfully.');
@@ -112,6 +120,10 @@ class UserController extends Controller
 
         $newStatus = $user->status === 'active' ? 'inactive' : 'active';
         $user->update(['status' => $newStatus]);
+
+        if ($newStatus === 'inactive') {
+            $user->revokeApiTokens();
+        }
 
         $message = $newStatus === 'inactive'
             ? 'User account deactivated successfully.'
