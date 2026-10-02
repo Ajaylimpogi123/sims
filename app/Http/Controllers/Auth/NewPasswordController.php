@@ -51,6 +51,9 @@ class NewPasswordController extends Controller
                     'remember_token' => Str::random(60),
                 ])->save();
 
+                // Sign every mobile device out, like the remember token above.
+                $user->revokeApiTokens();
+
                 event(new PasswordReset($user));
             }
         );

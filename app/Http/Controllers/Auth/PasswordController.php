@@ -24,6 +24,9 @@ class PasswordController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
+        // A password change is how a user locks out a lost phone.
+        $request->user()->revokeApiTokens();
+
         return back();
     }
 }

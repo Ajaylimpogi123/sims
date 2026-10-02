@@ -94,9 +94,10 @@ class UserController extends Controller
 
         $user->update($updateData);
 
-        // A role change re-scopes everything the user can reach, so sign the
-        // mobile app out now rather than letting an old token keep working.
-        if ($roleChanged) {
+        // A role change re-scopes everything the user can reach, and a new
+        // password is how staff lock out a lost phone, so sign the mobile app
+        // out now rather than letting an old token keep working.
+        if ($roleChanged || isset($updateData['password'])) {
             $user->revokeApiTokens();
         }
 

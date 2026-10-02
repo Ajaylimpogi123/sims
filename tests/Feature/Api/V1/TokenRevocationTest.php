@@ -6,6 +6,7 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Password;
 use Laravel\Sanctum\PersonalAccessToken;
 use Tests\TestCase;
 
@@ -149,6 +150,94 @@ class TokenRevocationTest extends TestCase
 
         $this->assertSame(User::ROLE_SUPERVISOR, (int) $supervisor->fresh()->role_id);
         $this->assertSame(1, $this->tokenCount($supervisor));
+    }
+
+    public function test_changing_your_own_password_revokes_your_tokens(): void
+    {
+        $supervisor = $this->user(User::ROLE_SUPERVISOR);
+        $phone = $supervisor->createToken('phone')->plainTextToken;
+
+        $this->actingAs($supervisor)
+            ->from('/profile')
+            ->put('/password', [
+                'current_password' => 'password',
+                'password' => 'new-password-123',
+                'password_confirmation' => 'new-password-123',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(0, $this->tokenCount($supervisor));
+        $this->app['auth']->forgetGuards();
+        $this->withToken($phone)->getJson('/api/v1/me')->assertUnauthorized();
+    }
+
+    public function test_a_failed_password_change_keeps_tokens(): void
+    {
+        $supervisor = $this->user(User::ROLE_SUPERVISOR);
+        $supervisor->createToken('phone');
+
+        $this->actingAs($supervisor)
+            ->from('/profile')
+            ->put('/password', [
+                'current_password' => 'wrong',
+                'password' => 'new-password-123',
+                'password_confirmation' => 'new-password-123',
+            ])
+            ->assertSessionHasErrors();
+
+        $this->assertSame(1, $this->tokenCount($supervisor));
+    }
+
+    public function test_staff_setting_a_users_password_revokes_their_tokens(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN);
+        $supervisor = $this->user(User::ROLE_SUPERVISOR);
+        $supervisor->createToken('phone');
+
+        $this->actingAs($admin)
+            ->patch(
+                route('user-management.update', $supervisor->id),
+                $this->editPayload($supervisor, [
+                    'password' => 'new-password-123',
+                    'password_confirmation' => 'new-password-123',
+                ]),
+            )
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(0, $this->tokenCount($supervisor));
+    }
+
+    public function test_resetting_a_forgotten_password_revokes_tokens(): void
+    {
+        $supervisor = $this->user(User::ROLE_SUPERVISOR);
+        $supervisor->createToken('phone');
+        $resetToken = Password::createToken($supervisor);
+
+        $this->post('/reset-password', [
+            'token' => $resetToken,
+            'email' => $supervisor->email,
+            'password' => 'new-password-123',
+            'password_confirmation' => 'new-password-123',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(0, $this->tokenCount($supervisor));
+    }
+
+    public function test_deleting_your_account_removes_your_tokens(): void
+    {
+        $supervisor = $this->user(User::ROLE_SUPERVISOR);
+        $supervisor->createToken('phone');
+        $supervisor->createToken('tablet');
+        $bystander = $this->user(User::ROLE_SUPERVISOR);
+        $bystander->createToken('phone');
+
+        $this->actingAs($supervisor)
+            ->delete('/profile', ['password' => 'password'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(User::find($supervisor->id));
+        $this->assertSame(0, $this->tokenCount($supervisor));
+        $this->assertSame(1, $this->tokenCount($bystander));
     }
 
     public function test_deactivating_a_student_from_internship_assignment_revokes_their_tokens(): void

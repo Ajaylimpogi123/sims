@@ -31,6 +31,15 @@ class User extends Authenticatable
         self::ROLE_ADMIN,
     ];
 
+    /**
+     * personal_access_tokens is polymorphic (no FK cascade), so a deleted
+     * user's tokens would otherwise be left behind.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(fn (User $user) => $user->revokeApiTokens());
+    }
+
     public function hasRole(int ...$roleIds): bool
     {
         return in_array((int) $this->role_id, $roleIds, true);
