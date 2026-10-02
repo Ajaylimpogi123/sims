@@ -281,14 +281,16 @@ class AttendanceService
     }
 
     /**
-     * Hours between time-in and time-out on the given date.
+     * Hours between time-in and time-out on the given date. Carbon 3's
+     * diffIn* methods are signed ($a->diffInMinutes($b) = $b - $a), so the
+     * time-in is the receiver.
      */
     public static function renderedHours(string $date, string $timeIn, string $timeOut): float
     {
         $in = Carbon::parse($date.' '.$timeIn);
         $out = Carbon::parse($date.' '.$timeOut);
 
-        return round($out->diffInMinutes($in) / 60, 2);
+        return round($in->diffInMinutes($out) / 60, 2);
     }
 
     /**
