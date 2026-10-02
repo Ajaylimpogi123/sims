@@ -22,6 +22,7 @@ import InputError from "@/Components/InputError";
 import useAddAttendanceEntry from "../Hooks/useAddAttendanceEntry";
 import useEditAttendanceEntry from "../Hooks/useEditAttendanceEntry";
 import { formatLongDate, formatTime } from "@/lib/dates";
+import { AttendanceEvidenceInOut } from "@/Components/AttendanceEvidence";
 
 function AttendanceRow({ attendance, studentUserId, canWrite, onDone }) {
     const [editing, setEditing] = useState(false);
@@ -77,6 +78,9 @@ function AttendanceRow({ attendance, studentUserId, canWrite, onDone }) {
                 </TableCell>
                 <TableCell>{attendance.rendered_hours ?? "-"}</TableCell>
                 <TableCell>-</TableCell>
+                <TableCell>
+                    <AttendanceEvidenceInOut attendance={attendance} />
+                </TableCell>
                 <TableCell className="flex gap-2">
                     <Button
                         size="sm"
@@ -106,6 +110,9 @@ function AttendanceRow({ attendance, studentUserId, canWrite, onDone }) {
             <TableCell>{attendance.rendered_hours ?? "-"}</TableCell>
             <TableCell>
                 {attendance.recorded_by === studentUserId ? "Self" : "Staff"}
+            </TableCell>
+            <TableCell>
+                <AttendanceEvidenceInOut attendance={attendance} />
             </TableCell>
             {canWrite && (
                 <TableCell className="flex gap-2">
@@ -140,7 +147,7 @@ export default function LogModal({ student, canWrite = true, children }) {
             <div onClick={() => setOpen(true)}>{children}</div>
 
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="sm:max-w-3xl">
                     <DialogHeader>
                         <DialogTitle>
                             Attendance Log — {student.name}
@@ -205,6 +212,7 @@ export default function LogModal({ student, canWrite = true, children }) {
                                     <TableHead>Time Out</TableHead>
                                     <TableHead>Hours</TableHead>
                                     <TableHead>Recorded By</TableHead>
+                                    <TableHead>Evidence</TableHead>
                                     {canWrite && (
                                         <TableHead>Actions</TableHead>
                                     )}
@@ -223,7 +231,7 @@ export default function LogModal({ student, canWrite = true, children }) {
                                 ) : (
                                     <TableRow>
                                         <TableCell
-                                            colSpan={canWrite ? 6 : 5}
+                                            colSpan={canWrite ? 7 : 6}
                                             className="h-24 text-center"
                                         >
                                             No attendance records yet.

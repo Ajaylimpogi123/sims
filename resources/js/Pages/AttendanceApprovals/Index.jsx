@@ -10,6 +10,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { formatLongDate, formatTime } from "@/lib/dates";
+import AttendanceEvidence from "@/Components/AttendanceEvidence";
 
 function buildRequests(attendances) {
     const requests = [];
@@ -102,6 +103,7 @@ export default function Index({ attendances }) {
                                         <TableHead>Date</TableHead>
                                         <TableHead>Type</TableHead>
                                         <TableHead>Requested Time</TableHead>
+                                        <TableHead>Evidence</TableHead>
                                         <TableHead>Note</TableHead>
                                         <TableHead>Actions</TableHead>
                                     </TableRow>
@@ -138,6 +140,14 @@ export default function Index({ attendances }) {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
+                                                    <AttendanceEvidence
+                                                        attendance={
+                                                            request.attendance
+                                                        }
+                                                        leg={request.type}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
                                                     {request.note || "-"}
                                                 </TableCell>
                                                 <TableCell className="flex gap-2">
@@ -168,7 +178,7 @@ export default function Index({ attendances }) {
                                     ) : (
                                         <TableRow>
                                             <TableCell
-                                                colSpan={6}
+                                                colSpan={7}
                                                 className="h-24 text-center"
                                             >
                                                 No pending requests.
