@@ -109,19 +109,39 @@ class AttendanceServiceTest extends TestCase
         $this->assertNull(AttendanceService::clampAccuracy(null));
     }
 
-    public function test_reject_then_approve_updates_status_and_notifies_the_student(): void
+    public function test_reject_updates_status_notifies_the_student_and_is_final(): void
     {
         $attendance = Attendance::factory()->pendingTimeIn()->create(['student_id' => $this->student->id]);
 
         $this->service->rejectTimeIn($attendance, 'Blurry photo');
         $this->assertSame('rejected', $attendance->fresh()->time_in_status);
         $this->assertSame('Blurry photo', $attendance->fresh()->time_in_rejection_reason);
+        $this->assertSame(1, Notification::where('user_id', $this->student->user_id)->count());
+
+        // Only a pending leg can be decided; the student re-submits instead.
+        try {
+            $this->service->approveTimeIn($attendance);
+            $this->fail('Approving a rejected time-in should be refused.');
+        } catch (AttendanceRuleException $e) {
+            $this->assertSame('This time-in is not pending review.', $e->getMessage());
+        }
+
+        $this->assertSame('rejected', $attendance->fresh()->time_in_status);
+        $this->assertSame(1, Notification::where('user_id', $this->student->user_id)->count());
+    }
+
+    public function test_approve_clears_the_reason_and_notifies_the_student(): void
+    {
+        $attendance = Attendance::factory()->pendingTimeIn()->create([
+            'student_id' => $this->student->id,
+            'time_in_rejection_reason' => 'Earlier attempt was blurry',
+        ]);
 
         $this->service->approveTimeIn($attendance);
+
         $this->assertSame('approved', $attendance->fresh()->time_in_status);
         $this->assertNull($attendance->fresh()->time_in_rejection_reason);
-
-        $this->assertSame(2, Notification::where('user_id', $this->student->user_id)->count());
+        $this->assertSame(1, Notification::where('user_id', $this->student->user_id)->count());
     }
 
     public function test_delete_entry_removes_both_photos(): void

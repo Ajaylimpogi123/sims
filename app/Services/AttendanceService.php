@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -157,67 +158,87 @@ class AttendanceService
         return $record;
     }
 
+    /**
+     * Supervisor / Admin review of a submitted leg. Each action only applies
+     * to a leg that is pending review (otherwise AttendanceRuleException:
+     * the website flashes it, the API returns 422), so a stale page or a
+     * replayed request can't flip an earlier decision.
+     *
+     * @throws AttendanceRuleException
+     */
     public function approveTimeIn(Attendance $attendance): Attendance
     {
-        $attendance->update([
-            'time_in_status' => 'approved',
-            'time_in_rejection_reason' => null,
-        ]);
-
-        $this->notifications->attendanceReviewed($attendance, 'time_in', 'approved');
-
-        return $attendance;
-    }
-
-    public function rejectTimeIn(Attendance $attendance, ?string $reason): Attendance
-    {
-        $attendance->update([
-            'time_in_status' => 'rejected',
-            'time_in_rejection_reason' => $reason,
-        ]);
-
-        $this->notifications->attendanceReviewed($attendance, 'time_in', 'rejected', $reason);
-
-        return $attendance;
+        return $this->review($attendance, 'time_in', 'approved');
     }
 
     /**
-     * Approving the time-out is what credits the day's hours, and only when
-     * the time-in was approved too.
+     * @throws AttendanceRuleException
+     */
+    public function rejectTimeIn(Attendance $attendance, ?string $reason): Attendance
+    {
+        return $this->review($attendance, 'time_in', 'rejected', $reason);
+    }
+
+    /**
+     * @throws AttendanceRuleException
      */
     public function approveTimeOut(Attendance $attendance): Attendance
     {
-        $renderedHours = null;
+        return $this->review($attendance, 'time_out', 'approved');
+    }
 
-        if ($attendance->time_in && $attendance->time_in_status === 'approved' && $attendance->time_out) {
-            $renderedHours = self::renderedHours(
-                $attendance->date->format('Y-m-d'),
-                $attendance->time_in,
-                $attendance->time_out,
-            );
-        }
+    /**
+     * @throws AttendanceRuleException
+     */
+    public function rejectTimeOut(Attendance $attendance, ?string $reason): Attendance
+    {
+        return $this->review($attendance, 'time_out', 'rejected', $reason);
+    }
 
-        $attendance->update([
-            'time_out_status' => 'approved',
-            'time_out_rejection_reason' => null,
-            'rendered_hours' => $renderedHours,
-        ]);
+    /**
+     * Decide one leg, then recompute the day's hours: credited exactly when
+     * both legs are approved, whichever was approved last (an emergency
+     * time-out can be submitted, and approved, while the time-in is still
+     * pending); cleared when either leg is rejected. The row is locked so
+     * two reviewers can't both act on the same pending leg.
+     *
+     * @param  'time_in'|'time_out'  $leg
+     * @param  'approved'|'rejected'  $decision
+     *
+     * @throws AttendanceRuleException
+     */
+    private function review(Attendance $attendance, string $leg, string $decision, ?string $reason = null): Attendance
+    {
+        DB::transaction(function () use ($attendance, $leg, $decision, $reason) {
+            $current = Attendance::query()->lockForUpdate()->findOrFail($attendance->id);
 
-        $this->notifications->attendanceReviewed($attendance, 'time_out', 'approved');
+            if ($current->{"{$leg}_status"} !== 'pending' || empty($current->{$leg})) {
+                $label = $leg === 'time_in' ? 'time-in' : 'time-out';
+
+                throw new AttendanceRuleException("This {$label} is not pending review.");
+            }
+
+            $current->{"{$leg}_status"} = $decision;
+            $current->{"{$leg}_rejection_reason"} = $decision === 'rejected' ? $reason : null;
+            $current->rendered_hours = self::hoursIfFullyApproved($current);
+            $current->save();
+
+            $attendance->setRawAttributes($current->getAttributes(), true);
+        });
+
+        $this->notifications->attendanceReviewed($attendance, $leg, $decision, $reason);
 
         return $attendance;
     }
 
-    public function rejectTimeOut(Attendance $attendance, ?string $reason): Attendance
+    private static function hoursIfFullyApproved(Attendance $attendance): ?float
     {
-        $attendance->update([
-            'time_out_status' => 'rejected',
-            'time_out_rejection_reason' => $reason,
-        ]);
+        if ($attendance->time_in_status !== 'approved' || $attendance->time_out_status !== 'approved'
+            || empty($attendance->time_in) || empty($attendance->time_out)) {
+            return null;
+        }
 
-        $this->notifications->attendanceReviewed($attendance, 'time_out', 'rejected', $reason);
-
-        return $attendance;
+        return self::renderedHours($attendance->date->format('Y-m-d'), $attendance->time_in, $attendance->time_out);
     }
 
     /**

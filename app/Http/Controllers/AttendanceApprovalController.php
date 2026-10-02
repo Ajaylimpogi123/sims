@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\AttendanceRuleException;
 use App\Models\Attendance;
 use App\Services\AttendanceService;
 use Illuminate\Http\RedirectResponse;
@@ -34,10 +35,7 @@ class AttendanceApprovalController extends Controller
     {
         $this->authorize('review', $attendance);
 
-        $this->attendance->approveTimeIn($attendance);
-
-        return redirect()->route('attendance-approvals.index')
-            ->with('success', 'Time-in approved.');
+        return $this->decide(fn () => $this->attendance->approveTimeIn($attendance), 'Time-in approved.');
     }
 
     public function rejectTimeIn(Request $request, Attendance $attendance): RedirectResponse
@@ -46,20 +44,17 @@ class AttendanceApprovalController extends Controller
 
         $validated = $request->validate(AttendanceService::rejectionRules());
 
-        $this->attendance->rejectTimeIn($attendance, $validated['reason'] ?? null);
-
-        return redirect()->route('attendance-approvals.index')
-            ->with('success', 'Time-in rejected.');
+        return $this->decide(
+            fn () => $this->attendance->rejectTimeIn($attendance, $validated['reason'] ?? null),
+            'Time-in rejected.',
+        );
     }
 
     public function approveTimeOut(Attendance $attendance): RedirectResponse
     {
         $this->authorize('review', $attendance);
 
-        $this->attendance->approveTimeOut($attendance);
-
-        return redirect()->route('attendance-approvals.index')
-            ->with('success', 'Time-out approved.');
+        return $this->decide(fn () => $this->attendance->approveTimeOut($attendance), 'Time-out approved.');
     }
 
     public function rejectTimeOut(Request $request, Attendance $attendance): RedirectResponse
@@ -68,9 +63,24 @@ class AttendanceApprovalController extends Controller
 
         $validated = $request->validate(AttendanceService::rejectionRules());
 
-        $this->attendance->rejectTimeOut($attendance, $validated['reason'] ?? null);
+        return $this->decide(
+            fn () => $this->attendance->rejectTimeOut($attendance, $validated['reason'] ?? null),
+            'Time-out rejected.',
+        );
+    }
 
-        return redirect()->route('attendance-approvals.index')
-            ->with('success', 'Time-out rejected.');
+    /**
+     * A leg that is no longer pending (already decided, or a stale page)
+     * comes back as a flash error instead of overwriting the decision.
+     */
+    private function decide(callable $action, string $success): RedirectResponse
+    {
+        try {
+            $action();
+        } catch (AttendanceRuleException $e) {
+            return redirect()->route('attendance-approvals.index')->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('attendance-approvals.index')->with('success', $success);
     }
 }
