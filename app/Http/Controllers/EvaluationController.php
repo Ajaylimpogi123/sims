@@ -15,10 +15,6 @@ use Inertia\Response;
 
 class EvaluationController extends Controller
 {
-    private const SUPERVISOR_ROLE_ID = 3;
-
-    private const ADMIN_ROLE_ID = 4;
-
     public function index(): Response
     {
         $evaluations = Evaluation::query()
@@ -27,22 +23,13 @@ class EvaluationController extends Controller
                 'company:id,company_name',
                 'supervisor:id,name',
             ])
-            ->when(
-                Auth::user()->role_id === self::SUPERVISOR_ROLE_ID,
-                fn ($query) => $query->whereHas(
-                    'student',
-                    fn ($q) => $q->where('supervisor_id', Auth::id()),
-                ),
-            )
+            ->visibleTo(Auth::user())
             ->orderByDesc('evaluation_period_start')
             ->get();
 
         $students = Student::query()
             ->with('user:id,name')
-            ->when(
-                Auth::user()->role_id === self::SUPERVISOR_ROLE_ID,
-                fn ($query) => $query->where('supervisor_id', Auth::id()),
-            )
+            ->visibleTo(Auth::user())
             ->orderBy('created_at', 'desc')
             ->get(['id', 'user_id', 'student_number', 'supervisor_id']);
 
@@ -55,7 +42,7 @@ class EvaluationController extends Controller
 
     public function show(Evaluation $evaluation): Response
     {
-        $this->authorizeView($evaluation);
+        $this->authorize('view', $evaluation);
 
         $evaluation->load([
             'student.user:id,name',
@@ -68,7 +55,7 @@ class EvaluationController extends Controller
         return Inertia::render('SupervisorEvaluations/Show', [
             'evaluation' => $evaluation,
             'criteria' => $this->activeCriteria(),
-            'canEdit' => $this->canMutate($evaluation) && $evaluation->status === 'draft',
+            'canEdit' => Auth::user()->can('update', $evaluation),
         ]);
     }
 
@@ -78,7 +65,7 @@ class EvaluationController extends Controller
 
         $student = Student::findOrFail($validated['student_id']);
 
-        $this->authorizeSupervisedStudent($student);
+        $this->authorize('evaluate', $student);
 
         $evaluation = DB::transaction(function () use ($validated, $student) {
             $evaluation = Evaluation::create([
@@ -106,9 +93,7 @@ class EvaluationController extends Controller
 
     public function update(Request $request, Evaluation $evaluation): RedirectResponse
     {
-        $this->authorizeMutation($evaluation);
-
-        abort_unless($evaluation->status === 'draft', 403, 'Only draft evaluations can be edited.');
+        $this->authorize('update', $evaluation);
 
         $validated = $this->validateEvaluation($request, forStudentSwitch: false);
 
@@ -132,9 +117,7 @@ class EvaluationController extends Controller
 
     public function submit(Evaluation $evaluation): RedirectResponse
     {
-        $this->authorizeMutation($evaluation);
-
-        abort_unless($evaluation->status === 'draft', 403, 'Only draft evaluations can be submitted.');
+        $this->authorize('submit', $evaluation);
 
         $activeCriteriaIds = EvaluationCriteria::query()->where('is_active', true)->pluck('id');
         $respondedCriteriaIds = $evaluation->responses()->pluck('evaluation_criteria_id');
@@ -158,7 +141,7 @@ class EvaluationController extends Controller
 
     public function lock(Evaluation $evaluation): RedirectResponse
     {
-        abort_unless($evaluation->status === 'submitted', 403, 'Only submitted evaluations can be locked.');
+        $this->authorize('lock', $evaluation);
 
         $evaluation->update([
             'status' => 'locked',
@@ -172,7 +155,7 @@ class EvaluationController extends Controller
 
     public function reopen(Evaluation $evaluation): RedirectResponse
     {
-        abort_unless(in_array($evaluation->status, ['submitted', 'locked'], true), 403, 'Only submitted or locked evaluations can be reopened.');
+        $this->authorize('reopen', $evaluation);
 
         $evaluation->update([
             'status' => 'draft',
@@ -253,35 +236,5 @@ class EvaluationController extends Controller
         $evaluation->update([
             'overall_rating' => $average !== null ? round($average, 2) : null,
         ]);
-    }
-
-    private function authorizeSupervisedStudent(Student $student): void
-    {
-        if (Auth::user()->role_id === self::SUPERVISOR_ROLE_ID) {
-            abort_unless($student->supervisor_id === Auth::id(), 403);
-        }
-    }
-
-    private function authorizeView(Evaluation $evaluation): void
-    {
-        if (Auth::user()->role_id === self::SUPERVISOR_ROLE_ID) {
-            abort_unless($evaluation->student->supervisor_id === Auth::id(), 403);
-        }
-    }
-
-    private function authorizeMutation(Evaluation $evaluation): void
-    {
-        if (Auth::user()->role_id === self::SUPERVISOR_ROLE_ID) {
-            abort_unless($evaluation->student->supervisor_id === Auth::id(), 403);
-        }
-    }
-
-    private function canMutate(Evaluation $evaluation): bool
-    {
-        if (Auth::user()->role_id === self::SUPERVISOR_ROLE_ID) {
-            return $evaluation->student->supervisor_id === Auth::id();
-        }
-
-        return in_array(Auth::user()->role_id, [self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID], true);
     }
 }

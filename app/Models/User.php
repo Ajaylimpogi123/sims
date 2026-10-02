@@ -11,8 +11,34 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    /** Role IDs — the canonical mapping lives in RoleSeeder. */
+    public const ROLE_STUDENT = 1;
+
+    public const ROLE_COORDINATOR = 2;
+
+    public const ROLE_SUPERVISOR = 3;
+
+    public const ROLE_ADMIN = 4;
+
     /** Role IDs allowed to use the mobile app (Student, Supervisor). */
-    public const MOBILE_ROLE_IDS = [1, 3];
+    public const MOBILE_ROLE_IDS = [self::ROLE_STUDENT, self::ROLE_SUPERVISOR];
+
+    public function hasRole(int ...$roleIds): bool
+    {
+        return in_array((int) $this->role_id, $roleIds, true);
+    }
+
+    /**
+     * Supervisor scoping: students.supervisor_id is the source of truth for
+     * who supervises whom (company_supervisors is only an eligibility roster).
+     */
+    public function supervises(?Student $student): bool
+    {
+        return $this->hasRole(self::ROLE_SUPERVISOR)
+            && $student !== null
+            && $student->supervisor_id !== null
+            && (int) $student->supervisor_id === (int) $this->id;
+    }
 
     public function canUseMobileApp(): bool
     {

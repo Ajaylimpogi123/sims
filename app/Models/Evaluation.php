@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\VisibleThroughStudent;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Evaluation extends Model
 {
-    use HasFactory;
+    use HasFactory, VisibleThroughStudent;
 
     protected $fillable = [
         'student_id',

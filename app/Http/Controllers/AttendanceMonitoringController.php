@@ -24,10 +24,7 @@ class AttendanceMonitoringController extends Controller
                 'attendances' => fn ($query) => $query->orderByDesc('date'),
             ])
             ->withSum('attendances as total_rendered_hours', 'rendered_hours')
-            ->when(
-                Auth::user()->role_id === 3,
-                fn ($query) => $query->where('supervisor_id', Auth::id()),
-            )
+            ->visibleTo(Auth::user())
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -38,7 +35,7 @@ class AttendanceMonitoringController extends Controller
 
     public function updateRequiredHours(Request $request, Student $student): RedirectResponse
     {
-        $this->authorizeSupervisedStudent($student);
+        $this->authorize('manageAttendance', $student);
 
         $request->merge(['required_hours' => $request->required_hours ?: null]);
 
@@ -54,7 +51,7 @@ class AttendanceMonitoringController extends Controller
 
     public function store(Request $request, Student $student): RedirectResponse
     {
-        $this->authorizeSupervisedStudent($student);
+        $this->authorize('manageAttendance', $student);
 
         $validated = $this->validateEntry($request, $student);
 
@@ -71,7 +68,7 @@ class AttendanceMonitoringController extends Controller
 
     public function update(Request $request, Attendance $attendance): RedirectResponse
     {
-        $this->authorizeSupervisedStudent($attendance->student);
+        $this->authorize('update', $attendance);
 
         $validated = $this->validateEntry($request, $attendance->student, $attendance->id);
 
@@ -109,7 +106,7 @@ class AttendanceMonitoringController extends Controller
 
     public function destroy(Attendance $attendance): RedirectResponse
     {
-        $this->authorizeSupervisedStudent($attendance->student);
+        $this->authorize('delete', $attendance);
 
         $photoPaths = array_filter([
             $attendance->time_in_photo_path,
@@ -124,13 +121,6 @@ class AttendanceMonitoringController extends Controller
 
         return redirect()->route('attendance-monitoring.index')
             ->with('success', 'Attendance entry deleted.');
-    }
-
-    private function authorizeSupervisedStudent(Student $student): void
-    {
-        if (Auth::user()->role_id === 3) {
-            abort_unless($student->supervisor_id === Auth::id(), 403);
-        }
     }
 
     private function validateEntry(Request $request, Student $student, ?int $ignoreId = null): array

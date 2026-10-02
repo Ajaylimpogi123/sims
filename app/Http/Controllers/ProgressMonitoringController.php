@@ -14,10 +14,7 @@ class ProgressMonitoringController extends Controller
         $students = Student::query()
             ->with(['user:id,name', 'company:id,company_name'])
             ->withSum('attendances as total_rendered_hours', 'rendered_hours')
-            ->when(
-                Auth::user()->role_id === 3,
-                fn ($query) => $query->where('supervisor_id', Auth::id()),
-            )
+            ->visibleTo(Auth::user())
             ->orderBy('created_at', 'desc')
             ->get();
 

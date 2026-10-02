@@ -81,10 +81,7 @@ class InternshipReportController extends Controller
                 ->with('error', self::NO_PROFILE_MESSAGE);
         }
 
-        abort_unless(
-            $report->student_id === $student->id && $report->status === 'pending',
-            403,
-        );
+        $this->authorize('update', $report);
 
         $validated = $this->validateReport($request);
 
@@ -114,10 +111,7 @@ class InternshipReportController extends Controller
                 ->with('error', self::NO_PROFILE_MESSAGE);
         }
 
-        abort_unless(
-            $report->student_id === $student->id && $report->status === 'pending',
-            403,
-        );
+        $this->authorize('delete', $report);
 
         if ($report->attachment_path) {
             Storage::disk(self::ATTACHMENT_DISK)->delete($report->attachment_path);
@@ -136,9 +130,7 @@ class InternshipReportController extends Controller
      */
     public function downloadAttachment(InternshipReport $report): StreamedResponse
     {
-        $student = Auth::user()->student;
-
-        abort_if(! $student || $report->student_id !== $student->id, 403);
+        $this->authorize('view', $report);
         abort_unless($report->attachment_path, 404);
 
         return Storage::disk(self::ATTACHMENT_DISK)->response(

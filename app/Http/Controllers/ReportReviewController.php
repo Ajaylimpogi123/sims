@@ -22,13 +22,9 @@ class ReportReviewController extends Controller
 
     public function index(): Response
     {
-        $query = InternshipReport::query()->with('student.user:id,name');
-
-        if (Auth::user()->role_id === 3) {
-            $query->whereHas('student', fn ($q) => $q->where('supervisor_id', Auth::id()));
-        }
-
-        $reports = $query
+        $reports = InternshipReport::query()
+            ->with('student.user:id,name')
+            ->visibleTo(Auth::user())
             ->orderByRaw("status = 'pending' desc")
             ->orderByDesc('period_start')
             ->get();
@@ -40,9 +36,7 @@ class ReportReviewController extends Controller
 
     public function review(Request $request, InternshipReport $report): RedirectResponse
     {
-        if (Auth::user()->role_id === 3) {
-            abort_unless($report->student->supervisor_id === Auth::id(), 403);
-        }
+        $this->authorize('review', $report);
 
         $validated = $request->validate([
             'comment' => ['nullable', 'string', 'max:2000'],
@@ -70,9 +64,7 @@ class ReportReviewController extends Controller
      */
     public function downloadAttachment(InternshipReport $report): StreamedResponse
     {
-        if (Auth::user()->role_id === 3) {
-            abort_unless($report->student->supervisor_id === Auth::id(), 403);
-        }
+        $this->authorize('view', $report);
 
         abort_unless($report->attachment_path, 404);
 

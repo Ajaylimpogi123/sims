@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use Illuminate\Auth\Access\Response;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
@@ -28,6 +30,16 @@ class AppServiceProvider extends ServiceProvider
         Vite::prefetch(concurrency: 3);
 
         $this->configureApiRateLimiting();
+
+        // Policies (app/Policies) are auto-discovered. An empty message makes
+        // a plain `false` from a policy render exactly like the abort(403)
+        // checks the policies replaced (the web 403 page says "Forbidden",
+        // the API says {"message": "Forbidden"}) instead of Laravel's
+        // "This action is unauthorized.". Policies that need a specific
+        // message return Response::deny('...'). Note Gate::forUser() does
+        // not copy this default — authorize through $this->authorize() /
+        // Gate::authorize() on the signed-in user.
+        Gate::defaultDenialResponse(Response::deny(''));
     }
 
     /**

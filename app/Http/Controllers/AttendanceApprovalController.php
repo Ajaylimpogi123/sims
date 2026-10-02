@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
-use App\Models\Student;
 use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -23,13 +22,7 @@ class AttendanceApprovalController extends Controller
             ->where(fn ($query) => $query
                 ->where('time_in_status', 'pending')
                 ->orWhere('time_out_status', 'pending'))
-            ->when(
-                Auth::user()->role_id === 3,
-                fn ($query) => $query->whereHas(
-                    'student',
-                    fn ($q) => $q->where('supervisor_id', Auth::id()),
-                ),
-            )
+            ->visibleTo(Auth::user())
             ->orderBy('date')
             ->get();
 
@@ -40,7 +33,7 @@ class AttendanceApprovalController extends Controller
 
     public function approveTimeIn(Attendance $attendance): RedirectResponse
     {
-        $this->authorizeSupervisedStudent($attendance->student);
+        $this->authorize('review', $attendance);
 
         $attendance->update([
             'time_in_status' => 'approved',
@@ -55,7 +48,7 @@ class AttendanceApprovalController extends Controller
 
     public function rejectTimeIn(Request $request, Attendance $attendance): RedirectResponse
     {
-        $this->authorizeSupervisedStudent($attendance->student);
+        $this->authorize('review', $attendance);
 
         $validated = $request->validate([
             'reason' => ['nullable', 'string', 'max:500'],
@@ -74,7 +67,7 @@ class AttendanceApprovalController extends Controller
 
     public function approveTimeOut(Attendance $attendance): RedirectResponse
     {
-        $this->authorizeSupervisedStudent($attendance->student);
+        $this->authorize('review', $attendance);
 
         $renderedHours = null;
 
@@ -98,7 +91,7 @@ class AttendanceApprovalController extends Controller
 
     public function rejectTimeOut(Request $request, Attendance $attendance): RedirectResponse
     {
-        $this->authorizeSupervisedStudent($attendance->student);
+        $this->authorize('review', $attendance);
 
         $validated = $request->validate([
             'reason' => ['nullable', 'string', 'max:500'],
@@ -113,12 +106,5 @@ class AttendanceApprovalController extends Controller
 
         return redirect()->route('attendance-approvals.index')
             ->with('success', 'Time-out rejected.');
-    }
-
-    private function authorizeSupervisedStudent(Student $student): void
-    {
-        if (Auth::user()->role_id === 3) {
-            abort_unless($student->supervisor_id === Auth::id(), 403);
-        }
     }
 }

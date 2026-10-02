@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\InternshipReportController;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
@@ -52,6 +53,21 @@ class Student extends Model
     public function evaluations()
     {
         return $this->hasMany(Evaluation::class);
+    }
+
+    /**
+     * Students the given user may see in a list: a Supervisor only their own
+     * students (students.supervisor_id), a Student only themself,
+     * Coordinator/Administrator everyone. Mirrors StudentPolicy::view().
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return match ((int) $user->role_id) {
+            User::ROLE_COORDINATOR, User::ROLE_ADMIN => $query,
+            User::ROLE_SUPERVISOR => $query->where($this->qualifyColumn('supervisor_id'), $user->id),
+            User::ROLE_STUDENT => $query->where($this->qualifyColumn('user_id'), $user->id),
+            default => $query->whereRaw('1 = 0'),
+        };
     }
 
     /**
