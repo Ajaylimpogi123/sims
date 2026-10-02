@@ -5,10 +5,24 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
+
+    /** Role IDs allowed to use the mobile app (Student, Supervisor). */
+    public const MOBILE_ROLE_IDS = [1, 3];
+
+    public function canUseMobileApp(): bool
+    {
+        return in_array((int) $this->role_id, self::MOBILE_ROLE_IDS, true);
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
 
     protected $fillable = [
         'name',
