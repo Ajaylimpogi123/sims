@@ -28,7 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Trust reverse proxies (e.g. ngrok) so Laravel detects the
         // original HTTPS scheme/host from X-Forwarded-* headers instead
         // of generating http:// URLs that browsers block as mixed content.
-        $middleware->trustProxies(at: '*', headers: Request::HEADER_X_FORWARDED_FOR |
+        // Which proxies are trusted comes from config/trustedproxy.php
+        // (TRUSTED_PROXIES, default loopback) — never '*', which would let
+        // any client spoof X-Forwarded-For and reset its login rate limit.
+        $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR |
             Request::HEADER_X_FORWARDED_HOST |
             Request::HEADER_X_FORWARDED_PORT |
             Request::HEADER_X_FORWARDED_PROTO);

@@ -2,15 +2,17 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Services\LoginThrottleKey;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class LoginRequest extends FormRequest
 {
+    private ?string $throttleKey = null;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -88,6 +90,7 @@ class LoginRequest extends FormRequest
      */
     public function throttleKey(): string
     {
-        return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+        // Called several times per attempt; the key involves a DB lookup.
+        return $this->throttleKey ??= LoginThrottleKey::for($this->input('email'), $this->ip());
     }
 }

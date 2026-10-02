@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\LoginThrottleKey;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -9,7 +10,6 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class AppServiceProvider extends ServiceProvider
@@ -48,9 +48,10 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureApiRateLimiting(): void
     {
-        // Mobile login: 5 attempts per minute per email + IP.
+        // Mobile login: 5 attempts per minute per account (or normalised
+        // email) + IP. Runs before validation, so `email` may be any type.
         RateLimiter::for('api-login', fn (Request $request) => Limit::perMinute(5)->by(
-            Str::transliterate(Str::lower((string) $request->input('email'))).'|'.$request->ip()
+            LoginThrottleKey::for($request->input('email'), $request->ip())
         ));
 
         // General ceiling for authenticated mobile API calls.
