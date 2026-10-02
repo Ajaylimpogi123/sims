@@ -20,6 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
 
+        // Malformed UTF-8 input is a 422 on the API, never a 500.
+        $middleware->api(prepend: [
+            \App\Http\Middleware\RejectMalformedUtf8::class,
+        ]);
+
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRoleMiddleware::class,
             'mobile' => \App\Http\Middleware\EnsureMobileAppAccess::class,
