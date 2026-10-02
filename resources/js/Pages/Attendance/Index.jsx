@@ -17,6 +17,7 @@ import {
     formatLongDateWithWeekday,
     formatTime,
 } from "@/lib/dates";
+import useHighlightRow from "@/hooks/useHighlightRow";
 
 const STATUS_STYLES = {
     pending: "bg-amber-100 text-amber-700",
@@ -48,6 +49,7 @@ export default function Index({
     // "time_in" | "time_out" | "emergency" while the capture dialog is open.
     // The dialog is only mounted while open so the camera is released on close.
     const [captureMode, setCaptureMode] = useState(null);
+    const { getRowProps } = useHighlightRow();
 
     const timeInStatus = todayRecord?.time_in_status;
     const timeOutStatus = todayRecord?.time_out_status;
@@ -225,7 +227,10 @@ export default function Index({
                                 <TableBody>
                                     {attendances.length ? (
                                         attendances.map((record) => (
-                                            <TableRow key={record.id}>
+                                            <TableRow
+                                                key={record.id}
+                                                {...getRowProps(record.id)}
+                                            >
                                                 <TableCell>
                                                     {formatLongDate(
                                                         record.date,

@@ -13,6 +13,7 @@ import ReviewModal from "./Partials/ReviewModal";
 import { formatLongDate } from "@/lib/dates";
 import ExportButtons from "@/Components/ExportButtons";
 import { usePage } from "@inertiajs/react";
+import useHighlightRow from "@/hooks/useHighlightRow";
 
 const SUPERVISOR_ROLE_ID = 3;
 
@@ -56,6 +57,7 @@ function capitalize(value) {
 export default function Index({ reports }) {
     const { auth } = usePage().props;
     const canReview = auth?.user?.role_id !== SUPERVISOR_ROLE_ID;
+    const { getRowProps } = useHighlightRow();
 
     const exportData = reports.map((report) => ({
         student_name: report.student?.user?.name || "-",
@@ -104,7 +106,10 @@ export default function Index({ reports }) {
                                 <TableBody>
                                     {reports.length ? (
                                         reports.map((report) => (
-                                            <TableRow key={report.id}>
+                                            <TableRow
+                                                key={report.id}
+                                                {...getRowProps(report.id)}
+                                            >
                                                 <TableCell>
                                                     {report.student?.user?.name}
                                                 </TableCell>

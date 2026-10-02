@@ -23,6 +23,7 @@ import InputError from "@/Components/InputError";
 import EditReportModal from "./Partials/EditReportModal";
 import { router } from "@inertiajs/react";
 import { formatLongDate } from "@/lib/dates";
+import useHighlightRow from "@/hooks/useHighlightRow";
 
 const STATUS_STYLES = {
     pending: "bg-amber-100 text-amber-700",
@@ -44,6 +45,7 @@ function StatusBadge({ status }) {
 export default function Index({ reports }) {
     const { flash } = usePage().props;
     const [showForm, setShowForm] = useState(false);
+    const { getRowProps } = useHighlightRow();
 
     const { data, setData, post, processing, errors, reset } = useForm({
         type: "daily",
@@ -247,7 +249,10 @@ export default function Index({ reports }) {
                                 <TableBody>
                                     {reports.length ? (
                                         reports.map((report) => (
-                                            <TableRow key={report.id}>
+                                            <TableRow
+                                                key={report.id}
+                                                {...getRowProps(report.id)}
+                                            >
                                                 <TableCell className="capitalize">
                                                     {report.type}
                                                 </TableCell>

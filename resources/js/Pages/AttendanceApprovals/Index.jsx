@@ -11,6 +11,7 @@ import {
 } from "@/Components/ui/table";
 import { formatLongDate, formatTime } from "@/lib/dates";
 import AttendanceEvidence from "@/Components/AttendanceEvidence";
+import useHighlightRow from "@/hooks/useHighlightRow";
 
 function buildRequests(attendances) {
     const requests = [];
@@ -48,6 +49,7 @@ function buildRequests(attendances) {
 
 export default function Index({ attendances }) {
     const requests = buildRequests(attendances);
+    const { getRowProps } = useHighlightRow();
 
     const handleApprove = (request) => {
         const routeName =
@@ -111,7 +113,12 @@ export default function Index({ attendances }) {
                                 <TableBody>
                                     {requests.length ? (
                                         requests.map((request) => (
-                                            <TableRow key={request.key}>
+                                            <TableRow
+                                                key={request.key}
+                                                {...getRowProps(
+                                                    request.attendance.id,
+                                                )}
+                                            >
                                                 <TableCell>
                                                     {
                                                         request.attendance
