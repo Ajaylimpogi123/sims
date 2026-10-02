@@ -34,9 +34,7 @@ class NotificationController extends Controller
     {
         abort_unless($notification->user_id === Auth::id(), 403);
 
-        if (! $notification->read_at) {
-            $notification->update(['read_at' => now()]);
-        }
+        $this->notifications->markRead($notification);
 
         return redirect()->to($this->notifications->urlFor($notification, Auth::user()));
     }
@@ -45,16 +43,14 @@ class NotificationController extends Controller
     {
         abort_unless($notification->user_id === Auth::id(), 403);
 
-        if (! $notification->read_at) {
-            $notification->update(['read_at' => now()]);
-        }
+        $this->notifications->markRead($notification);
 
         return back();
     }
 
     public function markAllRead(): RedirectResponse
     {
-        Auth::user()->notifications()->unread()->update(['read_at' => now()]);
+        $this->notifications->markAllRead(Auth::user());
 
         return back();
     }

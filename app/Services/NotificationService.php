@@ -25,6 +25,22 @@ class NotificationService
 
     private const ADMIN_ROLE_ID = 4;
 
+    /**
+     * Destination keys => web route for urlFor(). The keys are also the
+     * mobile app's screen keys returned by targetFor() (its FeatureKeys), so
+     * they are part of the API contract: never rename one.
+     */
+    private const DESTINATION_ROUTES = [
+        'approvals' => 'attendance-approvals.index',
+        'attendance-monitoring' => 'attendance-monitoring.index',
+        'attendance' => 'attendance.index',
+        'report-reviews' => 'report-reviews.index',
+        'my-reports' => 'reports.index',
+        'home' => 'dashboard',
+        'progress' => 'progress-monitoring.index',
+        'students' => 'internship-assignment.index',
+    ];
+
     public function notify(User $user, string $type, string $title, ?string $body = null, array $data = []): Notification
     {
         return $user->notifications()->create([
@@ -219,6 +235,27 @@ class NotificationService
     }
 
     /**
+     * Mark one notification read. Idempotent: an already-read notification
+     * keeps its original read_at. Ownership is the caller's job.
+     */
+    public function markRead(Notification $notification): void
+    {
+        if (! $notification->read_at) {
+            $notification->update(['read_at' => now()]);
+        }
+    }
+
+    /**
+     * Mark every unread notification of this user read.
+     *
+     * @return int how many were marked
+     */
+    public function markAllRead(User $user): int
+    {
+        return $user->notifications()->unread()->update(['read_at' => now()]);
+    }
+
+    /**
      * @return Collection<int, User>
      */
     private function staffUsers(): Collection
@@ -294,14 +331,46 @@ class NotificationService
      */
     public function urlFor(Notification $notification, User $viewer): string
     {
-        [$routeName, $parameters] = $this->destinationFor($notification, (int) $viewer->role_id)
-            ?? ['notifications.index', []];
+        $destination = $this->destinationFor($notification, (int) $viewer->role_id);
 
-        return route($routeName, $parameters);
+        if ($destination === null) {
+            return route('notifications.index');
+        }
+
+        return route(
+            self::DESTINATION_ROUTES[$destination['screen']],
+            $destination['highlight'] ? ['highlight' => $destination['id']] : [],
+        );
     }
 
     /**
-     * @return array{0: string, 1: array<string, int>}|null
+     * The mobile app's equivalent of urlFor(): which app screen (a stable
+     * key, see docs/api/v1.md) a tap on this notification should open for
+     * the viewer, plus the related record id to highlight. Same decision
+     * table as urlFor(), so both always point at the same place; null where
+     * the web falls back to the inbox.
+     *
+     * @return array{screen: string, params: array<string, int>}|null
+     */
+    public function targetFor(Notification $notification, User $viewer): ?array
+    {
+        $destination = $this->destinationFor($notification, (int) $viewer->role_id);
+
+        if ($destination === null) {
+            return null;
+        }
+
+        return [
+            'screen' => $destination['screen'],
+            'params' => $destination['highlight'] ? [$destination['id_key'] => $destination['id']] : [],
+        ];
+    }
+
+    /**
+     * The single type x role decision table behind urlFor() and targetFor().
+     * `highlight` says whether the destination highlights the related record.
+     *
+     * @return array{screen: string, highlight: bool, id: int, id_key: string}|null
      */
     private function destinationFor(Notification $notification, int $roleId): ?array
     {
@@ -321,43 +390,52 @@ class NotificationService
             return null;
         }
 
-        $highlight = ['highlight' => $id];
-
-        return match ($notification->type) {
+        $destination = match ($notification->type) {
             'attendance_pending' => match ($roleId) {
-                self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID => ['attendance-approvals.index', $highlight],
+                self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID => ['approvals', true],
                 // Coordinators received these before approvals moved to
                 // Supervisor/Admin; old rows open read-only monitoring
                 // instead of a 403.
-                self::COORDINATOR_ROLE_ID => ['attendance-monitoring.index', []],
+                self::COORDINATOR_ROLE_ID => ['attendance-monitoring', false],
                 default => null,
             },
             'attendance_reviewed' => match ($roleId) {
-                self::STUDENT_ROLE_ID => ['attendance.index', $highlight],
-                self::COORDINATOR_ROLE_ID, self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID => ['attendance-monitoring.index', []],
+                self::STUDENT_ROLE_ID => ['attendance', true],
+                self::COORDINATOR_ROLE_ID, self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID => ['attendance-monitoring', false],
                 default => null,
             },
             'report_submitted' => match ($roleId) {
-                self::COORDINATOR_ROLE_ID, self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID => ['report-reviews.index', $highlight],
+                self::COORDINATOR_ROLE_ID, self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID => ['report-reviews', true],
                 default => null,
             },
             'report_reviewed' => match ($roleId) {
-                self::STUDENT_ROLE_ID => ['reports.index', $highlight],
-                self::COORDINATOR_ROLE_ID, self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID => ['report-reviews.index', $highlight],
+                self::STUDENT_ROLE_ID => ['my-reports', true],
+                self::COORDINATOR_ROLE_ID, self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID => ['report-reviews', true],
                 default => null,
             },
             'assignment_updated' => match ($roleId) {
-                self::STUDENT_ROLE_ID => ['dashboard', []],
-                self::SUPERVISOR_ROLE_ID => ['progress-monitoring.index', []],
-                self::COORDINATOR_ROLE_ID, self::ADMIN_ROLE_ID => ['internship-assignment.index', []],
+                self::STUDENT_ROLE_ID => ['home', false],
+                self::SUPERVISOR_ROLE_ID => ['progress', false],
+                self::COORDINATOR_ROLE_ID, self::ADMIN_ROLE_ID => ['students', false],
                 default => null,
             },
             'student_registered' => match ($roleId) {
-                self::COORDINATOR_ROLE_ID, self::ADMIN_ROLE_ID => ['internship-assignment.index', []],
+                self::COORDINATOR_ROLE_ID, self::ADMIN_ROLE_ID => ['students', false],
                 default => null,
             },
             default => null,
         };
+
+        if ($destination === null) {
+            return null;
+        }
+
+        return [
+            'screen' => $destination[0],
+            'highlight' => $destination[1],
+            'id' => $id,
+            'id_key' => $idKey,
+        ];
     }
 
     private function positiveInt(mixed $value): ?int
