@@ -3,12 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\Student;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -51,17 +51,19 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
-        $studentId = $user->student?->id;
+
+        // users -> students -> attendances / internship_reports is an FK
+        // cascade, so no model events fire. Snapshot the student's private
+        // files now (the report rows are gone after the delete) and remove
+        // them only once the delete has succeeded.
+        $storedFiles = $user->student?->storedFiles();
 
         Auth::logout();
 
         $user->delete();
 
-        // users -> students -> attendances is an FK cascade, so no model
-        // events fire; remove the student's private attendance photos here.
-        if ($studentId) {
-            Storage::disk(AttendanceController::PHOTO_DISK)
-                ->deleteDirectory("attendance-photos/{$studentId}");
+        if ($storedFiles) {
+            Student::deleteStoredFiles($storedFiles);
         }
 
         $request->session()->invalidate();

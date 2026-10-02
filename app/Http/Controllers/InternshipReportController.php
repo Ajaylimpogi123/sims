@@ -22,7 +22,7 @@ class InternshipReportController extends Controller
     // only ever served back out through downloadAttachment() below, after an
     // ownership check — never via a direct /storage/... URL, which would
     // bypass authorization entirely.
-    private const ATTACHMENT_DISK = 'local';
+    public const ATTACHMENT_DISK = 'local';
 
     public function __construct(private NotificationService $notifications) {}
 
