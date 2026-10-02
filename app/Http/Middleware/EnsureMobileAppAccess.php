@@ -12,9 +12,9 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Guards every authenticated /api/v1 route (runs after auth:sanctum).
  *
- * A token is only usable while its owner is still an *active* Student or
- * Supervisor. Both can change after the token was issued (an admin
- * deactivates the account or changes its role on the website), so this is
+ * A token is only usable while its owner is still *active* and has one of
+ * the four SIMS roles. Both can change after the token was issued (staff
+ * deactivate the account or change its role on the website), so this is
  * re-checked on every request. When the check fails the token that was
  * presented is revoked, so the app is forced back to the login screen.
  */
@@ -24,7 +24,7 @@ class EnsureMobileAppAccess
 
     public const CODE_ACCOUNT_INACTIVE = 'account_inactive';
 
-    public const MESSAGE_ROLE_NOT_ALLOWED = 'The mobile app is for students and supervisors only. Please use the website.';
+    public const MESSAGE_ROLE_NOT_ALLOWED = 'This account does not have access to the mobile app.';
 
     public const MESSAGE_ACCOUNT_INACTIVE = 'This account has been deactivated. Please contact an administrator.';
 

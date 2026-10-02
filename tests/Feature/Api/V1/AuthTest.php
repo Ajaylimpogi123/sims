@@ -156,21 +156,50 @@ class AuthTest extends TestCase
         $this->assertJsonResponse($response);
     }
 
-    public function test_administrator_and_coordinator_are_told_to_use_the_website(): void
+    public function test_coordinator_and_administrator_can_log_in(): void
     {
-        foreach ([2 => 'coord@example.com', 4 => 'admin@example.com'] as $roleId => $email) {
-            $this->user($roleId, ['email' => $email]);
+        $roles = [2 => 'Internship Coordinator', 4 => 'Administrator'];
 
-            $response = $this->login($email);
+        foreach ($roles as $roleId => $roleName) {
+            $user = $this->user($roleId, ['email' => "role{$roleId}@example.com"]);
 
-            $response->assertForbidden()->assertExactJson([
-                'message' => 'The mobile app is for students and supervisors only. Please use the website.',
-                'code' => 'role_not_allowed',
+            $response = $this->login("role{$roleId}@example.com");
+
+            $response->assertOk()->assertExactJson([
+                'token' => $response->json('token'),
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role_id' => $roleId,
+                    'role' => $roleName,
+                ],
             ]);
-            $this->assertJsonResponse($response);
+            $this->assertTrue(PersonalAccessToken::findToken($response->json('token'))->tokenable->is($user));
         }
+    }
 
+    public function test_user_without_a_role_cannot_log_in(): void
+    {
+        $this->user(1, ['email' => 'norole@example.com', 'role_id' => null]);
+
+        $response = $this->login('norole@example.com');
+
+        $response->assertForbidden()->assertExactJson([
+            'message' => 'This account does not have access to the mobile app.',
+            'code' => 'role_not_allowed',
+        ]);
+        $this->assertJsonResponse($response);
         $this->assertSame(0, PersonalAccessToken::count());
+    }
+
+    public function test_user_without_a_role_and_wrong_password_gets_422_not_a_role_hint(): void
+    {
+        $this->user(1, ['email' => 'norole@example.com', 'role_id' => null]);
+
+        $this->login('norole@example.com', 'wrong')
+            ->assertStatus(422)
+            ->assertJsonPath('message', self::FAILED_MESSAGE);
     }
 
     public function test_admin_with_wrong_password_gets_422_not_a_role_hint(): void
@@ -182,9 +211,11 @@ class AuthTest extends TestCase
             ->assertJsonPath('message', self::FAILED_MESSAGE);
     }
 
-    public function test_inactive_student_and_supervisor_cannot_log_in(): void
+    public function test_inactive_accounts_of_every_role_cannot_log_in(): void
     {
-        foreach ([1 => 'student@example.com', 3 => 'sup@example.com'] as $roleId => $email) {
+        $accounts = [1 => 'student@example.com', 2 => 'coord@example.com', 3 => 'sup@example.com', 4 => 'admin@example.com'];
+
+        foreach ($accounts as $roleId => $email) {
             $this->user($roleId, ['email' => $email, 'status' => 'inactive']);
 
             $this->login($email)
@@ -259,6 +290,7 @@ class AuthTest extends TestCase
                 'supervisor' => ['id' => $supervisor->id, 'name' => 'Supervisor Santos'],
             ],
             'supervisor' => null,
+            'staff' => null,
         ]);
     }
 
@@ -273,7 +305,8 @@ class AuthTest extends TestCase
             ->assertJsonPath('student.company', null)
             ->assertJsonPath('student.supervisor', null)
             ->assertJsonPath('student.required_hours', null)
-            ->assertJsonPath('supervisor', null);
+            ->assertJsonPath('supervisor', null)
+            ->assertJsonPath('staff', null);
     }
 
     public function test_me_returns_null_student_for_a_student_role_user_without_a_profile(): void
@@ -285,7 +318,8 @@ class AuthTest extends TestCase
             ->assertOk()
             ->assertJsonPath('user.id', $user->id)
             ->assertJsonPath('student', null)
-            ->assertJsonPath('supervisor', null);
+            ->assertJsonPath('supervisor', null)
+            ->assertJsonPath('staff', null);
     }
 
     public function test_me_for_a_supervisor_counts_only_their_own_students(): void
@@ -309,6 +343,7 @@ class AuthTest extends TestCase
                 ],
                 'student' => null,
                 'supervisor' => ['students_count' => 2],
+                'staff' => null,
             ]);
     }
 
@@ -396,28 +431,112 @@ class AuthTest extends TestCase
         $this->api('GET', '/api/v1/me', $token)->assertUnauthorized();
     }
 
-    public function test_user_whose_role_changed_after_login_is_rejected_and_the_token_revoked(): void
+    public function test_user_whose_role_was_removed_after_login_is_rejected_and_the_token_revoked(): void
     {
         $user = $this->user(1);
         $token = $user->createToken('phone')->plainTextToken;
 
-        $user->update(['role_id' => 2]);
+        // e.g. the role row was deleted (users.role_id is nullOnDelete).
+        $user->update(['role_id' => null]);
 
         $this->api('GET', '/api/v1/me', $token)
             ->assertForbidden()
-            ->assertJsonPath('code', 'role_not_allowed');
+            ->assertExactJson([
+                'message' => 'This account does not have access to the mobile app.',
+                'code' => 'role_not_allowed',
+            ]);
         $this->assertSame(0, $user->tokens()->count());
+        $this->api('POST', '/api/v1/logout', $token)->assertUnauthorized();
     }
 
-    public function test_admin_holding_a_token_cannot_use_the_api(): void
+    public function test_inactive_staff_holding_a_token_are_rejected_and_the_token_revoked(): void
     {
-        $admin = $this->user(4);
-        $token = $admin->createToken('script')->plainTextToken;
+        foreach ([2, 4] as $roleId) {
+            $user = $this->user($roleId);
+            $token = $user->createToken('phone')->plainTextToken;
+            $user->update(['status' => 'inactive']);
+
+            $this->api('GET', '/api/v1/me', $token)
+                ->assertForbidden()
+                ->assertJsonPath('code', 'account_inactive');
+            $this->assertSame(0, $user->tokens()->count());
+        }
+    }
+
+    public function test_me_for_a_coordinator_returns_view_and_review_permissions_only(): void
+    {
+        $coordinator = $this->user(2);
+        $token = $coordinator->createToken('phone')->plainTextToken;
 
         $this->api('GET', '/api/v1/me', $token)
-            ->assertForbidden()
-            ->assertJsonPath('code', 'role_not_allowed');
-        $this->api('POST', '/api/v1/logout', $token)->assertUnauthorized();
+            ->assertOk()
+            ->assertExactJson([
+                'user' => [
+                    'id' => $coordinator->id,
+                    'name' => $coordinator->name,
+                    'email' => $coordinator->email,
+                    'role_id' => 2,
+                    'role' => 'Internship Coordinator',
+                ],
+                'student' => null,
+                'supervisor' => null,
+                'staff' => [
+                    'can_manage_users' => true,
+                    'can_manage_companies' => true,
+                    'can_assign_internships' => true,
+                    'can_approve_attendance' => false,
+                    'can_edit_attendance' => false,
+                    'can_review_reports' => true,
+                    'can_write_evaluations' => false,
+                    'can_lock_evaluations' => false,
+                    'can_manage_criteria' => false,
+                ],
+            ]);
+    }
+
+    public function test_me_for_an_administrator_returns_every_permission(): void
+    {
+        $admin = $this->user(4);
+        $token = $admin->createToken('phone')->plainTextToken;
+
+        $this->api('GET', '/api/v1/me', $token)
+            ->assertOk()
+            ->assertExactJson([
+                'user' => [
+                    'id' => $admin->id,
+                    'name' => $admin->name,
+                    'email' => $admin->email,
+                    'role_id' => 4,
+                    'role' => 'Administrator',
+                ],
+                'student' => null,
+                'supervisor' => null,
+                'staff' => [
+                    'can_manage_users' => true,
+                    'can_manage_companies' => true,
+                    'can_assign_internships' => true,
+                    'can_approve_attendance' => true,
+                    'can_edit_attendance' => true,
+                    'can_review_reports' => true,
+                    'can_write_evaluations' => true,
+                    'can_lock_evaluations' => true,
+                    'can_manage_criteria' => true,
+                ],
+            ]);
+    }
+
+    public function test_full_flow_for_every_role_login_then_me(): void
+    {
+        foreach ([1, 2, 3, 4] as $roleId) {
+            $this->user($roleId, ['email' => "flow{$roleId}@example.com"]);
+
+            $token = $this->login("flow{$roleId}@example.com")->assertOk()->json('token');
+
+            $this->api('GET', '/api/v1/me', $token)
+                ->assertOk()
+                ->assertJsonPath('user.role_id', $roleId)
+                ->assertJsonStructure(['user', 'student', 'supervisor', 'staff']);
+        }
     }
 
     public function test_successful_authenticated_requests_update_last_used_at(): void

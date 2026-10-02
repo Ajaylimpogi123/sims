@@ -20,8 +20,16 @@ class User extends Authenticatable
 
     public const ROLE_ADMIN = 4;
 
-    /** Role IDs allowed to use the mobile app (Student, Supervisor). */
-    public const MOBILE_ROLE_IDS = [self::ROLE_STUDENT, self::ROLE_SUPERVISOR];
+    /**
+     * Role IDs allowed to use the mobile app: every known role. Accounts
+     * with a null/unknown role_id are refused.
+     */
+    public const MOBILE_ROLE_IDS = [
+        self::ROLE_STUDENT,
+        self::ROLE_COORDINATOR,
+        self::ROLE_SUPERVISOR,
+        self::ROLE_ADMIN,
+    ];
 
     public function hasRole(int ...$roleIds): bool
     {
@@ -53,6 +61,35 @@ class User extends Authenticatable
     public function canUseMobileApp(): bool
     {
         return in_array((int) $this->role_id, self::MOBILE_ROLE_IDS, true);
+    }
+
+    /**
+     * What a Coordinator/Administrator may do, for the mobile app to build
+     * its navigation (GET /api/v1/me `staff`). Mirrors the website's route
+     * `role:` groups; they are UI hints only, every endpoint still enforces
+     * its own rule. Null for non-staff roles.
+     *
+     * @return array<string, bool>|null
+     */
+    public function staffPermissions(): ?array
+    {
+        if (! $this->hasRole(self::ROLE_COORDINATOR, self::ROLE_ADMIN)) {
+            return null;
+        }
+
+        $admin = $this->hasRole(self::ROLE_ADMIN);
+
+        return [
+            'can_manage_users' => true,
+            'can_manage_companies' => true,
+            'can_assign_internships' => true,
+            'can_approve_attendance' => $admin,
+            'can_edit_attendance' => $admin,
+            'can_review_reports' => true,
+            'can_write_evaluations' => $admin,
+            'can_lock_evaluations' => $admin,
+            'can_manage_criteria' => $admin,
+        ];
     }
 
     public function isActive(): bool

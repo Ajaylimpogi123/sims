@@ -8,13 +8,13 @@ use Illuminate\Support\Facades\Route;
 | Mobile API (v1)
 |--------------------------------------------------------------------------
 |
-| JSON API for the SIMS mobile app (Students and Supervisors only).
+| JSON API for the SIMS mobile app (all four roles).
 | Loaded by bootstrap/app.php with the "api" prefix and middleware group;
 | the contract is documented in docs/api/v1.md.
 |
 | Authenticated routes: Bearer token (auth:sanctum) + "mobile", which
-| rejects (and revokes the token of) anyone who is no longer an active
-| Student/Supervisor. Narrow further per module with role:1 / role:3.
+| rejects (and revokes the token of) anyone who is no longer active or has
+| no SIMS role. Narrow further per module with the role: middleware (e.g. role:3,4).
 |
 */
 

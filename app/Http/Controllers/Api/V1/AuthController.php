@@ -23,10 +23,10 @@ class AuthController extends Controller
     /**
      * Exchange email + password for a personal access token.
      *
-     * Only active Students and Supervisors may use the app. Wrong email and
-     * wrong password produce the identical 422 so the response never reveals
-     * whether an account exists; role/status are only disclosed (403) after
-     * the password has been verified.
+     * Any active account with a SIMS role (1-4) may use the app. Wrong email
+     * and wrong password produce the identical 422 so the response never
+     * reveals whether an account exists; a missing role or inactive status
+     * is only disclosed (403) after the password has been verified.
      */
     public function login(LoginRequest $request): JsonResponse
     {
@@ -86,6 +86,9 @@ class AuthController extends Controller
         $student = null;
         $supervisor = null;
 
+        // Coordinator / Administrator: permission flags for navigation.
+        $staff = $user->staffPermissions();
+
         if ((int) $user->role_id === 1) {
             $profile = $user->student()->with(['company', 'supervisor'])->first();
             $student = $profile ? new StudentProfileResource($profile) : null;
@@ -101,6 +104,7 @@ class AuthController extends Controller
             'user' => new UserResource($user),
             'student' => $student,
             'supervisor' => $supervisor,
+            'staff' => $staff,
         ]);
     }
 }
