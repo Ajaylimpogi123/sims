@@ -25,6 +25,14 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\RejectMalformedUtf8::class,
         ]);
 
+        // Must stay ahead of auth:sanctum (priority sorting would otherwise
+        // move authentication first): it caps 401s per IP before any token
+        // lookup.
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests::class,
+            prepend: \App\Http\Middleware\ThrottleFailedAuth::class,
+        );
+
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRoleMiddleware::class,
             'mobile' => \App\Http\Middleware\EnsureMobileAppAccess::class,

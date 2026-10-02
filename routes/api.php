@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Middleware\ThrottleFailedAuth;
 use App\Http\Middleware\ThrottleLogin;
 use Illuminate\Support\Facades\Route;
 
@@ -24,7 +25,8 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         ->middleware(ThrottleLogin::class)
         ->name('login');
 
-    Route::middleware(['auth:sanctum', 'mobile', 'throttle:api'])->group(function () {
+    // ThrottleFailedAuth must come before auth:sanctum: it caps 401s per IP.
+    Route::middleware([ThrottleFailedAuth::class, 'auth:sanctum', 'mobile', 'throttle:api'])->group(function () {
         Route::post('logout', [AuthController::class, 'logout'])->name('logout');
         Route::get('me', [AuthController::class, 'me'])->name('me');
     });
