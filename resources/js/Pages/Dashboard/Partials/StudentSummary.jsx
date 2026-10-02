@@ -6,7 +6,7 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table";
+} from "@/Components/ui/table";
 import { Clock, FileText, Building2 } from "lucide-react";
 import { formatLongDate, formatTime } from "@/lib/dates";
 import StatCard from "./StatCard";

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, usePage } from "@inertiajs/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import { AttendanceEvidenceInOut } from "@/Components/AttendanceEvidence";
 import CaptureDialog from "./Partials/CaptureDialog";
 import {
@@ -11,7 +11,7 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table";
+} from "@/Components/ui/table";
 import {
     formatLongDate,
     formatLongDateWithWeekday,

@@ -1,7 +1,7 @@
 import InputError from "@/Components/InputError";
 import InputLabel from "@/Components/InputLabel";
 import TextInput from "@/Components/TextInput";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import {
     Dialog,
     DialogContent,
@@ -10,7 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogDescription,
-} from "@/components/ui/dialog";
+} from "@/Components/ui/dialog";
 import useEditUser from "../Hooks/useEditUser";
 
 // Kept in sync with UserController::update()'s server-side rejection:

@@ -1,6 +1,6 @@
 // components/recent-orders-table.jsx
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/Components/ui/table";
+import { Badge } from "@/Components/ui/badge";
 import { Card, CardContent, CardHeader, CardDescription, CardTitle } from "@/Components/ui/card";
 import { formatDate } from "@/lib/dates";
 export function RecentOrdersTable({ orders }) {

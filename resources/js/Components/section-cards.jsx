@@ -1,7 +1,7 @@
 // components/section-cards.jsx (Enhanced)
 import { TrendingDownIcon, TrendingUpIcon, DollarSign, ShoppingBag, Users, TrendingUp } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/Components/ui/badge";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/Components/ui/card";
 
 export function SectionCards({ data }) {
     const { revenue, orders, customers, growth } = data;

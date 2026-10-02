@@ -1,12 +1,12 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/Components/ui/input";
+import { Label } from "@/Components/ui/label";
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select";
+} from "@/Components/ui/select";
 import InputError from "@/Components/InputError";
 import CriteriaRatingGroup from "./CriteriaRatingGroup";
 

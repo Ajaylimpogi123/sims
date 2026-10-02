@@ -1,7 +1,7 @@
 import { useState } from "react";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, Link, usePage } from "@inertiajs/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import {
     Table,
     TableBody,
@@ -9,7 +9,7 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table";
+} from "@/Components/ui/table";
 import { formatLongDate } from "@/lib/dates";
 import EvaluationFormFields from "./Partials/EvaluationFormFields";
 import useCreateEvaluation from "./Hooks/useCreateEvaluation";

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
+import { Label } from "@/Components/ui/label"
+import { Separator } from "@/Components/ui/separator"
 
 const FieldGroup = React.forwardRef(({ className, ...props }, ref) => (
   <div

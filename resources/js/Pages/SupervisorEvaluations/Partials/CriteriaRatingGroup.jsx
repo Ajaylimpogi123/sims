@@ -1,4 +1,4 @@
-import { Label } from "@/components/ui/label";
+import { Label } from "@/Components/ui/label";
 import { groupByCategory } from "../lib/responses";
 
 const RATING_SCALE = [1, 2, 3, 4, 5];

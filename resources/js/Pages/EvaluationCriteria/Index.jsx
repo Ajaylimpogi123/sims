@@ -1,6 +1,6 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, router, usePage } from "@inertiajs/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import { Plus } from "lucide-react";
 import {
     Table,
@@ -9,8 +9,8 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+} from "@/Components/ui/table";
+import { Badge } from "@/Components/ui/badge";
 import AddModal from "./Partials/AddModal";
 import EditModal from "./Partials/EditModal";
 

@@ -1,6 +1,6 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head } from "@inertiajs/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import { Plus } from "lucide-react";
 import AddModal from "./Partials/AddModal";
 import { DataTable } from "./Partials/DataTable";

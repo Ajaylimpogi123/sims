@@ -6,7 +6,7 @@ import {
     MapPin,
     RefreshCw,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import {
     Dialog,
     DialogContent,
@@ -14,8 +14,8 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+} from "@/Components/ui/dialog";
+import { Label } from "@/Components/ui/label";
 import InputError from "@/Components/InputError";
 import useCamera, { INSECURE_CONTEXT_MESSAGE } from "../Hooks/useCamera";
 import useGeolocation from "../Hooks/useGeolocation";

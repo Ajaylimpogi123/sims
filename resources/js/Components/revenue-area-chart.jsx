@@ -11,15 +11,15 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+} from "@/Components/ui/card"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/Components/ui/chart"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/Components/ui/select"
 
 export function RevenueAreaChart({ data, title = "Revenue Trend", description = "Daily revenue over time" }) {
   const [timeRange, setTimeRange] = React.useState("30d")

@@ -1,7 +1,7 @@
-import { SiteHeader } from "@/components/site-header";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { Toaster } from "@/components/ui/sonner";
+import { SiteHeader } from "@/Components/site-header";
+import { SidebarInset, SidebarProvider } from "@/Components/ui/sidebar";
+import { AppSidebar } from "@/Components/app-sidebar";
+import { Toaster } from "@/Components/ui/sonner";
 export default function AuthenticatedLayout({ children }) {
     return (
         <SidebarProvider>

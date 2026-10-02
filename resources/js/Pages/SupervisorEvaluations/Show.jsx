@@ -1,6 +1,6 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, Link, usePage } from "@inertiajs/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import { formatLongDate } from "@/lib/dates";
 import EvaluationFormFields from "./Partials/EvaluationFormFields";
 import CriteriaRatingGroup from "./Partials/CriteriaRatingGroup";

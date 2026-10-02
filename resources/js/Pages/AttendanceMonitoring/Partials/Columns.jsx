@@ -1,10 +1,10 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuLabel,
     DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/Components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
 import RequiredHoursModal from "./RequiredHoursModal";
 import LogModal from "./LogModal";

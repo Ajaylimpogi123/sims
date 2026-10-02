@@ -15,9 +15,9 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+} from "@/Components/ui/table";
+import { Input } from "@/Components/ui/input";
+import { Button } from "@/Components/ui/button";
 
 export function DataTable({ columns, data }) {
     const [sorting, setSorting] = useState([]);

@@ -1,5 +1,5 @@
 import InputLabel from "@/Components/InputLabel";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import {
     Table,
     TableBody,
@@ -7,7 +7,7 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table";
+} from "@/Components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/Components/ui/card";
 import StatusBadge from "@/Components/StatusBadge";
 import { router, useForm, usePage } from "@inertiajs/react";

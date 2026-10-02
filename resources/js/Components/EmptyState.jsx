@@ -1,5 +1,5 @@
 import { Inbox } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import { Link } from "@inertiajs/react";
 
 /**

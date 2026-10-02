@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { router } from "@inertiajs/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
     DialogDescription,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from "@/Components/ui/dialog";
+import { Input } from "@/Components/ui/input";
+import { Label } from "@/Components/ui/label";
 import {
     Table,
     TableBody,
@@ -17,7 +17,7 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table";
+} from "@/Components/ui/table";
 import InputError from "@/Components/InputError";
 import useAddAttendanceEntry from "../Hooks/useAddAttendanceEntry";
 import useEditAttendanceEntry from "../Hooks/useEditAttendanceEntry";

@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import InputLabel from "@/Components/InputLabel";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import { DateRangePicker } from "@/Components/date-range-picker";
 import useAnalyticsFilters from "../Hooks/useAnalyticsFilters";
 
