@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use App\Http\Controllers\InternshipReportController;
 use App\Services\AttendanceService;
+use App\Services\InternshipReportService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -100,7 +100,7 @@ class Student extends Model
     public static function deleteStoredFiles(array $storedFiles): void
     {
         if ($storedFiles['attachments'] !== []) {
-            Storage::disk(InternshipReportController::ATTACHMENT_DISK)
+            Storage::disk(InternshipReportService::ATTACHMENT_DISK)
                 ->delete($storedFiles['attachments']);
         }
 

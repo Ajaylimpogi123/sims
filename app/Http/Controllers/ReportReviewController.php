@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternshipReport;
-use App\Services\NotificationService;
+use App\Services\InternshipReportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,11 +14,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportReviewController extends Controller
 {
-    // Kept in sync with InternshipReportController::ATTACHMENT_DISK —
-    // attachments live on the private `local` disk, never on `public`.
-    private const ATTACHMENT_DISK = 'local';
-
-    public function __construct(private NotificationService $notifications) {}
+    public function __construct(private InternshipReportService $reports) {}
 
     public function index(): Response
     {
@@ -38,18 +34,9 @@ class ReportReviewController extends Controller
     {
         $this->authorize('review', $report);
 
-        $validated = $request->validate([
-            'comment' => ['nullable', 'string', 'max:2000'],
-        ]);
+        $validated = $request->validate(InternshipReportService::reviewRules());
 
-        $report->update([
-            'status' => 'reviewed',
-            'reviewer_comment' => $validated['comment'] ?? null,
-            'reviewed_by' => Auth::id(),
-            'reviewed_at' => now(),
-        ]);
-
-        $this->notifications->reportReviewed($report);
+        $this->reports->review($report, Auth::user(), $validated['comment'] ?? null);
 
         return redirect()->route('report-reviews.index')
             ->with('success', 'Report reviewed.');
@@ -68,7 +55,7 @@ class ReportReviewController extends Controller
 
         abort_unless($report->attachment_path, 404);
 
-        return Storage::disk(self::ATTACHMENT_DISK)->response(
+        return Storage::disk(InternshipReportService::ATTACHMENT_DISK)->response(
             $report->attachment_path,
             $report->attachment_original_name,
         );
