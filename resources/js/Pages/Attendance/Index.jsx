@@ -56,8 +56,11 @@ export default function Index({
     const canTimeOut =
         timeInStatus === "approved" &&
         (!timeOutStatus || timeOutStatus === "rejected");
+    // Mirrors AttendanceController::emergencyTimeOut — a rejected time-in
+    // can't be followed by an emergency time-out.
     const canReportEmergency =
         !!todayRecord?.time_in &&
+        timeInStatus !== "rejected" &&
         (!timeOutStatus || timeOutStatus === "rejected");
 
     const requiredHours = student.required_hours;
