@@ -1,7 +1,9 @@
 import { useState } from "react";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
-import { Head, router, usePage } from "@inertiajs/react";
+import { Head, usePage } from "@inertiajs/react";
 import { Button } from "@/components/ui/button";
+import { AttendanceEvidenceInOut } from "@/Components/AttendanceEvidence";
+import CaptureDialog from "./Partials/CaptureDialog";
 import {
     Table,
     TableBody,
@@ -43,8 +45,9 @@ export default function Index({
     todayRecord,
 }) {
     const { flash } = usePage().props;
-    const [showEmergencyForm, setShowEmergencyForm] = useState(false);
-    const [note, setNote] = useState("");
+    // "time_in" | "time_out" | "emergency" while the capture dialog is open.
+    // The dialog is only mounted while open so the camera is released on close.
+    const [captureMode, setCaptureMode] = useState(null);
 
     const timeInStatus = todayRecord?.time_in_status;
     const timeOutStatus = todayRecord?.time_out_status;
@@ -56,33 +59,6 @@ export default function Index({
     const canReportEmergency =
         !!todayRecord?.time_in &&
         (!timeOutStatus || timeOutStatus === "rejected");
-
-    const handleTimeIn = () => {
-        router.post(route("attendance.time-in"), {}, { preserveScroll: true });
-    };
-
-    const handleTimeOut = () => {
-        router.post(
-            route("attendance.time-out"),
-            {},
-            { preserveScroll: true },
-        );
-    };
-
-    const handleEmergencySubmit = (e) => {
-        e.preventDefault();
-        router.post(
-            route("attendance.emergency-time-out"),
-            { note },
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    setNote("");
-                    setShowEmergencyForm(false);
-                },
-            },
-        );
-    };
 
     const requiredHours = student.required_hours;
     const remainingHours =
@@ -187,13 +163,13 @@ export default function Index({
 
                             <div className="flex gap-2">
                                 <Button
-                                    onClick={handleTimeIn}
+                                    onClick={() => setCaptureMode("time_in")}
                                     disabled={!canTimeIn}
                                 >
                                     Time In
                                 </Button>
                                 <Button
-                                    onClick={handleTimeOut}
+                                    onClick={() => setCaptureMode("time_out")}
                                     disabled={!canTimeOut}
                                     variant="outline"
                                 >
@@ -202,57 +178,32 @@ export default function Index({
                             </div>
                         </div>
 
+                        <p className="text-xs text-muted-foreground">
+                            Time in and time out require a live photo from
+                            your camera and your current location.
+                        </p>
+
                         {canReportEmergency && (
                             <div className="border-t pt-4">
-                                {!showEmergencyForm ? (
-                                    <Button
-                                        variant="link"
-                                        className="h-auto p-0 text-sm text-red-600"
-                                        onClick={() =>
-                                            setShowEmergencyForm(true)
-                                        }
-                                    >
-                                        Report Emergency (time out without an
-                                        approved time-in)
-                                    </Button>
-                                ) : (
-                                    <form
-                                        onSubmit={handleEmergencySubmit}
-                                        className="space-y-2"
-                                    >
-                                        <textarea
-                                            placeholder="Explain the emergency..."
-                                            value={note}
-                                            onChange={(e) =>
-                                                setNote(e.target.value)
-                                            }
-                                            required
-                                            rows={3}
-                                            className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                        />
-                                        <div className="flex gap-2">
-                                            <Button type="submit" size="sm">
-                                                Submit Emergency Time Out
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => {
-                                                    setShowEmergencyForm(
-                                                        false,
-                                                    );
-                                                    setNote("");
-                                                }}
-                                            >
-                                                Cancel
-                                            </Button>
-                                        </div>
-                                    </form>
-                                )}
+                                <Button
+                                    variant="link"
+                                    className="h-auto p-0 text-sm text-red-600"
+                                    onClick={() => setCaptureMode("emergency")}
+                                >
+                                    Report Emergency (time out without an
+                                    approved time-in)
+                                </Button>
                             </div>
                         )}
                     </div>
+
+                    {captureMode && (
+                        <CaptureDialog
+                            key={captureMode}
+                            mode={captureMode}
+                            onClose={() => setCaptureMode(null)}
+                        />
+                    )}
 
                     <div className="rounded-sm border bg-card text-card-foreground shadow">
                         <div className="p-6">
@@ -265,6 +216,7 @@ export default function Index({
                                         <TableHead>Time Out</TableHead>
                                         <TableHead>Out Status</TableHead>
                                         <TableHead>Hours Rendered</TableHead>
+                                        <TableHead>Evidence</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -306,12 +258,17 @@ export default function Index({
                                                     {record.rendered_hours ??
                                                         "-"}
                                                 </TableCell>
+                                                <TableCell>
+                                                    <AttendanceEvidenceInOut
+                                                        attendance={record}
+                                                    />
+                                                </TableCell>
                                             </TableRow>
                                         ))
                                     ) : (
                                         <TableRow>
                                             <TableCell
-                                                colSpan={6}
+                                                colSpan={7}
                                                 className="h-24 text-center"
                                             >
                                                 No attendance records yet.
