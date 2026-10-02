@@ -161,9 +161,14 @@ class InternshipAssignmentController extends Controller
 
     public function toggleStatus(Student $student): RedirectResponse
     {
-        $student->user->update([
-            'status' => $student->user->status === 'active' ? 'inactive' : 'active',
-        ]);
+        $newStatus = $student->user->status === 'active' ? 'inactive' : 'active';
+
+        $student->user->update(['status' => $newStatus]);
+
+        // Same as User Management: sign the mobile app out immediately.
+        if ($newStatus === 'inactive') {
+            $student->user->revokeApiTokens();
+        }
 
         return redirect()->route('internship-assignment.index')
             ->with('success', 'Student status updated.');

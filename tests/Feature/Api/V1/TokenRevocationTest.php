@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -148,5 +149,26 @@ class TokenRevocationTest extends TestCase
 
         $this->assertSame(User::ROLE_SUPERVISOR, (int) $supervisor->fresh()->role_id);
         $this->assertSame(1, $this->tokenCount($supervisor));
+    }
+
+    public function test_deactivating_a_student_from_internship_assignment_revokes_their_tokens(): void
+    {
+        $coordinator = $this->user(User::ROLE_COORDINATOR);
+        $student = Student::factory()->create();
+        $student->user->update(['status' => 'active']);
+        $student->user->createToken('phone');
+
+        $this->actingAs($coordinator)
+            ->patch(route('internship-assignment.toggle-status', $student))
+            ->assertRedirect();
+
+        $this->assertSame('inactive', $student->user->fresh()->status);
+        $this->assertSame(0, $this->tokenCount($student->user));
+
+        // Reactivating leaves tokens alone.
+        $student->user->createToken('new-phone');
+        $this->actingAs($coordinator)->patch(route('internship-assignment.toggle-status', $student));
+        $this->assertSame('active', $student->user->fresh()->status);
+        $this->assertSame(1, $this->tokenCount($student->user));
     }
 }
