@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\InternshipReportController;
+use App\Services\AttendanceService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -104,7 +104,7 @@ class Student extends Model
                 ->delete($storedFiles['attachments']);
         }
 
-        Storage::disk(AttendanceController::PHOTO_DISK)
+        Storage::disk(AttendanceService::PHOTO_DISK)
             ->deleteDirectory($storedFiles['photo_directory']);
     }
 }

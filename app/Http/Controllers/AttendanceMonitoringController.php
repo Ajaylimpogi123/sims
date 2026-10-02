@@ -4,17 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use App\Models\Student;
-use Carbon\Carbon;
+use App\Services\AttendanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class AttendanceMonitoringController extends Controller
 {
+    public function __construct(private AttendanceService $attendance) {}
+
     public function index(): Response
     {
         $students = Student::query()
@@ -55,12 +56,7 @@ class AttendanceMonitoringController extends Controller
 
         $validated = $this->validateEntry($request, $student);
 
-        $validated['rendered_hours'] = $this->computeRenderedHours($validated);
-        $validated['recorded_by'] = Auth::id();
-        $validated['time_in_status'] = $validated['time_in'] ? 'approved' : null;
-        $validated['time_out_status'] = $validated['time_out'] ? 'approved' : null;
-
-        $student->attendances()->create($validated);
+        $this->attendance->createEntry($student, Auth::user(), $validated);
 
         return redirect()->route('attendance-monitoring.index')
             ->with('success', 'Attendance entry added.');
@@ -72,33 +68,7 @@ class AttendanceMonitoringController extends Controller
 
         $validated = $this->validateEntry($request, $attendance->student, $attendance->id);
 
-        $validated['rendered_hours'] = $this->computeRenderedHours($validated);
-        $validated['recorded_by'] = Auth::id();
-        $validated['time_in_status'] = $validated['time_in'] ? 'approved' : null;
-        $validated['time_out_status'] = $validated['time_out'] ? 'approved' : null;
-
-        // A leg staff clear no longer has a submission, so its captured
-        // photo + GPS go with it. A leg whose time is merely overridden keeps
-        // its evidence on purpose: it still documents what the student sent.
-        $orphanedPhotos = [];
-
-        foreach (['time_in', 'time_out'] as $leg) {
-            if (($validated[$leg] ?? null) !== null) {
-                continue;
-            }
-
-            $orphanedPhotos[] = $attendance->{"{$leg}_photo_path"};
-
-            foreach (['photo_path', 'latitude', 'longitude', 'accuracy'] as $field) {
-                $validated["{$leg}_{$field}"] = null;
-            }
-        }
-
-        $attendance->update($validated);
-
-        if ($orphanedPhotos = array_filter($orphanedPhotos)) {
-            Storage::disk(AttendanceController::PHOTO_DISK)->delete($orphanedPhotos);
-        }
+        $this->attendance->updateEntry($attendance, Auth::user(), $validated);
 
         return redirect()->route('attendance-monitoring.index')
             ->with('success', 'Attendance entry updated.');
@@ -108,16 +78,7 @@ class AttendanceMonitoringController extends Controller
     {
         $this->authorize('delete', $attendance);
 
-        $photoPaths = array_filter([
-            $attendance->time_in_photo_path,
-            $attendance->time_out_photo_path,
-        ]);
-
-        $attendance->delete();
-
-        if ($photoPaths) {
-            Storage::disk(AttendanceController::PHOTO_DISK)->delete($photoPaths);
-        }
+        $this->attendance->deleteEntry($attendance);
 
         return redirect()->route('attendance-monitoring.index')
             ->with('success', 'Attendance entry deleted.');
@@ -141,17 +102,5 @@ class AttendanceMonitoringController extends Controller
             'time_in' => ['nullable', 'date_format:H:i'],
             'time_out' => ['nullable', 'date_format:H:i', 'after:time_in'],
         ]);
-    }
-
-    private function computeRenderedHours(array $validated): ?float
-    {
-        if (empty($validated['time_in']) || empty($validated['time_out'])) {
-            return null;
-        }
-
-        $timeIn = Carbon::parse($validated['date'].' '.$validated['time_in']);
-        $timeOut = Carbon::parse($validated['date'].' '.$validated['time_out']);
-
-        return round($timeOut->diffInMinutes($timeIn) / 60, 2);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Services\AttendanceService;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -22,8 +23,8 @@ class AttendancePhotoController extends Controller
 
         $path = $attendance->{"{$leg}_photo_path"};
 
-        abort_unless($path && Storage::disk(AttendanceController::PHOTO_DISK)->exists($path), 404);
+        abort_unless($path && Storage::disk(AttendanceService::PHOTO_DISK)->exists($path), 404);
 
-        return Storage::disk(AttendanceController::PHOTO_DISK)->response($path);
+        return Storage::disk(AttendanceService::PHOTO_DISK)->response($path);
     }
 }
