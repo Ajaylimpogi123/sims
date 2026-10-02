@@ -196,6 +196,19 @@ class AttendanceCaptureTest extends TestCase
         Storage::disk('local')->assertExists($record->time_in_photo_path);
     }
 
+    public function test_empty_string_accuracy_is_stored_as_null(): void
+    {
+        // The capture dialog sends accuracy: '' when the browser reports none.
+        $user = $this->studentUser();
+
+        $this->actingAs($user)
+            ->post('/my-attendance/time-in', $this->validPayload(['accuracy' => '']))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $this->assertNull(Attendance::where('student_id', $user->student->id)->value('time_in_accuracy'));
+    }
+
     public function test_state_check_failure_does_not_store_a_photo(): void
     {
         $user = $this->studentUser();
@@ -333,6 +346,16 @@ class AttendanceCaptureTest extends TestCase
 
         $response->assertOk();
         $this->assertSame('jpeg-bytes', $response->streamedContent());
+    }
+
+    public function test_cache_busting_query_param_is_ignored(): void
+    {
+        // The frontend appends ?v={updated_at} so a replaced photo is refetched.
+        [$attendance, $owner] = $this->attendanceWithPhoto();
+
+        $url = $this->photoUrl($attendance).'?v='.urlencode($attendance->updated_at->toJSON());
+
+        $this->actingAs($owner)->get($url)->assertOk();
     }
 
     public function test_other_student_cannot_view_the_photo(): void
