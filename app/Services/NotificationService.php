@@ -17,6 +17,12 @@ class NotificationService
      */
     private const STAFF_ROLE_IDS = [2, 4];
 
+    private const STUDENT_ROLE_ID = 1;
+
+    private const COORDINATOR_ROLE_ID = 2;
+
+    private const SUPERVISOR_ROLE_ID = 3;
+
     private const ADMIN_ROLE_ID = 4;
 
     public function notify(User $user, string $type, string $title, ?string $body = null, array $data = []): Notification
@@ -41,16 +47,28 @@ class NotificationService
 
     /**
      * A student submitted a time-in/time-out (or emergency time-out) that
-     * now needs coordinator/admin approval.
+     * now needs approval. Approvals are Supervisor/Admin only
+     * (/attendance-approvals is role:3,4), so this goes to every Admin plus
+     * the student's own supervisor — never to Coordinators, who can't act
+     * on it.
      */
     public function attendanceSubmitted(Attendance $attendance, string $leg): void
     {
-        $studentName = $attendance->student?->user?->name ?? 'A student';
+        $student = $attendance->student;
+        $studentName = $student?->user?->name ?? 'A student';
         $legLabel = $leg === 'time_in' ? 'time-in' : 'time-out';
         $date = $attendance->date?->format('F j, Y');
 
+        $recipients = User::where('role_id', self::ADMIN_ROLE_ID)->get();
+
+        $supervisor = $student?->supervisor;
+
+        if ($supervisor && (int) $supervisor->role_id === self::SUPERVISOR_ROLE_ID) {
+            $recipients->push($supervisor);
+        }
+
         $this->notifyMany(
-            $this->staffUsers(),
+            $recipients->unique('id'),
             'attendance_pending',
             'New attendance approval request',
             "{$studentName} submitted a {$legLabel} for {$date} awaiting your approval.",

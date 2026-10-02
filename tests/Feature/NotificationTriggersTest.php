@@ -32,10 +32,49 @@ class NotificationTriggersTest extends TestCase
         return Student::factory()->create(array_merge(['user_id' => $user->id], $overrides));
     }
 
-    public function test_submitting_a_time_in_notifies_coordinators_and_admins_but_not_students(): void
+    public function test_submitting_a_time_in_notifies_admins_and_the_students_supervisor_only(): void
+    {
+        // Approvals are role:3,4 — Coordinators can't act on a pending
+        // attendance, so they must not be notified; the student's own
+        // supervisor (who approves) must be.
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $admin = User::factory()->create(['role_id' => 4]);
+        $otherAdmin = User::factory()->create(['role_id' => 4]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $otherSupervisor = User::factory()->create(['role_id' => 3]);
+        $student = $this->studentWithUser(['supervisor_id' => $supervisor->id]);
+        Storage::fake('local');
+
+        $this->actingAs($student->user)->post('/my-attendance/time-in', [
+            'photo' => UploadedFile::fake()->image('capture.jpg'),
+            'latitude' => '10.6765432',
+            'longitude' => '122.9509876',
+        ])->assertSessionHas('success');
+
+        foreach ([$admin, $otherAdmin, $supervisor] as $recipient) {
+            $this->assertSame(
+                1,
+                Notification::where('user_id', $recipient->id)->where('type', 'attendance_pending')->count(),
+            );
+        }
+
+        $this->assertDatabaseMissing('notifications', [
+            'user_id' => $coordinator->id,
+            'type' => 'attendance_pending',
+        ]);
+        $this->assertDatabaseMissing('notifications', [
+            'user_id' => $otherSupervisor->id,
+        ]);
+        $this->assertDatabaseMissing('notifications', [
+            'user_id' => $student->user_id,
+        ]);
+    }
+
+    public function test_submitting_a_time_in_without_a_supervisor_notifies_only_admins(): void
     {
         $coordinator = User::factory()->create(['role_id' => 2]);
         $admin = User::factory()->create(['role_id' => 4]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
         $student = $this->studentWithUser();
         Storage::fake('local');
 
@@ -46,16 +85,13 @@ class NotificationTriggersTest extends TestCase
         ])->assertSessionHas('success');
 
         $this->assertDatabaseHas('notifications', [
-            'user_id' => $coordinator->id,
-            'type' => 'attendance_pending',
-        ]);
-        $this->assertDatabaseHas('notifications', [
             'user_id' => $admin->id,
             'type' => 'attendance_pending',
         ]);
-        $this->assertDatabaseMissing('notifications', [
-            'user_id' => $student->user_id,
-        ]);
+        $this->assertSame(
+            0,
+            Notification::whereIn('user_id', [$coordinator->id, $supervisor->id])->count(),
+        );
     }
 
     public function test_approving_a_time_in_notifies_the_student(): void
