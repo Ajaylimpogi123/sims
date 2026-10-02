@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\MedicineProduct;
 use App\Models\ProductQty;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\SeedsWestpoint;

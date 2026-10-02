@@ -24,7 +24,7 @@ class DocumentNumberService
         if (DB::transactionLevel() === 0) {
             throw new RuntimeException(
                 'Document numbers must be allocated inside a transaction so the '
-                . 'number and the document it identifies commit together.'
+                .'number and the document it identifies commit together.'
             );
         }
 
@@ -64,7 +64,7 @@ class DocumentNumberService
     public static function posInvoiceNumber(int $branchId): string
     {
         $period = now()->format('Ymd');
-        $scope = self::SCOPE_POS_INVOICE . ':' . $branchId;
+        $scope = self::SCOPE_POS_INVOICE.':'.$branchId;
         $sequence = self::next($scope, $period);
 
         return sprintf('POS-%d-%s-%05d', $branchId, $period, $sequence);

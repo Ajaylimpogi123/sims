@@ -18,7 +18,7 @@ class InvalidPackSizeException extends RuntimeException
     {
         return new self(
             "{$medicineName} has no valid pack size, so it cannot be transacted in boxes. "
-            . 'Set a pack size of at least 1 on the medicine first.'
+            .'Set a pack size of at least 1 on the medicine first.'
         );
     }
 }

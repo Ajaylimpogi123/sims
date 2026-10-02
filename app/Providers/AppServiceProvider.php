@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Inertia\Inertia;
+
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -22,7 +23,8 @@ class AppServiceProvider extends ServiceProvider
     {
         Vite::prefetch(concurrency: 3);
     }
-  /**
+
+    /**
      * Share common data with Inertia.
      */
     protected function shareInertiaData(): void
@@ -40,8 +42,6 @@ class AppServiceProvider extends ServiceProvider
                     ] : null,
                 ];
             },
-
-
 
             'flash' => function () {
                 return [

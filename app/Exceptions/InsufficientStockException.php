@@ -22,7 +22,7 @@ class InsufficientStockException extends RuntimeException
 
         return new self(
             "{$lot} only has {$available} piece(s) available but {$requested} were requested. "
-            . 'Reduce the quantity or choose another lot.'
+            .'Reduce the quantity or choose another lot.'
         );
     }
 }

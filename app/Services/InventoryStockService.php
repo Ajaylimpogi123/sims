@@ -48,7 +48,7 @@ class InventoryStockService
         if ($quantityInPieces > self::MAX_TRANSACTION_PIECES) {
             throw new \RuntimeException(
                 'That quantity is larger than this system supports on a single line ('
-                . number_format(self::MAX_TRANSACTION_PIECES) . ' pieces). Split it across multiple lines.'
+                .number_format(self::MAX_TRANSACTION_PIECES).' pieces). Split it across multiple lines.'
             );
         }
     }
@@ -250,9 +250,13 @@ class InventoryStockService
     }
 
     public const STOCK_IN_INTENT_INCOMPLETE = 'incomplete';
+
     public const STOCK_IN_INTENT_NEW = 'new';
+
     public const STOCK_IN_INTENT_MERGE = 'merge';
+
     public const STOCK_IN_INTENT_CONFLICT = 'conflict';
+
     public const STOCK_IN_INTENT_SHELF_SPLIT = 'shelf_split';
 
     /**
@@ -335,7 +339,7 @@ class InventoryStockService
 
         throw new \RuntimeException(
             "Lot {$lotNumber} already exists with expiry {$onFileExpiry}. "
-            . 'Confirm that you intend to create a separate batch, or match the expiry on file.'
+            .'Confirm that you intend to create a separate batch, or match the expiry on file.'
         );
     }
 

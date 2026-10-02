@@ -1,168 +1,543 @@
-import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
-import PrimaryButton from '@/Components/PrimaryButton';
-import TextInput from '@/Components/TextInput';
-import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from "@inertiajs/react";
 
-export default function Register({ branches, roles }) {
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+// Decorative graduation-cap shape used across the background layer.
+// Purely visual — aria-hidden, no interaction.
+function GradCap({ className, color, style }) {
+    return (
+        <svg
+            viewBox="0 0 100 70"
+            className={className}
+            style={style}
+            aria-hidden="true"
+        >
+            <polygon
+                points="50,5 95,25 50,45 5,25"
+                fill={color}
+                opacity="0.9"
+            />
+            <rect
+                x="35"
+                y="25"
+                width="30"
+                height="12"
+                fill={color}
+                opacity="0.7"
+            />
+            <circle cx="50" cy="25" r="3.5" fill="rgba(255,255,255,0.7)" />
+            <line
+                x1="50"
+                y1="26"
+                x2="72"
+                y2="54"
+                stroke={color}
+                strokeWidth="2"
+            />
+            <circle cx="72" cy="57" r="4" fill={color} />
+        </svg>
+    );
+}
+
+function OpenBook({ className, color, style }) {
+    return (
+        <svg
+            viewBox="0 0 100 70"
+            className={className}
+            style={style}
+            aria-hidden="true"
+        >
+            <path
+                d="M50 15 C40 8 20 8 10 15 L10 55 C20 48 40 48 50 55 C60 48 80 48 90 55 L90 15 C80 8 60 8 50 15 Z"
+                fill={color}
+                opacity="0.85"
+            />
+            <line
+                x1="50"
+                y1="15"
+                x2="50"
+                y2="55"
+                stroke="rgba(255,255,255,0.35)"
+                strokeWidth="1.5"
+            />
+        </svg>
+    );
+}
+
+export default function Register() {
     const { data, setData, post, processing, errors, reset } = useForm({
-        name: '',
-        email: '',
-        password: '',
-        password_confirmation: '',
-        branch_id: '',
-        role_id: '',
+        name: "",
+        email: "",
+        student_number: "",
+        course: "",
+        section: "",
+        password: "",
+        password_confirmation: "",
     });
 
     const submit = (e) => {
         e.preventDefault();
-
-        post(route('register'), {
-            onFinish: () => reset('password', 'password_confirmation'),
+        post(route("register"), {
+            onFinish: () => reset("password", "password_confirmation"),
         });
     };
 
     return (
-        <GuestLayout>
-            <Head title="Register" />
+        <div className="bcc-login relative min-h-screen flex items-center justify-center overflow-hidden bg-[#0F1712] px-4 py-10">
+            <Head title="Student Registration" />
 
-            <form onSubmit={submit}>
-                <div>
-                    <InputLabel htmlFor="name" value="Name" />
+            {/* Ambient glow */}
+            <div className="bcc-orb bcc-orb-a" aria-hidden="true" />
+            <div className="bcc-orb bcc-orb-b" aria-hidden="true" />
+            <div className="bcc-grain" aria-hidden="true" />
 
-                    <TextInput
-                        id="name"
-                        name="name"
-                        value={data.name}
-                        className="mt-1 block w-full"
-                        autoComplete="name"
-                        isFocused={true}
-                        onChange={(e) => setData('name', e.target.value)}
-                        required
-                    />
+            {/* Academic-themed decorative field */}
+            <div
+                className="absolute inset-0 pointer-events-none"
+                aria-hidden="true"
+            >
+                <GradCap
+                    color="#1F7A3D"
+                    className="bcc-cap absolute w-24 opacity-70 blur-[1px]"
+                    style={{
+                        top: "8%",
+                        left: "6%",
+                        animationDelay: "0s",
+                    }}
+                />
+                <GradCap
+                    color="#F5B301"
+                    className="bcc-cap absolute w-20 opacity-55 blur-[2px]"
+                    style={{
+                        top: "62%",
+                        left: "-1%",
+                        animationDelay: "-4s",
+                    }}
+                />
+                <GradCap
+                    color="#145C34"
+                    className="bcc-cap absolute w-24 opacity-60 blur-[2px]"
+                    style={{
+                        top: "4%",
+                        right: "4%",
+                        animationDelay: "-8s",
+                    }}
+                />
+                <OpenBook
+                    color="#F5B301"
+                    className="bcc-book absolute w-24 opacity-60 blur-[1px]"
+                    style={{
+                        bottom: "6%",
+                        right: "3%",
+                        animationDelay: "-2s",
+                    }}
+                />
+                <OpenBook
+                    color="#1F7A3D"
+                    className="bcc-book absolute w-20 opacity-45 blur-[2px]"
+                    style={{
+                        bottom: "18%",
+                        left: "16%",
+                        animationDelay: "-6s",
+                    }}
+                />
+                <GradCap
+                    color="#FFD666"
+                    className="bcc-cap absolute w-14 opacity-45 blur-[1px]"
+                    style={{ top: "22%", left: "30%", animationDelay: "-1s" }}
+                />
+                <OpenBook
+                    color="#1F7A3D"
+                    className="bcc-book absolute w-12 opacity-40 blur-[2px]"
+                    style={{ bottom: "28%", left: "6%", animationDelay: "-5s" }}
+                />
+                <GradCap
+                    color="#F5B301"
+                    className="bcc-cap absolute w-14 opacity-45 blur-[1px]"
+                    style={{ top: "14%", right: "24%", animationDelay: "-3s" }}
+                />
+                <OpenBook
+                    color="#145C34"
+                    className="bcc-book absolute w-12 opacity-35 blur-[2px]"
+                    style={{
+                        bottom: "9%",
+                        right: "20%",
+                        animationDelay: "-7s",
+                    }}
+                />
+            </div>
 
-                    <InputError message={errors.name} className="mt-2" />
+            <div className="relative z-10 w-full max-w-[420px]">
+                {/* Brand */}
+                <div className="flex flex-col items-center mb-8">
+                    <div className="flex items-center justify-center w-32 h-32 rounded-2xl bg-white/[0.06] border border-white/10 shadow-[0_8px_30px_-12px_rgba(31,122,61,0.35)] backdrop-blur-xl mb-4">
+                        <img
+                            src="/images/logo/bcc-logo.jpg"
+                            alt="Bacolod City College"
+                            className="w-full h-full object-contain rounded-lg p-3"
+                        />
+                    </div>
+                    <span className="bcc-display text-[#F1F2F6] text-lg tracking-tight text-center">
+                        Bacolod City College
+                    </span>
+                    <span className="text-xs text-[#9AA69E] mt-0.5">
+                        Student Internship Monitoring System
+                    </span>
                 </div>
 
-                <div className="mt-4">
-                    <InputLabel htmlFor="email" value="Email" />
+                {/* Glass card */}
+                <div className="bcc-card rounded-3xl border border-white/10 bg-white/[0.05] backdrop-blur-2xl shadow-[0_24px_70px_-20px_rgba(0,0,0,0.5)] px-7 py-8">
+                    <h1 className="bcc-display text-[#F1F2F6] text-2xl tracking-tight mb-1 text-center">
+                        Student Registration
+                    </h1>
+                    <p className="text-sm text-[#9AA69E] mb-7 text-center">
+                        Create your account to get started
+                    </p>
 
-                    <TextInput
-                        id="email"
-                        type="email"
-                        name="email"
-                        value={data.email}
-                        className="mt-1 block w-full"
-                        autoComplete="username"
-                        onChange={(e) => setData('email', e.target.value)}
-                        required
-                    />
+                    <form onSubmit={submit} noValidate className="space-y-4">
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="name"
+                                className="text-xs font-medium text-[#A9B3AB]"
+                            >
+                                Full name
+                            </Label>
+                            <Input
+                                id="name"
+                                type="text"
+                                name="name"
+                                value={data.name}
+                                placeholder="Juan Dela Cruz"
+                                autoComplete="name"
+                                autoFocus
+                                onChange={(e) =>
+                                    setData("name", e.target.value)
+                                }
+                                className={`h-11 rounded-xl border-white/10 bg-white/[0.04] text-[#F1F2F6] placeholder:text-[#5F6B62] focus-visible:ring-2 focus-visible:ring-[#F5B301]/35 focus-visible:border-[#F5B301]/50 ${
+                                    errors.name
+                                        ? "border-red-400/40 focus-visible:ring-red-400/20"
+                                        : ""
+                                }`}
+                            />
+                            {errors.name && (
+                                <p className="text-xs text-red-400 font-medium">
+                                    {errors.name}
+                                </p>
+                            )}
+                        </div>
 
-                    <InputError message={errors.email} className="mt-2" />
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="email"
+                                className="text-xs font-medium text-[#A9B3AB]"
+                            >
+                                Email
+                            </Label>
+                            <Input
+                                id="email"
+                                type="email"
+                                name="email"
+                                value={data.email}
+                                placeholder="you@bcc.edu.ph"
+                                autoComplete="username"
+                                onChange={(e) =>
+                                    setData("email", e.target.value)
+                                }
+                                className={`h-11 rounded-xl border-white/10 bg-white/[0.04] text-[#F1F2F6] placeholder:text-[#5F6B62] focus-visible:ring-2 focus-visible:ring-[#F5B301]/35 focus-visible:border-[#F5B301]/50 ${
+                                    errors.email
+                                        ? "border-red-400/40 focus-visible:ring-red-400/20"
+                                        : ""
+                                }`}
+                            />
+                            {errors.email && (
+                                <p className="text-xs text-red-400 font-medium">
+                                    {errors.email}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="student_number"
+                                className="text-xs font-medium text-[#A9B3AB]"
+                            >
+                                Student number
+                            </Label>
+                            <Input
+                                id="student_number"
+                                type="text"
+                                name="student_number"
+                                value={data.student_number}
+                                placeholder="2026-00123"
+                                onChange={(e) =>
+                                    setData("student_number", e.target.value)
+                                }
+                                className={`h-11 rounded-xl border-white/10 bg-white/[0.04] text-[#F1F2F6] placeholder:text-[#5F6B62] focus-visible:ring-2 focus-visible:ring-[#F5B301]/35 focus-visible:border-[#F5B301]/50 ${
+                                    errors.student_number
+                                        ? "border-red-400/40 focus-visible:ring-red-400/20"
+                                        : ""
+                                }`}
+                            />
+                            {errors.student_number && (
+                                <p className="text-xs text-red-400 font-medium">
+                                    {errors.student_number}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label
+                                    htmlFor="course"
+                                    className="text-xs font-medium text-[#A9B3AB]"
+                                >
+                                    Course
+                                </Label>
+                                <Input
+                                    id="course"
+                                    type="text"
+                                    name="course"
+                                    value={data.course}
+                                    placeholder="BSIT"
+                                    onChange={(e) =>
+                                        setData("course", e.target.value)
+                                    }
+                                    className={`h-11 rounded-xl border-white/10 bg-white/[0.04] text-[#F1F2F6] placeholder:text-[#5F6B62] focus-visible:ring-2 focus-visible:ring-[#F5B301]/35 focus-visible:border-[#F5B301]/50 ${
+                                        errors.course
+                                            ? "border-red-400/40 focus-visible:ring-red-400/20"
+                                            : ""
+                                    }`}
+                                />
+                                {errors.course && (
+                                    <p className="text-xs text-red-400 font-medium">
+                                        {errors.course}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label
+                                    htmlFor="section"
+                                    className="text-xs font-medium text-[#A9B3AB]"
+                                >
+                                    Section
+                                </Label>
+                                <Input
+                                    id="section"
+                                    type="text"
+                                    name="section"
+                                    value={data.section}
+                                    placeholder="4-A"
+                                    onChange={(e) =>
+                                        setData("section", e.target.value)
+                                    }
+                                    className={`h-11 rounded-xl border-white/10 bg-white/[0.04] text-[#F1F2F6] placeholder:text-[#5F6B62] focus-visible:ring-2 focus-visible:ring-[#F5B301]/35 focus-visible:border-[#F5B301]/50 ${
+                                        errors.section
+                                            ? "border-red-400/40 focus-visible:ring-red-400/20"
+                                            : ""
+                                    }`}
+                                />
+                                {errors.section && (
+                                    <p className="text-xs text-red-400 font-medium">
+                                        {errors.section}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="password"
+                                className="text-xs font-medium text-[#A9B3AB]"
+                            >
+                                Password
+                            </Label>
+                            <Input
+                                id="password"
+                                type="password"
+                                name="password"
+                                value={data.password}
+                                placeholder="••••••••"
+                                autoComplete="new-password"
+                                onChange={(e) =>
+                                    setData("password", e.target.value)
+                                }
+                                className={`h-11 rounded-xl border-white/10 bg-white/[0.04] text-[#F1F2F6] placeholder:text-[#5F6B62] focus-visible:ring-2 focus-visible:ring-[#F5B301]/35 focus-visible:border-[#F5B301]/50 ${
+                                    errors.password
+                                        ? "border-red-400/40 focus-visible:ring-red-400/20"
+                                        : ""
+                                }`}
+                            />
+                            {errors.password && (
+                                <p className="text-xs text-red-400 font-medium">
+                                    {errors.password}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="password_confirmation"
+                                className="text-xs font-medium text-[#A9B3AB]"
+                            >
+                                Confirm password
+                            </Label>
+                            <Input
+                                id="password_confirmation"
+                                type="password"
+                                name="password_confirmation"
+                                value={data.password_confirmation}
+                                placeholder="••••••••"
+                                autoComplete="new-password"
+                                onChange={(e) =>
+                                    setData(
+                                        "password_confirmation",
+                                        e.target.value,
+                                    )
+                                }
+                                className={`h-11 rounded-xl border-white/10 bg-white/[0.04] text-[#F1F2F6] placeholder:text-[#5F6B62] focus-visible:ring-2 focus-visible:ring-[#F5B301]/35 focus-visible:border-[#F5B301]/50 ${
+                                    errors.password_confirmation
+                                        ? "border-red-400/40 focus-visible:ring-red-400/20"
+                                        : ""
+                                }`}
+                            />
+                            {errors.password_confirmation && (
+                                <p className="text-xs text-red-400 font-medium">
+                                    {errors.password_confirmation}
+                                </p>
+                            )}
+                        </div>
+
+                        <Button
+                            type="submit"
+                            disabled={processing}
+                            className="bcc-cta w-full h-11 rounded-xl text-white font-medium border-0 mt-2"
+                        >
+                            {processing ? (
+                                <span className="flex items-center gap-2">
+                                    <svg
+                                        className="animate-spin h-4 w-4"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <circle
+                                            className="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                        />
+                                        <path
+                                            className="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                        />
+                                    </svg>
+                                    Creating account…
+                                </span>
+                            ) : (
+                                "Register"
+                            )}
+                        </Button>
+                    </form>
+
+                    <p className="text-center text-sm text-[#9AA69E] mt-6">
+                        Already have an account?{" "}
+                        <Link
+                            href={route("login")}
+                            className="text-[#F5B301] font-medium hover:text-[#FFD666] transition-colors"
+                        >
+                            Sign in
+                        </Link>
+                    </p>
                 </div>
 
-                 <div className="mt-4">
-                    <InputLabel htmlFor="branch_id" value="Branch" />
+                <p className="text-center text-xs text-[#5F6B62] mt-6">
+                    Bacolod City College
+                </p>
+            </div>
 
-                    <select
-                        id="branch_id"
-                        name="branch_id"
-                        value={data.branch_id}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                        onChange={(e) => setData('branch_id', e.target.value)}
-                        required
-                    >
-                        <option value="">- Select a Branch -</option>
-                        {branches.map((branch) => (
-                            <option key={branch.id} value={branch.id}>
-                                {branch.branch_name}
-                            </option>
-                        ))}
-                    </select>
+            <style>{`
+                .bcc-display {
+                    font-family: 'Space Grotesk', 'Inter', sans-serif;
+                    font-weight: 500;
+                }
 
-                    <InputError message={errors.branch_id} className="mt-2" />
-                </div>
+                .bcc-orb {
+                    position: absolute;
+                    border-radius: 9999px;
+                    filter: blur(110px);
+                    opacity: 0.22;
+                    pointer-events: none;
+                }
+                .bcc-orb-a {
+                    width: 560px;
+                    height: 560px;
+                    top: -200px;
+                    left: -160px;
+                    background: radial-gradient(circle, #1F7A3D 0%, transparent 70%);
+                }
+                .bcc-orb-b {
+                    width: 480px;
+                    height: 480px;
+                    bottom: -220px;
+                    right: -140px;
+                    background: radial-gradient(circle, #F5B301 0%, transparent 70%);
+                    opacity: 0.16;
+                }
 
-                <div className="mt-4">
-                    <InputLabel htmlFor="role_id" value="Role" />
+                .bcc-grain {
+                    position: absolute;
+                    inset: 0;
+                    opacity: 0.035;
+                    pointer-events: none;
+                    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+                }
 
-                    <select
-                        id="role_id"
-                        name="role_id"
-                        value={data.role_id}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                        onChange={(e) => setData('role_id', e.target.value)}
-                        required
-                    >
-                        <option value="">- Select a Role -</option>
-                        {roles.map((role) => (
-                            <option key={role.id} value={role.id}>
-                                {role.role_name}
-                            </option>
-                        ))}
-                    </select>
+                .bcc-cap {
+                    animation: bcc-drift 14s ease-in-out infinite;
+                    filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25));
+                }
+                .bcc-book {
+                    animation: bcc-drift-fast 10s ease-in-out infinite;
+                    filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25));
+                }
+                @keyframes bcc-drift {
+                    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+                    50%      { transform: translate(10px, -10px) rotate(4deg); }
+                }
+                @keyframes bcc-drift-fast {
+                    0%, 100% { transform: translate(0, 0); }
+                    50%      { transform: translate(-8px, 8px); }
+                }
 
-                    <InputError message={errors.role_id} className="mt-2" />
-                </div>
+                .bcc-card {
+                    animation: bcc-card-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+                }
+                @keyframes bcc-card-in {
+                    from { opacity: 0; transform: translateY(10px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
 
-                <div className="mt-4">
-                    <InputLabel htmlFor="password" value="Password" />
+                .bcc-cta {
+                    background: linear-gradient(135deg, #1F7A3D 0%, #F5B301 100%);
+                    transition: filter 0.2s ease, transform 0.15s ease;
+                }
+                .bcc-cta:hover {
+                    filter: brightness(1.08);
+                }
+                .bcc-cta:active {
+                    transform: scale(0.98);
+                }
 
-                    <TextInput
-                        id="password"
-                        type="password"
-                        name="password"
-                        value={data.password}
-                        className="mt-1 block w-full"
-                        autoComplete="new-password"
-                        onChange={(e) => setData('password', e.target.value)}
-                        required
-                    />
-
-                    <InputError message={errors.password} className="mt-2" />
-                </div>
-
-                <div className="mt-4">
-                    <InputLabel
-                        htmlFor="password_confirmation"
-                        value="Confirm Password"
-                    />
-
-                    <TextInput
-                        id="password_confirmation"
-                        type="password"
-                        name="password_confirmation"
-                        value={data.password_confirmation}
-                        className="mt-1 block w-full"
-                        autoComplete="new-password"
-                        onChange={(e) =>
-                            setData('password_confirmation', e.target.value)
-                        }
-                        required
-                    />
-
-                    <InputError
-                        message={errors.password_confirmation}
-                        className="mt-2"
-                    />
-                </div>
-
-
-
-                <div className="mt-4 flex items-center justify-end">
-                    <Link
-                        href={route('login')}
-                        className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                    >
-                        Already registered?
-                    </Link>
-
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Register
-                    </PrimaryButton>
-                </div>
-            </form>
-        </GuestLayout>
+                @media (prefers-reduced-motion: reduce) {
+                    .bcc-cap, .bcc-book, .bcc-card { animation: none; }
+                }
+            `}</style>
+        </div>
     );
 }
