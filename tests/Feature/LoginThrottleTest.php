@@ -154,6 +154,56 @@ class LoginThrottleTest extends TestCase
         $this->apiLogin('juan@example.com', 'password')->assertStatus(429);
     }
 
+    // ------------------------------------------- one counter, web and API
+
+    private function webLogin(string $email, string $password = 'wrong'): TestResponse
+    {
+        return $this->withServerVariables(['REMOTE_ADDR' => self::CLIENT_IP])
+            ->post('/login', ['email' => $email, 'password' => $password]);
+    }
+
+    public function test_failed_web_logins_count_against_the_api_login_limit(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->webLogin('juan@example.com')->assertSessionHasErrors('email');
+        }
+
+        $this->apiLogin('juan@example.com', 'password')
+            ->assertStatus(429)
+            ->assertExactJson(['message' => 'Too Many Attempts.'])
+            ->assertHeader('Retry-After');
+    }
+
+    public function test_api_login_attempts_count_against_the_web_login_limit(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->apiLogin('juan@example.com')->assertStatus(422);
+        }
+
+        $this->webLogin('juan@example.com', 'password')->assertSessionHasErrors('email');
+        $this->assertStringStartsWith('Too many login attempts.', session('errors')->first('email'));
+        $this->assertGuest();
+    }
+
+    public function test_mixed_web_and_api_attempts_share_five_per_minute(): void
+    {
+        for ($i = 0; $i < 3; $i++) {
+            $this->apiLogin('juan@example.com')->assertStatus(422);
+        }
+        for ($i = 0; $i < 2; $i++) {
+            $this->webLogin('juan@example.com');
+        }
+
+        $this->apiLogin('juan@example.com', 'password')->assertStatus(429);
+    }
+
+    public function test_api_login_reports_rate_limit_headers(): void
+    {
+        $this->apiLogin('juan@example.com')
+            ->assertHeader('X-RateLimit-Limit', '5')
+            ->assertHeader('X-RateLimit-Remaining', '4');
+    }
+
     public function test_another_account_from_the_same_ip_is_not_affected(): void
     {
         User::factory()->create(['role_id' => 1, 'status' => 'active', 'email' => 'maria@example.com']);

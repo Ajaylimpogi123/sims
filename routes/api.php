@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Middleware\ThrottleLogin;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -20,7 +21,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::post('login', [AuthController::class, 'login'])
-        ->middleware('throttle:api-login')
+        ->middleware(ThrottleLogin::class)
         ->name('login');
 
     Route::middleware(['auth:sanctum', 'mobile', 'throttle:api'])->group(function () {

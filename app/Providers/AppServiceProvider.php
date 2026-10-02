@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Services\LoginThrottleKey;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -48,11 +47,8 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureApiRateLimiting(): void
     {
-        // Mobile login: 5 attempts per minute per account (or normalised
-        // email) + IP. Runs before validation, so `email` may be any type.
-        RateLimiter::for('api-login', fn (Request $request) => Limit::perMinute(5)->by(
-            LoginThrottleKey::for($request->input('email'), $request->ip())
-        ));
+        // Mobile login is limited by the ThrottleLogin middleware, which
+        // shares its counter with the website login (LoginThrottleKey).
 
         // General ceiling for authenticated mobile API calls.
         RateLimiter::for('api', fn (Request $request) => Limit::perMinute(120)->by(

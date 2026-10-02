@@ -7,8 +7,9 @@ use Illuminate\Support\Str;
 use Normalizer;
 
 /**
- * Rate-limit key for login attempts (mobile API `api-login` limiter and the
- * website's LoginRequest): "<account>|<ip>".
+ * Rate-limit key for login attempts: "login:<account>|<ip>". The mobile
+ * API (ThrottleLogin middleware) and the website's LoginRequest count in
+ * this same RateLimiter bucket, so they share one allowance.
  *
  * The account part must not be something a client can vary while still
  * reaching the same account, or every variant would get a fresh allowance:
@@ -24,9 +25,14 @@ use Normalizer;
  */
 final class LoginThrottleKey
 {
+    /** Shared web + API login allowance: attempts per DECAY_SECONDS. */
+    public const MAX_ATTEMPTS = 5;
+
+    public const DECAY_SECONDS = 60;
+
     public static function for(mixed $email, ?string $ip): string
     {
-        return self::account($email).'|'.$ip;
+        return 'login:'.self::account($email).'|'.$ip;
     }
 
     public static function normalizeEmail(mixed $email): string
