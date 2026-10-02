@@ -3,18 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Evaluation;
-use App\Models\EvaluationCriteria;
 use App\Models\Student;
+use App\Policies\EvaluationPolicy;
+use App\Services\EvaluationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class EvaluationController extends Controller
 {
+    public function __construct(private EvaluationService $evaluations) {}
+
     public function index(): Response
     {
         $evaluations = Evaluation::query()
@@ -36,7 +37,7 @@ class EvaluationController extends Controller
         return Inertia::render('SupervisorEvaluations/Index', [
             'evaluations' => $evaluations,
             'students' => $students,
-            'criteria' => $this->activeCriteria(),
+            'criteria' => $this->evaluations->activeCriteria(),
         ]);
     }
 
@@ -54,38 +55,20 @@ class EvaluationController extends Controller
 
         return Inertia::render('SupervisorEvaluations/Show', [
             'evaluation' => $evaluation,
-            'criteria' => $this->activeCriteria(),
+            'criteria' => $this->evaluations->activeCriteria(),
             'canEdit' => Auth::user()->can('update', $evaluation),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $validated = $this->validateEvaluation($request);
+        $validated = $request->validate(EvaluationService::rules());
 
         $student = Student::findOrFail($validated['student_id']);
 
         $this->authorize('evaluate', $student);
 
-        $evaluation = DB::transaction(function () use ($validated, $student) {
-            $evaluation = Evaluation::create([
-                'student_id' => $student->id,
-                'company_id' => $student->company_id,
-                'supervisor_id' => $student->supervisor_id,
-                'evaluation_period_start' => $validated['evaluation_period_start'],
-                'evaluation_period_end' => $validated['evaluation_period_end'],
-                'strengths' => $validated['strengths'] ?? null,
-                'areas_for_improvement' => $validated['areas_for_improvement'] ?? null,
-                'recommendations' => $validated['recommendations'] ?? null,
-                'supervisor_remarks' => $validated['supervisor_remarks'] ?? null,
-                'status' => 'draft',
-            ]);
-
-            $this->syncResponses($evaluation, $validated['responses'] ?? []);
-            $this->refreshOverallRating($evaluation);
-
-            return $evaluation;
-        });
+        $evaluation = $this->evaluations->createDraft($student, $validated);
 
         return redirect()->route('supervisor-evaluations.show', $evaluation)
             ->with('success', 'Evaluation draft saved.');
@@ -95,21 +78,9 @@ class EvaluationController extends Controller
     {
         $this->authorize('update', $evaluation);
 
-        $validated = $this->validateEvaluation($request, forStudentSwitch: false);
+        $validated = $request->validate(EvaluationService::rules(forStudentSwitch: false));
 
-        DB::transaction(function () use ($evaluation, $validated) {
-            $evaluation->update([
-                'evaluation_period_start' => $validated['evaluation_period_start'],
-                'evaluation_period_end' => $validated['evaluation_period_end'],
-                'strengths' => $validated['strengths'] ?? null,
-                'areas_for_improvement' => $validated['areas_for_improvement'] ?? null,
-                'recommendations' => $validated['recommendations'] ?? null,
-                'supervisor_remarks' => $validated['supervisor_remarks'] ?? null,
-            ]);
-
-            $this->syncResponses($evaluation, $validated['responses'] ?? []);
-            $this->refreshOverallRating($evaluation);
-        });
+        $this->evaluations->updateDraft($evaluation, $validated);
 
         return redirect()->route('supervisor-evaluations.show', $evaluation)
             ->with('success', 'Evaluation draft updated.');
@@ -119,21 +90,7 @@ class EvaluationController extends Controller
     {
         $this->authorize('submit', $evaluation);
 
-        $activeCriteriaIds = EvaluationCriteria::query()->where('is_active', true)->pluck('id');
-        $respondedCriteriaIds = $evaluation->responses()->pluck('evaluation_criteria_id');
-
-        if ($activeCriteriaIds->diff($respondedCriteriaIds)->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'responses' => 'Every evaluation criterion must be rated before submitting.',
-            ]);
-        }
-
-        $this->refreshOverallRating($evaluation);
-
-        $evaluation->update([
-            'status' => 'submitted',
-            'submitted_at' => now(),
-        ]);
+        $this->evaluations->submit($evaluation);
 
         return redirect()->route('supervisor-evaluations.show', $evaluation)
             ->with('success', 'Evaluation submitted.');
@@ -143,11 +100,7 @@ class EvaluationController extends Controller
     {
         $this->authorize('lock', $evaluation);
 
-        $evaluation->update([
-            'status' => 'locked',
-            'locked_at' => now(),
-            'locked_by' => Auth::id(),
-        ]);
+        $this->evaluations->lock($evaluation, Auth::user());
 
         return redirect()->route('supervisor-evaluations.show', $evaluation)
             ->with('success', 'Evaluation locked.');
@@ -157,12 +110,7 @@ class EvaluationController extends Controller
     {
         $this->authorize('reopen', $evaluation);
 
-        $evaluation->update([
-            'status' => 'draft',
-            'submitted_at' => null,
-            'locked_at' => null,
-            'locked_by' => null,
-        ]);
+        $this->evaluations->reopen($evaluation);
 
         return redirect()->route('supervisor-evaluations.show', $evaluation)
             ->with('success', 'Evaluation reopened for editing.');
@@ -175,66 +123,13 @@ class EvaluationController extends Controller
         $evaluations = $student
             ? $student->evaluations()
                 ->with(['company:id,company_name', 'supervisor:id,name', 'responses.criteria'])
-                ->whereIn('status', ['submitted', 'locked'])
+                ->whereIn('status', EvaluationPolicy::STUDENT_VISIBLE_STATUSES)
                 ->orderByDesc('evaluation_period_start')
                 ->get()
             : collect();
 
         return Inertia::render('SupervisorEvaluations/MyFeedback', [
             'evaluations' => $evaluations,
-        ]);
-    }
-
-    private function activeCriteria()
-    {
-        return EvaluationCriteria::query()
-            ->where('is_active', true)
-            ->orderBy('category')
-            ->orderBy('sort_order')
-            ->get();
-    }
-
-    private function validateEvaluation(Request $request, bool $forStudentSwitch = true): array
-    {
-        $rules = [
-            'evaluation_period_start' => ['required', 'date'],
-            'evaluation_period_end' => ['required', 'date', 'after_or_equal:evaluation_period_start'],
-            'strengths' => ['nullable', 'string', 'max:5000'],
-            'areas_for_improvement' => ['nullable', 'string', 'max:5000'],
-            'recommendations' => ['nullable', 'string', 'max:5000'],
-            'supervisor_remarks' => ['nullable', 'string', 'max:5000'],
-            'responses' => ['nullable', 'array'],
-            'responses.*.evaluation_criteria_id' => ['required', 'integer', 'exists:evaluation_criteria,id', 'distinct'],
-            'responses.*.rating' => ['required', 'integer', 'min:1', 'max:5'],
-            'responses.*.comment' => ['nullable', 'string', 'max:2000'],
-        ];
-
-        if ($forStudentSwitch) {
-            $rules['student_id'] = ['required', 'exists:students,id'];
-        }
-
-        return $request->validate($rules);
-    }
-
-    private function syncResponses(Evaluation $evaluation, array $responses): void
-    {
-        $evaluation->responses()->delete();
-
-        foreach ($responses as $response) {
-            $evaluation->responses()->create([
-                'evaluation_criteria_id' => $response['evaluation_criteria_id'],
-                'rating' => $response['rating'],
-                'comment' => $response['comment'] ?? null,
-            ]);
-        }
-    }
-
-    private function refreshOverallRating(Evaluation $evaluation): void
-    {
-        $average = $evaluation->responses()->avg('rating');
-
-        $evaluation->update([
-            'overall_rating' => $average !== null ? round($average, 2) : null,
         ]);
     }
 }
