@@ -98,7 +98,7 @@ class DashboardController extends Controller
             ],
             'kpis' => $this->analytics->adminKpis(),
             'actionItems' => $this->analytics->actionItems($user),
-            'recentActivity' => $this->notifications->recentActivity($user),
+            'recentActivity' => $this->notifications->withUrls($this->notifications->recentActivity($user), $user),
             'filterOptions' => $this->analytics->filterOptions($user),
             'analytics' => Inertia::defer(fn () => $this->analyticsPayload($user, $request)),
         ]);
@@ -120,7 +120,7 @@ class DashboardController extends Controller
             ],
             'kpis' => $this->analytics->coordinatorKpis(),
             'actionItems' => $this->analytics->actionItems($user),
-            'recentActivity' => $this->notifications->recentActivity($user),
+            'recentActivity' => $this->notifications->withUrls($this->notifications->recentActivity($user), $user),
             'filterOptions' => $this->analytics->filterOptions($user),
             'analytics' => Inertia::defer(fn () => $this->analyticsPayload($user, $request)),
         ]);
@@ -153,7 +153,7 @@ class DashboardController extends Controller
             ]),
             'kpis' => $this->analytics->supervisorKpis($user),
             'actionItems' => $this->analytics->actionItems($user),
-            'recentActivity' => $this->notifications->recentActivity($user),
+            'recentActivity' => $this->notifications->withUrls($this->notifications->recentActivity($user), $user),
             'filterOptions' => $this->analytics->filterOptions($user),
             'analytics' => Inertia::defer(fn () => $this->analyticsPayload($user, $request)),
         ]);
