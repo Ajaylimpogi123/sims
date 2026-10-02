@@ -111,6 +111,8 @@ export default function CaptureDialog({ mode, onClose }) {
         setCaptureError(null);
         try {
             setPhoto(await camera.capture());
+            // Release the webcam while the preview is shown; Retake restarts it.
+            camera.stop();
         } catch (err) {
             setCaptureError(err.message);
         }
