@@ -2,16 +2,26 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Attendance;
+use App\Models\Student;
 use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class AttendanceController extends Controller
 {
     private const NO_PROFILE_MESSAGE = 'No student profile is linked to your account yet. Please contact your coordinator.';
+
+    /**
+     * Private disk: photos are only ever served through
+     * AttendancePhotoController, which enforces role scoping.
+     */
+    public const PHOTO_DISK = 'local';
 
     public function __construct(private NotificationService $notifications) {}
 
@@ -40,7 +50,7 @@ class AttendanceController extends Controller
         ]);
     }
 
-    public function timeIn(): RedirectResponse
+    public function timeIn(Request $request): RedirectResponse
     {
         $student = Auth::user()->student;
 
@@ -48,6 +58,8 @@ class AttendanceController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', self::NO_PROFILE_MESSAGE);
         }
+
+        $validated = $this->validateCapture($request);
 
         $record = $student->attendances()->firstOrNew([
             'date' => today()->toDateString(),
@@ -62,7 +74,8 @@ class AttendanceController extends Controller
         $record->time_in_status = 'pending';
         $record->time_in_rejection_reason = null;
         $record->recorded_by = Auth::id();
-        $record->save();
+
+        $this->saveWithEvidence($record, 'time_in', $student, $request, $validated);
 
         $this->notifications->attendanceSubmitted($record, 'time_in');
 
@@ -70,7 +83,7 @@ class AttendanceController extends Controller
             ->with('success', 'Time-in submitted for approval.');
     }
 
-    public function timeOut(): RedirectResponse
+    public function timeOut(Request $request): RedirectResponse
     {
         $student = Auth::user()->student;
 
@@ -78,6 +91,8 @@ class AttendanceController extends Controller
             return redirect()->route('dashboard')
                 ->with('error', self::NO_PROFILE_MESSAGE);
         }
+
+        $validated = $this->validateCapture($request);
 
         $record = $student->attendances()
             ->where('date', today()->toDateString())
@@ -99,7 +114,8 @@ class AttendanceController extends Controller
         $record->is_emergency = false;
         $record->note = null;
         $record->recorded_by = Auth::id();
-        $record->save();
+
+        $this->saveWithEvidence($record, 'time_out', $student, $request, $validated);
 
         $this->notifications->attendanceSubmitted($record, 'time_out');
 
@@ -109,16 +125,16 @@ class AttendanceController extends Controller
 
     public function emergencyTimeOut(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'note' => ['required', 'string', 'max:1000'],
-        ]);
-
         $student = Auth::user()->student;
 
         if (! $student) {
             return redirect()->route('dashboard')
                 ->with('error', self::NO_PROFILE_MESSAGE);
         }
+
+        $validated = $this->validateCapture($request, [
+            'note' => ['required', 'string', 'max:1000'],
+        ]);
 
         $record = $student->attendances()->firstOrNew([
             'date' => today()->toDateString(),
@@ -145,11 +161,53 @@ class AttendanceController extends Controller
         $record->is_emergency = true;
         $record->note = $validated['note'];
         $record->recorded_by = Auth::id();
-        $record->save();
+
+        $this->saveWithEvidence($record, 'time_out', $student, $request, $validated);
 
         $this->notifications->attendanceSubmitted($record, 'time_out');
 
         return redirect()->route('attendance.index')
             ->with('success', 'Emergency time-out submitted for approval.');
+    }
+
+    /**
+     * Live camera photo + device GPS are required on every self-service leg.
+     */
+    private function validateCapture(Request $request, array $extra = []): array
+    {
+        return $request->validate(array_merge([
+            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
+            'accuracy' => ['nullable', 'numeric', 'min:0'],
+        ], $extra));
+    }
+
+    /**
+     * Store the photo for this leg, write its coordinates, and save the
+     * record. A photo previously stored for the same leg (re-submission
+     * after a rejection) is deleted only once the new one is persisted.
+     */
+    private function saveWithEvidence(Attendance $record, string $leg, Student $student, Request $request, array $validated): void
+    {
+        $oldPath = $record->{"{$leg}_photo_path"};
+        $newPath = $request->file('photo')->store("attendance-photos/{$student->id}", self::PHOTO_DISK);
+
+        $record->{"{$leg}_photo_path"} = $newPath;
+        $record->{"{$leg}_latitude"} = $validated['latitude'];
+        $record->{"{$leg}_longitude"} = $validated['longitude'];
+        $record->{"{$leg}_accuracy"} = $validated['accuracy'] ?? null;
+
+        try {
+            $record->save();
+        } catch (Throwable $e) {
+            Storage::disk(self::PHOTO_DISK)->delete($newPath);
+
+            throw $e;
+        }
+
+        if ($oldPath && $oldPath !== $newPath) {
+            Storage::disk(self::PHOTO_DISK)->delete($oldPath);
+        }
     }
 }

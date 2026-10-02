@@ -7,6 +7,8 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AttendanceEmergencyTimeOutTest extends TestCase
@@ -18,6 +20,19 @@ class AttendanceEmergencyTimeOutTest extends TestCase
         parent::setUp();
 
         $this->seed(RoleSeeder::class);
+        Storage::fake('local');
+    }
+
+    /**
+     * Every emergency time-out must carry a live photo + GPS coordinates.
+     */
+    private function capture(array $fields): array
+    {
+        return array_merge([
+            'photo' => UploadedFile::fake()->image('capture.jpg'),
+            'latitude' => '10.6765432',
+            'longitude' => '122.9509876',
+        ], $fields);
     }
 
     private function studentUser(): User
@@ -42,9 +57,9 @@ class AttendanceEmergencyTimeOutTest extends TestCase
             'time_out_status' => null,
         ]);
 
-        $response = $this->actingAs($user)->post('/my-attendance/emergency-time-out', [
+        $response = $this->actingAs($user)->post('/my-attendance/emergency-time-out', $this->capture([
             'note' => 'Family emergency, had to leave.',
-        ]);
+        ]));
 
         $response->assertRedirect(route('attendance.index', absolute: false));
         $response->assertSessionHas('success');
@@ -61,9 +76,9 @@ class AttendanceEmergencyTimeOutTest extends TestCase
         $user = $this->studentUser();
         $student = $user->student;
 
-        $response = $this->actingAs($user)->post('/my-attendance/emergency-time-out', [
+        $response = $this->actingAs($user)->post('/my-attendance/emergency-time-out', $this->capture([
             'note' => 'Trying to skip time-in entirely.',
-        ]);
+        ]));
 
         $response->assertRedirect(route('attendance.index', absolute: false));
         $response->assertSessionHas('error', 'You must time in before using emergency time-out.');
@@ -88,9 +103,9 @@ class AttendanceEmergencyTimeOutTest extends TestCase
             'time_out_status' => null,
         ]);
 
-        $response = $this->actingAs($user)->post('/my-attendance/emergency-time-out', [
+        $response = $this->actingAs($user)->post('/my-attendance/emergency-time-out', $this->capture([
             'note' => 'Need to leave early.',
-        ]);
+        ]));
 
         $response->assertRedirect(route('attendance.index', absolute: false));
         $response->assertSessionHas('success');
@@ -114,9 +129,9 @@ class AttendanceEmergencyTimeOutTest extends TestCase
             'time_out_status' => null,
         ]);
 
-        $response = $this->actingAs($user)->post('/my-attendance/emergency-time-out', [
+        $response = $this->actingAs($user)->post('/my-attendance/emergency-time-out', $this->capture([
             'note' => 'Trying to work around a rejected time-in.',
-        ]);
+        ]));
 
         $response->assertRedirect(route('attendance.index', absolute: false));
         $response->assertSessionHas('error');

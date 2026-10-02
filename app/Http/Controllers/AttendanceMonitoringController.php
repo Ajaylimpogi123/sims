@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -89,7 +90,16 @@ class AttendanceMonitoringController extends Controller
     {
         $this->authorizeSupervisedStudent($attendance->student);
 
+        $photoPaths = array_filter([
+            $attendance->time_in_photo_path,
+            $attendance->time_out_photo_path,
+        ]);
+
         $attendance->delete();
+
+        if ($photoPaths) {
+            Storage::disk(AttendanceController::PHOTO_DISK)->delete($photoPaths);
+        }
 
         return redirect()->route('attendance-monitoring.index')
             ->with('success', 'Attendance entry deleted.');

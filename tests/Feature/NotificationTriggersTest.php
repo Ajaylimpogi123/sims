@@ -10,6 +10,8 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class NotificationTriggersTest extends TestCase
@@ -35,8 +37,13 @@ class NotificationTriggersTest extends TestCase
         $coordinator = User::factory()->create(['role_id' => 2]);
         $admin = User::factory()->create(['role_id' => 4]);
         $student = $this->studentWithUser();
+        Storage::fake('local');
 
-        $this->actingAs($student->user)->post('/my-attendance/time-in');
+        $this->actingAs($student->user)->post('/my-attendance/time-in', [
+            'photo' => UploadedFile::fake()->image('capture.jpg'),
+            'latitude' => '10.6765432',
+            'longitude' => '122.9509876',
+        ])->assertSessionHas('success');
 
         $this->assertDatabaseHas('notifications', [
             'user_id' => $coordinator->id,
