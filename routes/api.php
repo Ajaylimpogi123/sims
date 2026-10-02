@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Middleware\ThrottleFailedAuth;
 use App\Http\Middleware\ThrottleLogin;
 use Illuminate\Support\Facades\Route;
@@ -29,5 +30,13 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::middleware([ThrottleFailedAuth::class, 'auth:sanctum', 'mobile', 'throttle:api'])->group(function () {
         Route::post('logout', [AuthController::class, 'logout'])->name('logout');
         Route::get('me', [AuthController::class, 'me'])->name('me');
+
+        // Notifications: every role, own inbox only.
+        Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
+        Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+        Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])
+            ->whereNumber('notification')
+            ->name('notifications.read');
     });
 });
