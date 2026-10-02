@@ -54,26 +54,50 @@ class NotificationService
      */
     public function attendanceSubmitted(Attendance $attendance, string $leg): void
     {
-        $student = $attendance->student;
-        $studentName = $student?->user?->name ?? 'A student';
-        $legLabel = $leg === 'time_in' ? 'time-in' : 'time-out';
-        $date = $attendance->date?->format('F j, Y');
-
         $recipients = User::where('role_id', self::ADMIN_ROLE_ID)->get();
 
-        $supervisor = $student?->supervisor;
+        $supervisor = $this->attendanceSupervisor($attendance);
 
-        if ($supervisor && (int) $supervisor->role_id === self::SUPERVISOR_ROLE_ID) {
+        if ($supervisor) {
             $recipients->push($supervisor);
         }
 
-        $this->notifyMany(
-            $recipients->unique('id'),
+        foreach ($recipients->unique('id') as $recipient) {
+            $this->notifyAttendanceSubmitted($recipient, $attendance, $leg);
+        }
+    }
+
+    /**
+     * Send the attendance_pending notification for one leg to a single
+     * recipient. attendanceSubmitted() uses this for every recipient, and
+     * the supervisor backfill command uses it so the wording never drifts.
+     */
+    public function notifyAttendanceSubmitted(User $recipient, Attendance $attendance, string $leg): Notification
+    {
+        $studentName = $attendance->student?->user?->name ?? 'A student';
+        $legLabel = $leg === 'time_in' ? 'time-in' : 'time-out';
+        $date = $attendance->date?->format('F j, Y');
+
+        return $this->notify(
+            $recipient,
             'attendance_pending',
             'New attendance approval request',
             "{$studentName} submitted a {$legLabel} for {$date} awaiting your approval.",
             ['attendance_id' => $attendance->id],
         );
+    }
+
+    /**
+     * The student's assigned supervisor, but only while that account still
+     * holds the Supervisor role — only role 3 can act on approvals.
+     */
+    public function attendanceSupervisor(Attendance $attendance): ?User
+    {
+        $supervisor = $attendance->student?->supervisor;
+
+        return $supervisor && (int) $supervisor->role_id === self::SUPERVISOR_ROLE_ID
+            ? $supervisor
+            : null;
     }
 
     /**
