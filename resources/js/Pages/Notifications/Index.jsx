@@ -1,5 +1,5 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
-import { Head, router } from "@inertiajs/react";
+import { Head, Link, router } from "@inertiajs/react";
 import { Button } from "@/Components/ui/button";
 import {
     Table,
@@ -14,14 +14,25 @@ import { formatDateTime } from "@/lib/dates";
 export default function Index({ notifications }) {
     const items = notifications.data ?? [];
 
-    const markRead = (notification) => {
-        if (notification.read_at) return;
+    // Opening goes through notifications.open (a single GET that marks the
+    // notification read and redirects to its destination).
+    const openHref = (notification) =>
+        route("notifications.open", notification.id);
 
-        router.patch(
-            route("notifications.read", notification.id),
-            {},
-            { preserveScroll: true },
-        );
+    // Whole-row click target for pointer users; the title <Link> is the
+    // keyboard-focusable control, so the row itself is not a tab stop.
+    const handleRowClick = (notification, e) => {
+        if (e.target.closest("a, button")) return;
+        if (window.getSelection()?.toString()) return;
+
+        const href = openHref(notification);
+
+        if (e.metaKey || e.ctrlKey) {
+            window.open(href, "_blank", "noopener");
+            return;
+        }
+
+        router.visit(href);
     };
 
     const markAllRead = () => {
@@ -75,15 +86,25 @@ export default function Index({ notifications }) {
                                                 key={notification.id}
                                                 className={
                                                     notification.read_at
-                                                        ? undefined
-                                                        : "bg-emerald-50/60 cursor-pointer"
+                                                        ? "cursor-pointer"
+                                                        : "cursor-pointer bg-emerald-50/60"
                                                 }
-                                                onClick={() =>
-                                                    markRead(notification)
+                                                onClick={(e) =>
+                                                    handleRowClick(
+                                                        notification,
+                                                        e,
+                                                    )
                                                 }
                                             >
                                                 <TableCell className="font-medium">
-                                                    {notification.title}
+                                                    <Link
+                                                        href={openHref(
+                                                            notification,
+                                                        )}
+                                                        className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                    >
+                                                        {notification.title}
+                                                    </Link>
                                                 </TableCell>
                                                 <TableCell className="max-w-md text-muted-foreground">
                                                     {notification.body}

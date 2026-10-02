@@ -15,18 +15,6 @@ export function NotificationBell() {
     const { unreadNotificationsCount = 0, recentNotifications = [] } =
         usePage().props;
 
-    const markRead = (notification, e) => {
-        e.preventDefault();
-
-        if (notification.read_at) return;
-
-        router.patch(
-            route("notifications.read", notification.id),
-            {},
-            { preserveScroll: true },
-        );
-    };
-
     const markAllRead = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -68,26 +56,35 @@ export function NotificationBell() {
                         No notifications yet.
                     </p>
                 ) : (
+                    // Each item is a single GET to notifications.open: the
+                    // server marks it read and redirects to the destination.
                     recentNotifications.map((notification) => (
                         <DropdownMenuItem
                             key={notification.id}
-                            className="flex flex-col items-start gap-0.5 whitespace-normal py-2"
-                            onClick={(e) => markRead(notification, e)}
+                            asChild
+                            className="flex cursor-pointer flex-col items-start gap-0.5 whitespace-normal py-2"
                         >
-                            <span className="flex w-full items-center gap-2 text-sm font-medium">
-                                {!notification.read_at && (
-                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                            <Link
+                                href={route(
+                                    "notifications.open",
+                                    notification.id,
                                 )}
-                                {notification.title}
-                            </span>
-                            {notification.body && (
-                                <span className="line-clamp-2 text-xs text-muted-foreground">
-                                    {notification.body}
+                            >
+                                <span className="flex w-full items-center gap-2 text-sm font-medium">
+                                    {!notification.read_at && (
+                                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                                    )}
+                                    {notification.title}
                                 </span>
-                            )}
-                            <span className="text-[11px] text-muted-foreground">
-                                {formatDateTime(notification.created_at)}
-                            </span>
+                                {notification.body && (
+                                    <span className="line-clamp-2 text-xs text-muted-foreground">
+                                        {notification.body}
+                                    </span>
+                                )}
+                                <span className="text-[11px] text-muted-foreground">
+                                    {formatDateTime(notification.created_at)}
+                                </span>
+                            </Link>
                         </DropdownMenuItem>
                     ))
                 )}
