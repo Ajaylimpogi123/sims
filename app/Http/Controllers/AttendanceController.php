@@ -23,6 +23,9 @@ class AttendanceController extends Controller
      */
     public const PHOTO_DISK = 'local';
 
+    /** Largest value the decimal(8,2) *_accuracy columns can hold. */
+    private const MAX_ACCURACY = 999999.99;
+
     public function __construct(private NotificationService $notifications) {}
 
     public function index(): Response|RedirectResponse
@@ -184,6 +187,22 @@ class AttendanceController extends Controller
     }
 
     /**
+     * The browser forwards the device's accuracy unchanged, so it can exceed
+     * the decimal(8,2) column. Rejecting it would block that device on every
+     * retry, so it is clamped instead: 999999.99 m still reads as "useless
+     * fix" to a reviewer. Clamp before rounding so 999999.995 can't round up
+     * past the column max.
+     */
+    private function clampAccuracy(mixed $accuracy): ?float
+    {
+        if ($accuracy === null) {
+            return null;
+        }
+
+        return round(min((float) $accuracy, self::MAX_ACCURACY), 2);
+    }
+
+    /**
      * Store the photo for this leg, write its coordinates, and save the
      * record. A photo previously stored for the same leg (re-submission
      * after a rejection) is deleted only once the new one is persisted.
@@ -196,7 +215,7 @@ class AttendanceController extends Controller
         $record->{"{$leg}_photo_path"} = $newPath;
         $record->{"{$leg}_latitude"} = $validated['latitude'];
         $record->{"{$leg}_longitude"} = $validated['longitude'];
-        $record->{"{$leg}_accuracy"} = $validated['accuracy'] ?? null;
+        $record->{"{$leg}_accuracy"} = $this->clampAccuracy($validated['accuracy'] ?? null);
 
         try {
             $record->save();

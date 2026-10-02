@@ -80,7 +80,28 @@ class AttendanceMonitoringController extends Controller
         $validated['time_in_status'] = $validated['time_in'] ? 'approved' : null;
         $validated['time_out_status'] = $validated['time_out'] ? 'approved' : null;
 
+        // A leg staff clear no longer has a submission, so its captured
+        // photo + GPS go with it. A leg whose time is merely overridden keeps
+        // its evidence on purpose: it still documents what the student sent.
+        $orphanedPhotos = [];
+
+        foreach (['time_in', 'time_out'] as $leg) {
+            if (($validated[$leg] ?? null) !== null) {
+                continue;
+            }
+
+            $orphanedPhotos[] = $attendance->{"{$leg}_photo_path"};
+
+            foreach (['photo_path', 'latitude', 'longitude', 'accuracy'] as $field) {
+                $validated["{$leg}_{$field}"] = null;
+            }
+        }
+
         $attendance->update($validated);
+
+        if ($orphanedPhotos = array_filter($orphanedPhotos)) {
+            Storage::disk(AttendanceController::PHOTO_DISK)->delete($orphanedPhotos);
+        }
 
         return redirect()->route('attendance-monitoring.index')
             ->with('success', 'Attendance entry updated.');

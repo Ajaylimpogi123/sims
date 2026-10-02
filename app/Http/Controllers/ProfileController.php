@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -50,10 +51,18 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+        $studentId = $user->student?->id;
 
         Auth::logout();
 
         $user->delete();
+
+        // users -> students -> attendances is an FK cascade, so no model
+        // events fire; remove the student's private attendance photos here.
+        if ($studentId) {
+            Storage::disk(AttendanceController::PHOTO_DISK)
+                ->deleteDirectory("attendance-photos/{$studentId}");
+        }
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

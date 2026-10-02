@@ -181,6 +181,32 @@ class AttendanceCaptureTest extends TestCase
         $this->assertNull($record->{"{$otherLeg}_latitude"});
     }
 
+    public static function oversizedAccuracies(): array
+    {
+        return [
+            'one million metres' => ['1000000'],
+            'rounds up past the column max' => ['999999.995'],
+            'exponent notation' => ['1e30'],
+        ];
+    }
+
+    #[DataProvider('oversizedAccuracies')]
+    public function test_accuracy_above_the_column_max_is_clamped_instead_of_failing(string $accuracy): void
+    {
+        // Regression (QA BUG-B1): decimal(8,2) overflowed with a 500, and
+        // the browser would resend the same value on every retry.
+        $user = $this->studentUser();
+
+        $this->actingAs($user)
+            ->post('/my-attendance/time-in', $this->validPayload(['accuracy' => $accuracy]))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $record = Attendance::where('student_id', $user->student->id)->firstOrFail();
+        $this->assertSame('999999.99', $record->time_in_accuracy);
+        Storage::disk('local')->assertExists($record->time_in_photo_path);
+    }
+
     public function test_accuracy_is_optional(): void
     {
         $user = $this->studentUser();
@@ -310,6 +336,128 @@ class AttendanceCaptureTest extends TestCase
         $this->assertModelMissing($attendance);
         Storage::disk('local')->assertMissing('attendance-photos/x/in.jpg');
         Storage::disk('local')->assertMissing('attendance-photos/x/out.jpg');
+    }
+
+    public static function clearedLegs(): array
+    {
+        return [
+            'time out cleared' => ['time_out', ['time_in' => '08:00', 'time_out' => '']],
+            'time in cleared' => ['time_in', ['time_in' => '', 'time_out' => '']],
+        ];
+    }
+
+    #[DataProvider('clearedLegs')]
+    public function test_clearing_a_leg_in_monitoring_removes_its_evidence(string $clearedLeg, array $times): void
+    {
+        // Regression (QA BUG-B2): clearing a leg left its photo + GPS behind,
+        // still served and shown next to a "-" time.
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $student = Student::factory()->create(['supervisor_id' => $supervisor->id]);
+        Storage::disk('local')->put('attendance-photos/x/in.jpg', 'in');
+        Storage::disk('local')->put('attendance-photos/x/out.jpg', 'out');
+
+        $attendance = Attendance::factory()->create([
+            'student_id' => $student->id,
+            'date' => today()->toDateString(),
+            'time_in_photo_path' => 'attendance-photos/x/in.jpg',
+            'time_in_latitude' => 10.5,
+            'time_in_longitude' => 122.9,
+            'time_in_accuracy' => 5,
+            'time_out_photo_path' => 'attendance-photos/x/out.jpg',
+            'time_out_latitude' => 10.5,
+            'time_out_longitude' => 122.9,
+            'time_out_accuracy' => 5,
+        ]);
+
+        $this->actingAs($supervisor)
+            ->patch("/attendance-monitoring/attendances/{$attendance->id}", array_merge([
+                'date' => today()->toDateString(),
+            ], $times))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $attendance->refresh();
+
+        foreach (['photo_path', 'latitude', 'longitude', 'accuracy'] as $field) {
+            $this->assertNull($attendance->{"{$clearedLeg}_{$field}"}, "{$clearedLeg}_{$field} should be cleared");
+        }
+        Storage::disk('local')->assertMissing("attendance-photos/x/{$this->shortLeg($clearedLeg)}.jpg");
+
+        if ($clearedLeg === 'time_out') {
+            $this->assertSame('attendance-photos/x/in.jpg', $attendance->time_in_photo_path);
+            Storage::disk('local')->assertExists('attendance-photos/x/in.jpg');
+        }
+
+        $this->actingAs($supervisor)
+            ->get($this->photoUrl($attendance, $clearedLeg))
+            ->assertNotFound();
+    }
+
+    public function test_overriding_a_time_in_monitoring_keeps_that_legs_evidence(): void
+    {
+        // Deliberate: the photo/GPS document what the student submitted for
+        // that leg; a staff time correction doesn't invalidate it.
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $student = Student::factory()->create(['supervisor_id' => $supervisor->id]);
+        Storage::disk('local')->put('attendance-photos/x/out.jpg', 'out');
+
+        $attendance = Attendance::factory()->create([
+            'student_id' => $student->id,
+            'date' => today()->toDateString(),
+            'time_out_photo_path' => 'attendance-photos/x/out.jpg',
+            'time_out_latitude' => 10.5,
+        ]);
+
+        $this->actingAs($supervisor)
+            ->patch("/attendance-monitoring/attendances/{$attendance->id}", [
+                'date' => today()->toDateString(),
+                'time_in' => '08:00',
+                'time_out' => '16:30',
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame('attendance-photos/x/out.jpg', $attendance->fresh()->time_out_photo_path);
+        Storage::disk('local')->assertExists('attendance-photos/x/out.jpg');
+    }
+
+    private function shortLeg(string $leg): string
+    {
+        return $leg === 'time_in' ? 'in' : 'out';
+    }
+
+    public function test_deleting_own_account_removes_the_students_attendance_photos(): void
+    {
+        // Regression (QA BUG-B3): the FK cascade removed the rows but left
+        // the images on disk.
+        $user = $this->studentUser();
+        $other = $this->studentUser();
+        $ownDir = "attendance-photos/{$user->student->id}";
+        $otherDir = "attendance-photos/{$other->student->id}";
+        Storage::disk('local')->put("{$ownDir}/in.jpg", 'in');
+        Storage::disk('local')->put("{$otherDir}/in.jpg", 'in');
+
+        $this->actingAs($user)
+            ->delete('/profile', ['password' => 'password'])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect('/');
+
+        $this->assertModelMissing($user);
+        Storage::disk('local')->assertMissing("{$ownDir}/in.jpg");
+        $this->assertFalse(Storage::disk('local')->directoryExists($ownDir));
+        Storage::disk('local')->assertExists("{$otherDir}/in.jpg");
+    }
+
+    public function test_failed_account_deletion_keeps_the_photos(): void
+    {
+        $user = $this->studentUser();
+        $path = "attendance-photos/{$user->student->id}/in.jpg";
+        Storage::disk('local')->put($path, 'in');
+
+        $this->actingAs($user)
+            ->delete('/profile', ['password' => 'wrong-password'])
+            ->assertSessionHasErrors('password');
+
+        Storage::disk('local')->assertExists($path);
     }
 
     // ---- attendance.photo access matrix ---------------------------------
