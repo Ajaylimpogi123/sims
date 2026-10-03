@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ReportRuleException;
 use App\Models\InternshipReport;
 use App\Services\InternshipReportService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -36,7 +38,15 @@ class ReportReviewController extends Controller
 
         $validated = $request->validate(InternshipReportService::reviewRules());
 
-        $this->reports->review($report, Auth::user(), $validated['comment'] ?? null);
+        try {
+            $this->reports->review($report, Auth::user(), $validated['comment'] ?? null);
+        } catch (ReportRuleException $e) {
+            // Already reviewed (by someone else, or a stale page / replay).
+            return redirect()->route('report-reviews.index')->with('error', $e->getMessage());
+        } catch (ModelNotFoundException) {
+            // The student deleted it after this request loaded it.
+            return redirect()->route('report-reviews.index')->with('error', 'This report no longer exists.');
+        }
 
         return redirect()->route('report-reviews.index')
             ->with('success', 'Report reviewed.');

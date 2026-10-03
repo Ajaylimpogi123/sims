@@ -52,6 +52,8 @@ class InternshipReportService
 
     public const NOT_PENDING_MESSAGE = 'This report has already been reviewed and can no longer be changed.';
 
+    public const ALREADY_REVIEWED_MESSAGE = 'This report has already been reviewed.';
+
     /** Report fields a student fills in (the attachment is handled apart). */
     private const FIELDS = ['type', 'period_start', 'period_end', 'content'];
 
@@ -221,14 +223,33 @@ class InternshipReportService
         $this->deleteFile($path);
     }
 
+    /**
+     * Review a pending report, once. The row is locked, so a concurrent
+     * student delete/edit or a second reviewer can't interleave; the
+     * student is notified only after commit.
+     *
+     * @throws ReportRuleException when it was already reviewed
+     * @throws ModelNotFoundException when it was deleted meanwhile
+     */
     public function review(InternshipReport $report, User $reviewer, ?string $comment): InternshipReport
     {
-        $report->update([
-            'status' => 'reviewed',
-            'reviewer_comment' => $comment,
-            'reviewed_by' => $reviewer->id,
-            'reviewed_at' => now(),
-        ]);
+        DB::transaction(function () use ($report, $reviewer, $comment) {
+            $current = InternshipReport::query()->lockForUpdate()->find($report->id)
+                ?? throw (new ModelNotFoundException)->setModel(InternshipReport::class, [$report->id]);
+
+            if ($current->status !== 'pending') {
+                throw new ReportRuleException(self::ALREADY_REVIEWED_MESSAGE);
+            }
+
+            $current->update([
+                'status' => 'reviewed',
+                'reviewer_comment' => $comment,
+                'reviewed_by' => $reviewer->id,
+                'reviewed_at' => now(),
+            ]);
+
+            $report->setRawAttributes($current->getAttributes(), true);
+        });
 
         $this->notifications->reportReviewed($report);
 

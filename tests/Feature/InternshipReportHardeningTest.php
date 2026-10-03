@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\InternshipReport;
+use App\Models\Notification;
 use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
@@ -135,6 +136,82 @@ class InternshipReportHardeningTest extends TestCase
             ->assertSessionHas('error');
 
         $this->assertModelExists($report);
+    }
+
+    public function test_reviewing_a_report_deleted_meanwhile_is_refused_without_a_notification(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $user = $this->studentUser();
+        $report = InternshipReport::factory()->create(['student_id' => $user->student->id]);
+
+        $this->actingAs($coordinator);
+
+        // The student's delete commits right after the review request
+        // loaded the (route-bound) report.
+        $landed = false;
+        DB::listen(function ($query) use (&$landed, $report) {
+            if ($landed || ! str_contains($query->sql, 'from `internship_reports`')) {
+                return;
+            }
+
+            $landed = true;
+            DB::table('internship_reports')->where('id', $report->id)->delete();
+        });
+
+        $this->patch("/report-reviews/{$report->id}", ['comment' => 'x'])
+            ->assertRedirect(route('report-reviews.index', absolute: false))
+            ->assertSessionHas('error', 'This report no longer exists.');
+
+        $this->assertTrue($landed);
+        $this->assertSame(0, Notification::count());
+    }
+
+    public function test_a_reviewed_report_cannot_be_reviewed_again(): void
+    {
+        $first = User::factory()->create(['role_id' => 2]);
+        $second = User::factory()->create(['role_id' => 4]);
+        $user = $this->studentUser();
+        $report = InternshipReport::factory()->create(['student_id' => $user->student->id]);
+
+        $this->actingAs($first)->patch("/report-reviews/{$report->id}", ['comment' => 'First'])
+            ->assertSessionHas('success', 'Report reviewed.');
+
+        $this->actingAs($second)->patch("/report-reviews/{$report->id}", ['comment' => 'Second'])
+            ->assertRedirect(route('report-reviews.index', absolute: false))
+            ->assertSessionHas('error', 'This report has already been reviewed.');
+
+        $report->refresh();
+        $this->assertSame('First', $report->reviewer_comment);
+        $this->assertSame($first->id, $report->reviewed_by);
+        $this->assertSame(1, Notification::where('type', 'report_reviewed')->count());
+    }
+
+    public function test_a_review_that_lands_first_wins_over_a_concurrent_one(): void
+    {
+        $first = User::factory()->create(['role_id' => 2]);
+        $second = User::factory()->create(['role_id' => 4]);
+        $user = $this->studentUser();
+        $report = InternshipReport::factory()->create(['student_id' => $user->student->id]);
+
+        $this->actingAs($second);
+
+        $landed = false;
+        DB::listen(function ($query) use (&$landed, $report, $first) {
+            if ($landed || ! str_contains($query->sql, 'from `internship_reports`')) {
+                return;
+            }
+
+            $landed = true;
+            DB::table('internship_reports')->where('id', $report->id)->update([
+                'status' => 'reviewed', 'reviewer_comment' => 'First', 'reviewed_by' => $first->id, 'reviewed_at' => now(),
+            ]);
+        });
+
+        $this->patch("/report-reviews/{$report->id}", ['comment' => 'Second'])
+            ->assertSessionHas('error', 'This report has already been reviewed.');
+
+        $this->assertSame('First', $report->fresh()->reviewer_comment);
+        $this->assertSame(0, Notification::count());
     }
 
     public function test_the_factory_never_repeats_a_student_type_and_period(): void
