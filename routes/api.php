@@ -5,7 +5,9 @@ use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AttendancePhotoController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\InternshipReportController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\ReportAttachmentController;
 use App\Http\Middleware\ThrottleFailedAuth;
 use App\Http\Middleware\ThrottleLogin;
 use Illuminate\Support\Facades\Route;
@@ -64,11 +66,35 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::post('attendance/emergency-time-out', [AttendanceController::class, 'emergencyTimeOut'])->name('attendance.emergency-time-out');
         });
 
+        // My Reports: Student only, own reports only (another student's id is a
+        // 404). Rules live in InternshipReportService. Multipart updates are
+        // sent as POST with _method=PATCH.
+        Route::middleware('role:1')->group(function () {
+            Route::get('reports', [InternshipReportController::class, 'index'])->name('reports.index');
+            Route::post('reports', [InternshipReportController::class, 'store'])->name('reports.store');
+            Route::get('reports/{report}', [InternshipReportController::class, 'show'])
+                ->where('report', '[1-9][0-9]{0,17}')
+                ->name('reports.show');
+            Route::patch('reports/{report}', [InternshipReportController::class, 'update'])
+                ->where('report', '[1-9][0-9]{0,17}')
+                ->name('reports.update');
+            Route::delete('reports/{report}', [InternshipReportController::class, 'destroy'])
+                ->where('report', '[1-9][0-9]{0,17}')
+                ->name('reports.destroy');
+        });
+
         // Evidence photos: every role, scoped per record by
         // AttendancePolicy::view inside the controller (404 when not visible).
         Route::get('attendance/{attendance}/photo/{leg}', AttendancePhotoController::class)
             ->whereNumber('attendance')
             ->whereIn('leg', ['time_in', 'time_out'])
             ->name('attendance.photo');
+
+        // Report attachments: every role, scoped per report by
+        // InternshipReportPolicy::view inside the controller (404 when not
+        // visible).
+        Route::get('reports/{report}/attachment', ReportAttachmentController::class)
+            ->where('report', '[1-9][0-9]{0,17}')
+            ->name('reports.attachment');
     });
 });
