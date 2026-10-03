@@ -27,6 +27,11 @@ use Illuminate\Validation\ValidationException;
  */
 class InternshipReportController extends Controller
 {
+    /** remove_attachment values that remove / keep the current file. */
+    private const REMOVE = [true, 1, '1', 'true'];
+
+    private const KEEP = [false, 0, '0', 'false'];
+
     public function __construct(private InternshipReportService $reports) {}
 
     /**
@@ -83,10 +88,15 @@ class InternshipReportController extends Controller
 
         $validated = $request->validate([
             ...InternshipReportService::rules(),
-            'remove_attachment' => ['sometimes', 'nullable', 'in:0,1,true,false'],
+            // Multipart sends text; JSON may send real booleans / numbers.
+            'remove_attachment' => ['sometimes', 'nullable', function (string $attribute, mixed $value, \Closure $fail) {
+                if (! in_array($value, [...self::REMOVE, ...self::KEEP], true)) {
+                    $fail('The remove attachment field must be 1, 0, true or false.');
+                }
+            }],
         ]);
 
-        $remove = in_array((string) ($validated['remove_attachment'] ?? ''), ['1', 'true'], true);
+        $remove = in_array($validated['remove_attachment'] ?? null, self::REMOVE, true);
 
         if ($remove && $request->hasFile('attachment')) {
             throw ValidationException::withMessages([

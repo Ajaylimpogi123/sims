@@ -697,6 +697,33 @@ class ReportApiTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors(['remove_attachment']);
     }
 
+    public function test_remove_attachment_accepts_json_booleans_and_numbers(): void
+    {
+        [, $token, $student] = $this->student();
+        $report = $this->withAttachment($student);
+        $patch = fn (mixed $value) => $this->api('PATCH', "/api/v1/reports/{$report->id}", $token, $this->payload(['remove_attachment' => $value]), json: true);
+
+        foreach ([false, 0, '0', 'false', null, ''] as $keep) {
+            $patch($keep)->assertOk()->assertJsonPath('report.attachment.name', 'proof.pdf');
+        }
+
+        foreach ([2, 'yes', ['1']] as $invalid) {
+            $patch($invalid)->assertStatus(422)->assertJsonValidationErrors(['remove_attachment']);
+        }
+
+        $patch(true)->assertOk()->assertJsonPath('report.attachment', null);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_remove_attachment_json_one_removes(): void
+    {
+        [, $token, $student] = $this->student();
+        $report = $this->withAttachment($student);
+
+        $this->api('PATCH', "/api/v1/reports/{$report->id}", $token, $this->payload(['remove_attachment' => 1]), json: true)
+            ->assertOk()->assertJsonPath('report.attachment', null);
+    }
+
     public function test_uploading_and_removing_at_once_is_a_422(): void
     {
         [, $token, $student] = $this->student();
