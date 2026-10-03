@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ReportRuleException;
 use App\Models\InternshipReport;
 use App\Services\InternshipReportService;
 use Illuminate\Http\RedirectResponse;
@@ -64,7 +65,13 @@ class InternshipReportController extends Controller
 
         $validated = $request->validate(InternshipReportService::rules());
 
-        $this->reports->update($report, $validated, $request->file('attachment'));
+        try {
+            $this->reports->update($report, $validated, $request->file('attachment'));
+        } catch (ReportRuleException $e) {
+            // Reviewed between the policy check above and the service's
+            // locked re-check.
+            return redirect()->route('reports.index')->with('error', $e->getMessage());
+        }
 
         return redirect()->route('reports.index')
             ->with('success', 'Report updated.');
@@ -79,7 +86,11 @@ class InternshipReportController extends Controller
 
         $this->authorize('delete', $report);
 
-        $this->reports->delete($report);
+        try {
+            $this->reports->delete($report);
+        } catch (ReportRuleException $e) {
+            return redirect()->route('reports.index')->with('error', $e->getMessage());
+        }
 
         return redirect()->route('reports.index')
             ->with('success', 'Report deleted.');
