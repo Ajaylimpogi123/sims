@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 /**
@@ -254,6 +255,28 @@ class InternshipReportService
         $this->notifications->reportReviewed($report);
 
         return $report;
+    }
+
+    /**
+     * Stream a report's attachment from the private disk (authorization is
+     * the caller's job). 404 when the report has no attachment or its file
+     * is missing. Served with its detected type, and nosniff + a sandbox CSP
+     * so a browser never treats it as anything active.
+     *
+     * @param  array<string, string>  $headers  extra headers (e.g. caching)
+     */
+    public function attachmentResponse(InternshipReport $report, array $headers = []): StreamedResponse
+    {
+        $path = $report->attachment_path;
+        $disk = Storage::disk(self::ATTACHMENT_DISK);
+
+        abort_unless($path && $disk->exists($path), 404);
+
+        return $disk->response($path, $report->attachment_original_name ?: basename($path), [
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; sandbox",
+            ...$headers,
+        ]);
     }
 
     /**

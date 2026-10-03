@@ -8,7 +8,6 @@ use App\Services\InternshipReportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -104,11 +103,7 @@ class InternshipReportController extends Controller
     public function downloadAttachment(InternshipReport $report): StreamedResponse
     {
         $this->authorize('view', $report);
-        abort_unless($report->attachment_path, 404);
 
-        return Storage::disk(InternshipReportService::ATTACHMENT_DISK)->response(
-            $report->attachment_path,
-            $report->attachment_original_name,
-        );
+        return $this->reports->attachmentResponse($report);
     }
 }
