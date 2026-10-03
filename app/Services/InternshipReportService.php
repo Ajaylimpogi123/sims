@@ -69,13 +69,17 @@ class InternshipReportService
     {
         return [
             'type' => ['required', 'string', 'in:daily,weekly'],
-            'period_start' => ['required', 'date_format:Y-m-d'],
+            'period_start' => ['bail', 'required', 'string', 'date_format:Y-m-d'],
             'period_end' => [
+                'bail',
                 'required',
+                'string',
                 'date_format:Y-m-d',
-                'after_or_equal:period_start',
+                // Compared only against a string period_start: the date
+                // comparison throws a TypeError (500) on an array.
+                Rule::when(fn ($input) => is_string($input->period_start), ['after_or_equal:period_start']),
                 // A daily report covers exactly one day.
-                Rule::when(fn ($input) => $input->type === 'daily', ['same:period_start']),
+                Rule::when(fn ($input) => is_string($input->period_start) && $input->type === 'daily', ['same:period_start']),
             ],
             'content' => ['required', 'string', 'max:'.self::MAX_CONTENT_LENGTH],
             // `mimes` checks the file's actual content, so SVG / HTML (or

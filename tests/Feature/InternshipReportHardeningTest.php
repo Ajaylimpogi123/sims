@@ -67,6 +67,23 @@ class InternshipReportHardeningTest extends TestCase
         $this->assertSame(1, InternshipReport::count());
     }
 
+    public function test_the_website_rejects_array_dates_with_errors_not_a_500(): void
+    {
+        $user = $this->studentUser();
+        $report = InternshipReport::factory()->create(['student_id' => $user->student->id]);
+
+        $this->actingAs($user)->post('/my-reports', $this->payload(['period_start' => ['2026-01-05']]))
+            ->assertSessionHasErrors('period_start');
+        $this->actingAs($user)->post('/my-reports', $this->payload(['type' => 'weekly', 'period_start' => ['2026-01-05'], 'period_end' => ['2026-01-09']]))
+            ->assertSessionHasErrors(['period_start', 'period_end']);
+        $this->actingAs($user)->patch("/my-reports/{$report->id}", $this->payload(['period_start' => ['2026-01-05']]))
+            ->assertSessionHasErrors('period_start');
+        $this->actingAs($user)->patch("/my-reports/{$report->id}", $this->payload(['period_end' => ['2026-01-05']]))
+            ->assertSessionHasErrors('period_end');
+
+        $this->assertSame(1, InternshipReport::count());
+    }
+
     public function test_a_website_edit_that_loses_the_race_to_a_review_flashes_an_error(): void
     {
         $user = $this->studentUser();

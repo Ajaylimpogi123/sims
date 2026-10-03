@@ -428,6 +428,10 @@ class ReportApiTest extends TestCase
             'missing everything' => [['type' => null, 'period_start' => null, 'period_end' => null, 'content' => null], ['type', 'period_start', 'period_end', 'content']],
             'unknown type' => [['type' => 'monthly'], ['type']],
             'array type' => [['type' => ['daily']], ['type']],
+            'array period start' => [['period_start' => ['2026-10-02']], ['period_start']],
+            'array period end' => [['period_end' => ['2026-10-02']], ['period_end']],
+            'array period start and end' => [['type' => 'weekly', 'period_start' => ['2026-10-02'], 'period_end' => ['2026-10-02']], ['period_start', 'period_end']],
+            'array content' => [['content' => ['x']], ['content']],
             'non ISO date' => [['period_start' => '10/02/2026', 'period_end' => '10/02/2026'], ['period_start', 'period_end']],
             'date with time' => [['period_start' => '2026-10-02 13:00', 'period_end' => '2026-10-02 13:00'], ['period_start', 'period_end']],
             'impossible date' => [['period_start' => '2026-02-30', 'period_end' => '2026-02-30'], ['period_start', 'period_end']],
@@ -450,6 +454,26 @@ class ReportApiTest extends TestCase
 
         $this->assertSame(0, InternshipReport::count());
         $this->assertSame(0, Notification::count());
+    }
+
+    public function test_array_dates_are_a_422_not_a_500_on_json_create_and_multipart_update(): void
+    {
+        [, $token, $student] = $this->student();
+        $report = $this->report($student);
+
+        $this->api('POST', '/api/v1/reports', $token, $this->payload(['period_start' => ['2026-10-02']]), json: true)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['period_start']);
+
+        $this->update($report, $token, $this->payload(['period_start' => ['2026-10-02']]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['period_start']);
+
+        $this->update($report, $token, $this->payload(['period_end' => ['2026-10-02']]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['period_end']);
+
+        $this->assertSame(1, InternshipReport::count());
     }
 
     public function test_content_at_the_limit_with_multibyte_characters_is_stored_intact(): void
