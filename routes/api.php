@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AnalyticsController;
+use App\Http\Controllers\Api\V1\AttendanceController;
+use App\Http\Controllers\Api\V1\AttendancePhotoController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -51,5 +53,22 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
             Route::get('analytics/filter-options', [AnalyticsController::class, 'filterOptions'])->name('analytics.filter-options');
         });
+
+        // My Attendance: Student only, always the signed-in student's own
+        // record (no ids accepted). Rules live in AttendanceService.
+        Route::middleware('role:1')->group(function () {
+            Route::get('attendance/today', [AttendanceController::class, 'today'])->name('attendance.today');
+            Route::get('attendance', [AttendanceController::class, 'index'])->name('attendance.index');
+            Route::post('attendance/time-in', [AttendanceController::class, 'timeIn'])->name('attendance.time-in');
+            Route::post('attendance/time-out', [AttendanceController::class, 'timeOut'])->name('attendance.time-out');
+            Route::post('attendance/emergency-time-out', [AttendanceController::class, 'emergencyTimeOut'])->name('attendance.emergency-time-out');
+        });
+
+        // Evidence photos: every role, scoped per record by
+        // AttendancePolicy::view inside the controller (404 when not visible).
+        Route::get('attendance/{attendance}/photo/{leg}', AttendancePhotoController::class)
+            ->whereNumber('attendance')
+            ->whereIn('leg', ['time_in', 'time_out'])
+            ->name('attendance.photo');
     });
 });
