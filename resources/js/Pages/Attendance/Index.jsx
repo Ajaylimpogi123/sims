@@ -54,7 +54,11 @@ export default function Index({
     const timeInStatus = todayRecord?.time_in_status;
     const timeOutStatus = todayRecord?.time_out_status;
 
-    const canTimeIn = !timeInStatus || timeInStatus === "rejected";
+    // Mirrors the server: a rejected time-in can't be re-submitted once
+    // today's time-out is pending or approved (it would credit negative hours).
+    const canTimeIn =
+        (!timeInStatus || timeInStatus === "rejected") &&
+        !["pending", "approved"].includes(timeOutStatus);
     const canTimeOut =
         timeInStatus === "approved" &&
         (!timeOutStatus || timeOutStatus === "rejected");
