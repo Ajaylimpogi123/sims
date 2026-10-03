@@ -9,6 +9,7 @@ use App\Models\EvaluationResponse;
 use App\Models\InternshipReport;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\AppScreen;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -377,6 +378,77 @@ class DashboardAnalyticsService
         ];
     }
 
+    /**
+     * The Student dashboard summary for one student (their own record):
+     * assignment, hours, today's attendance row, report counts and the five
+     * most recent reports. Shared by the web dashboard and the mobile API.
+     *
+     * @return array{
+     *     internship_status: string|null,
+     *     company: Company|null,
+     *     supervisor: User|null,
+     *     hours: array{rendered: float, required: int|null, remaining: float|null},
+     *     todayAttendance: Attendance|null,
+     *     reportCounts: array{pending: int, reviewed: int},
+     *     recentReports: \Illuminate\Support\Collection<int, InternshipReport>,
+     * }
+     */
+    public function studentSummary(Student $student): array
+    {
+        $renderedHours = (float) $student->attendances()->sum('rendered_hours');
+        $requiredHours = $student->required_hours;
+
+        $reportCounts = $student->internshipReports()
+            ->select('status', DB::raw('count(*) as total'))
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return [
+            'internship_status' => $student->internship_status,
+            'company' => $student->company,
+            'supervisor' => $student->supervisor,
+            'hours' => [
+                'rendered' => $renderedHours,
+                'required' => $requiredHours,
+                'remaining' => $requiredHours !== null
+                    ? max($requiredHours - $renderedHours, 0)
+                    : null,
+            ],
+            'todayAttendance' => $student->attendances()
+                ->where('date', today()->toDateString())
+                ->first(),
+            'reportCounts' => [
+                'pending' => (int) ($reportCounts['pending'] ?? 0),
+                'reviewed' => (int) ($reportCounts['reviewed'] ?? 0),
+            ],
+            'recentReports' => $student->internshipReports()
+                ->orderByDesc('period_start')
+                ->limit(5)
+                ->get(['id', 'type', 'period_start', 'period_end', 'status']),
+        ];
+    }
+
+    /**
+     * A Supervisor's own students (students.supervisor_id) with their total
+     * rendered hours, for the "Your Students" progress list.
+     *
+     * @return \Illuminate\Support\Collection<int, array{id: int, name: string|null, internship_status: string|null, rendered_hours: float, required_hours: int|null}>
+     */
+    public function supervisedStudentsProgress(User $user): \Illuminate\Support\Collection
+    {
+        return $user->supervisedStudents()
+            ->with('user:id,name')
+            ->withSum('attendances as total_rendered_hours', 'rendered_hours')
+            ->get()
+            ->map(fn (Student $student) => [
+                'id' => $student->id,
+                'name' => $student->user?->name,
+                'internship_status' => $student->internship_status,
+                'rendered_hours' => (float) ($student->total_rendered_hours ?? 0),
+                'required_hours' => $student->required_hours,
+            ]);
+    }
+
     private function averageCompletionProgress(): float
     {
         $students = Student::whereNotNull('required_hours')
@@ -401,7 +473,46 @@ class DashboardAnalyticsService
     // Alerts / action items
     // -----------------------------------------------------------------
 
+    /**
+     * Action items for the website dashboard: each links to its page.
+     *
+     * @return array<int, array{key: string, label: string, count: int, href: string}>
+     */
     public function actionItems(User $user): array
+    {
+        return array_map(fn (array $item) => [
+            'key' => $item['key'],
+            'label' => $item['label'],
+            'count' => $item['count'],
+            'href' => AppScreen::url($item['screen']),
+        ], $this->collectActionItems($user));
+    }
+
+    /**
+     * The same action items for the mobile app: each carries the app
+     * `target` of the equivalent screen instead of a web URL.
+     *
+     * @return array<int, array{key: string, label: string, count: int, target: array{screen: string, params: object}}>
+     */
+    public function appActionItems(User $user): array
+    {
+        return array_map(fn (array $item) => [
+            'key' => $item['key'],
+            'label' => $item['label'],
+            'count' => $item['count'],
+            'target' => AppScreen::target($item['screen']),
+        ], $this->collectActionItems($user));
+    }
+
+    /**
+     * The single decision table behind actionItems() and appActionItems().
+     * Each item's `screen` (an AppScreen key) must be one the role can open:
+     * approvals only for Supervisor/Admin, students only for
+     * Coordinator/Admin; the rest are open to roles 2-4.
+     *
+     * @return array<int, array{key: string, label: string, count: int, screen: string}>
+     */
+    private function collectActionItems(User $user): array
     {
         $roleId = (int) $user->role_id;
         $items = [];
@@ -410,79 +521,108 @@ class DashboardAnalyticsService
             if ($roleId === self::ADMIN_ROLE_ID) {
                 $pending = $this->pendingApprovalsCountFor();
                 if ($pending > 0) {
-                    $items[] = $this->item('pending_approvals', "{$pending} attendance approval(s) awaiting action", $pending, 'attendance-approvals.index');
+                    $items[] = $this->item('pending_approvals', "{$pending} attendance approval(s) awaiting action", $pending, 'approvals');
                 }
             }
 
             $withoutCompany = Student::whereNull('company_id')->count();
             if ($withoutCompany > 0) {
-                $items[] = $this->item('students_without_company', "{$withoutCompany} student(s) without a company assignment", $withoutCompany, 'internship-assignment.index');
+                $items[] = $this->item('students_without_company', "{$withoutCompany} student(s) without a company assignment", $withoutCompany, 'students');
             }
 
             $reportsAwaiting = InternshipReport::where('status', 'pending')->count();
             if ($reportsAwaiting > 0) {
-                $items[] = $this->item('reports_awaiting_review', "{$reportsAwaiting} report(s) awaiting review", $reportsAwaiting, 'report-reviews.index');
+                $items[] = $this->item('reports_awaiting_review', "{$reportsAwaiting} report(s) awaiting review", $reportsAwaiting, 'report-reviews');
             }
 
             $evalDrafts = Evaluation::where('status', 'draft')->count();
             if ($evalDrafts > 0) {
-                $items[] = $this->item('evaluations_awaiting_completion', "{$evalDrafts} evaluation(s) still in draft", $evalDrafts, 'supervisor-evaluations.index');
+                $items[] = $this->item('evaluations_awaiting_completion', "{$evalDrafts} evaluation(s) still in draft", $evalDrafts, 'evaluations');
             }
 
             $nearing = $this->nearingCompletionStudentIds()->count();
             if ($nearing > 0) {
-                $items[] = $this->item('nearing_completion', "{$nearing} student(s) nearing internship completion", $nearing, 'progress-monitoring.index');
+                $items[] = $this->item('nearing_completion', "{$nearing} student(s) nearing internship completion", $nearing, 'progress');
             }
 
             $rejections = $this->frequentRejectionStudentIds()->count();
             if ($rejections > 0) {
-                $items[] = $this->item('frequent_rejections', "{$rejections} student(s) with repeated attendance rejections", $rejections, 'attendance-monitoring.index');
+                $items[] = $this->item('frequent_rejections', "{$rejections} student(s) with repeated attendance rejections", $rejections, 'attendance-monitoring');
             }
         }
 
         if ($roleId === self::SUPERVISOR_ROLE_ID) {
             $pending = $this->pendingApprovalsCountFor($user);
             if ($pending > 0) {
-                $items[] = $this->item('pending_approvals', "{$pending} attendance approval(s) awaiting your action", $pending, 'attendance-approvals.index');
+                $items[] = $this->item('pending_approvals', "{$pending} attendance approval(s) awaiting your action", $pending, 'approvals');
             }
 
             $reportsAwaiting = InternshipReport::whereHas('student', fn (Builder $q) => $q->where('supervisor_id', $user->id))->where('status', 'pending')->count();
             if ($reportsAwaiting > 0) {
-                $items[] = $this->item('reports_awaiting_review', "{$reportsAwaiting} report(s) awaiting your review", $reportsAwaiting, 'report-reviews.index');
+                $items[] = $this->item('reports_awaiting_review', "{$reportsAwaiting} report(s) awaiting your review", $reportsAwaiting, 'report-reviews');
             }
 
             $evalDrafts = Evaluation::where('supervisor_id', $user->id)->where('status', 'draft')->count();
             if ($evalDrafts > 0) {
-                $items[] = $this->item('evaluations_awaiting_completion', "{$evalDrafts} evaluation(s) still in draft", $evalDrafts, 'supervisor-evaluations.index');
+                $items[] = $this->item('evaluations_awaiting_completion', "{$evalDrafts} evaluation(s) still in draft", $evalDrafts, 'evaluations');
             }
 
             $nearing = $this->nearingCompletionStudentIds($user)->count();
             if ($nearing > 0) {
-                $items[] = $this->item('nearing_completion', "{$nearing} student(s) nearing internship completion", $nearing, 'progress-monitoring.index');
+                $items[] = $this->item('nearing_completion', "{$nearing} student(s) nearing internship completion", $nearing, 'progress');
             }
 
             $rejections = $this->frequentRejectionStudentIds($user)->count();
             if ($rejections > 0) {
-                $items[] = $this->item('frequent_rejections', "{$rejections} student(s) with repeated attendance rejections", $rejections, 'attendance-monitoring.index');
+                $items[] = $this->item('frequent_rejections', "{$rejections} student(s) with repeated attendance rejections", $rejections, 'attendance-monitoring');
             }
         }
 
         return $items;
     }
 
-    private function item(string $key, string $label, int $count, string $routeName): array
+    private function item(string $key, string $label, int $count, string $screen): array
     {
         return [
             'key' => $key,
             'label' => $label,
             'count' => $count,
-            'href' => route($routeName),
+            'screen' => $screen,
         ];
     }
 
     // -----------------------------------------------------------------
     // Analytics tab charts
     // -----------------------------------------------------------------
+
+    /**
+     * Every Analytics chart dataset for already-resolved filters (see
+     * resolveFilters()), grouped by section. The web dashboard ships this
+     * as-is; the mobile API reshapes it into plain series.
+     */
+    public function charts(User $user, array $filters): array
+    {
+        return [
+            'internship' => [
+                'statusBreakdown' => $this->internshipStatusBreakdown($user, $filters),
+                'studentsByCompany' => $this->studentsByCompany($user, $filters),
+                'completionProgressBuckets' => $this->completionProgressBuckets($user, $filters),
+            ],
+            'attendance' => [
+                'outcomes' => $this->attendanceOutcomes($user, $filters),
+                'trend' => $this->attendanceTrend($user, $filters),
+                'frequentRejections' => $this->frequentRejections($user, $filters),
+            ],
+            'evaluation' => [
+                'completion' => $this->evaluationCompletion($user, $filters),
+                'byCategory' => $this->evaluationByCategory($user, $filters),
+            ],
+            'reports' => [
+                'funnel' => $this->reportsFunnel($user, $filters),
+                'submissionTrend' => $this->reportSubmissionTrend($user, $filters),
+            ],
+        ];
+    }
 
     public function internshipStatusBreakdown(User $user, array $filters): array
     {

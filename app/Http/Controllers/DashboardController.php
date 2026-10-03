@@ -48,35 +48,19 @@ class DashboardController extends Controller
             ]);
         }
 
-        $renderedHours = (float) $student->attendances()->sum('rendered_hours');
-        $requiredHours = $student->required_hours;
-
-        $todayAttendance = $student->attendances()
-            ->where('date', today()->toDateString())
-            ->first();
-
-        $recentReports = $student->internshipReports()
-            ->orderByDesc('period_start')
-            ->limit(5)
-            ->get(['id', 'type', 'period_start', 'period_end', 'status']);
+        $summary = $this->analytics->studentSummary($student);
 
         return Inertia::render('Dashboard/Index', [
             'roleId' => 1,
             'student' => [
-                'internship_status' => $student->internship_status,
-                'company_name' => $student->company?->company_name,
-                'supervisor_name' => $student->supervisor?->name,
+                'internship_status' => $summary['internship_status'],
+                'company_name' => $summary['company']?->company_name,
+                'supervisor_name' => $summary['supervisor']?->name,
             ],
-            'hours' => [
-                'rendered' => $renderedHours,
-                'required' => $requiredHours,
-                'remaining' => $requiredHours !== null
-                    ? max($requiredHours - $renderedHours, 0)
-                    : null,
-            ],
-            'todayAttendance' => $todayAttendance,
-            'pendingReportsCount' => $student->internshipReports()->where('status', 'pending')->count(),
-            'recentReports' => $recentReports,
+            'hours' => $summary['hours'],
+            'todayAttendance' => $summary['todayAttendance'],
+            'pendingReportsCount' => $summary['reportCounts']['pending'],
+            'recentReports' => $summary['recentReports'],
         ]);
     }
 
@@ -128,10 +112,7 @@ class DashboardController extends Controller
 
     private function supervisorDashboard(User $user, Request $request): Response
     {
-        $supervisedStudents = $user->supervisedStudents()
-            ->with('user:id,name')
-            ->withSum('attendances as total_rendered_hours', 'rendered_hours')
-            ->get();
+        $supervisedStudents = $this->analytics->supervisedStudentsProgress($user);
 
         $pendingReportReviews = InternshipReport::query()
             ->whereHas('student', fn ($query) => $query->where('supervisor_id', $user->id))
@@ -144,13 +125,7 @@ class DashboardController extends Controller
                 'supervisedStudents' => $supervisedStudents->count(),
                 'pendingReportReviews' => $pendingReportReviews,
             ],
-            'supervisedStudents' => $supervisedStudents->map(fn (Student $student) => [
-                'id' => $student->id,
-                'name' => $student->user?->name,
-                'internship_status' => $student->internship_status,
-                'rendered_hours' => (float) ($student->total_rendered_hours ?? 0),
-                'required_hours' => $student->required_hours,
-            ]),
+            'supervisedStudents' => $supervisedStudents,
             'kpis' => $this->analytics->supervisorKpis($user),
             'actionItems' => $this->analytics->actionItems($user),
             'recentActivity' => $this->notifications->withUrls($this->notifications->recentActivity($user), $user),
@@ -172,24 +147,7 @@ class DashboardController extends Controller
 
         return [
             'filters' => $filters,
-            'internship' => [
-                'statusBreakdown' => $this->analytics->internshipStatusBreakdown($user, $filters),
-                'studentsByCompany' => $this->analytics->studentsByCompany($user, $filters),
-                'completionProgressBuckets' => $this->analytics->completionProgressBuckets($user, $filters),
-            ],
-            'attendance' => [
-                'outcomes' => $this->analytics->attendanceOutcomes($user, $filters),
-                'trend' => $this->analytics->attendanceTrend($user, $filters),
-                'frequentRejections' => $this->analytics->frequentRejections($user, $filters),
-            ],
-            'evaluation' => [
-                'completion' => $this->analytics->evaluationCompletion($user, $filters),
-                'byCategory' => $this->analytics->evaluationByCategory($user, $filters),
-            ],
-            'reports' => [
-                'funnel' => $this->analytics->reportsFunnel($user, $filters),
-                'submissionTrend' => $this->analytics->reportSubmissionTrend($user, $filters),
-            ],
+            ...$this->analytics->charts($user, $filters),
         ];
     }
 }

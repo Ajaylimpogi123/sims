@@ -7,6 +7,7 @@ use App\Models\InternshipReport;
 use App\Models\Notification;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\AppScreen;
 use Illuminate\Support\Collection;
 
 class NotificationService
@@ -24,22 +25,6 @@ class NotificationService
     private const SUPERVISOR_ROLE_ID = 3;
 
     private const ADMIN_ROLE_ID = 4;
-
-    /**
-     * Destination keys => web route for urlFor(). The keys are also the
-     * mobile app's screen keys returned by targetFor() (its FeatureKeys), so
-     * they are part of the API contract: never rename one.
-     */
-    private const DESTINATION_ROUTES = [
-        'approvals' => 'attendance-approvals.index',
-        'attendance-monitoring' => 'attendance-monitoring.index',
-        'attendance' => 'attendance.index',
-        'report-reviews' => 'report-reviews.index',
-        'my-reports' => 'reports.index',
-        'home' => 'dashboard',
-        'progress' => 'progress-monitoring.index',
-        'students' => 'internship-assignment.index',
-    ];
 
     public function notify(User $user, string $type, string $title, ?string $body = null, array $data = []): Notification
     {
@@ -337,8 +322,10 @@ class NotificationService
             return route('notifications.index');
         }
 
-        return route(
-            self::DESTINATION_ROUTES[$destination['screen']],
+        // Destinations are AppScreen keys: the web route here, the app
+        // screen in targetFor().
+        return AppScreen::url(
+            $destination['screen'],
             $destination['highlight'] ? ['highlight' => $destination['id']] : [],
         );
     }
