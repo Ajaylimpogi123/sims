@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AttendancePhotoController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\FeedbackController;
 use App\Http\Controllers\Api\V1\InternshipReportController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ReportAttachmentController;
@@ -81,6 +82,15 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::delete('reports/{report}', [InternshipReportController::class, 'destroy'])
                 ->where('report', '[1-9][0-9]{0,17}')
                 ->name('reports.destroy');
+        });
+
+        // My Feedback: Student only, own submitted/locked evaluations only
+        // (a draft or another student's id is a 404). Read-only.
+        Route::middleware('role:1')->group(function () {
+            Route::get('feedback', [FeedbackController::class, 'index'])->name('feedback.index');
+            Route::get('feedback/{evaluation}', [FeedbackController::class, 'show'])
+                ->where('evaluation', '[1-9][0-9]{0,17}')
+                ->name('feedback.show');
         });
 
         // Evidence photos: every role, scoped per record by
