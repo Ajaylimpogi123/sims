@@ -208,7 +208,7 @@ class AnalyticsApiTest extends TestCase
         $fixture = $this->dashboardFixture();
         $supervisor = $fixture['supervisorA'];
 
-        $this->getApi('/api/v1/analytics', $supervisor, ['student_id' => $fixture['studentB1']->id])->assertForbidden();
+        $this->getApi('/api/v1/analytics', $supervisor, ['student_id' => $fixture['studentB1']->id])->assertForbidden()->assertExactJson(['message' => 'Forbidden']);
         $this->getApi('/api/v1/analytics', $supervisor, ['student_id' => $fixture['unassigned']->id])->assertForbidden();
 
         $otherCompany = \App\Models\Company::factory()->create();
