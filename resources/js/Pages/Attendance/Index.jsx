@@ -269,6 +269,9 @@ export default function Index({
                                                 <TableCell>
                                                     <AttendanceEvidenceInOut
                                                         attendance={record}
+                                                        showMockedWarning={
+                                                            false
+                                                        }
                                                     />
                                                 </TableCell>
                                             </TableRow>

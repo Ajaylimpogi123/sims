@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ImageOff, MapPin } from "lucide-react";
+import { ImageOff, MapPin, TriangleAlert } from "lucide-react";
 
 function toNumber(value) {
     if (value === null || value === undefined || value === "") return null;
@@ -12,7 +12,11 @@ function toNumber(value) {
  * attendance record. Renders "—" when that leg has no captured evidence
  * (staff-entered rows and records from before capture was required).
  */
-export default function AttendanceEvidence({ attendance, leg }) {
+export default function AttendanceEvidence({
+    attendance,
+    leg,
+    showMockedWarning = true,
+}) {
     const [failedUrl, setFailedUrl] = useState(null);
 
     if (!attendance) {
@@ -24,8 +28,13 @@ export default function AttendanceEvidence({ attendance, leg }) {
     const longitude = toNumber(attendance[`${leg}_longitude`]);
     const accuracy = toNumber(attendance[`${leg}_accuracy`]);
     const hasLocation = latitude !== null && longitude !== null;
+    // Only an explicit `true` from the phone counts; false/null (including
+    // every web submission) shows nothing. Reviewer-facing only; the
+    // student's own page opts out via showMockedWarning={false}.
+    const isMocked =
+        showMockedWarning && attendance[`${leg}_mocked`] === true;
 
-    if (!hasPhoto && !hasLocation) {
+    if (!hasPhoto && !hasLocation && !isMocked) {
         return <span className="text-muted-foreground">—</span>;
     }
 
@@ -92,7 +101,21 @@ export default function AttendanceEvidence({ attendance, leg }) {
                     No location
                 </span>
             )}
+
+            {isMocked && <MockedLocationBadge />}
         </div>
+    );
+}
+
+function MockedLocationBadge() {
+    return (
+        <span
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
+            title="The phone reported a mocked location for this entry."
+        >
+            <TriangleAlert className="h-3 w-3" />
+            Possible fake GPS
+        </span>
     );
 }
 
@@ -100,20 +123,31 @@ export default function AttendanceEvidence({ attendance, leg }) {
  * Stacked In / Out evidence for a whole attendance record, for tables that
  * show one row per day.
  */
-export function AttendanceEvidenceInOut({ attendance }) {
+export function AttendanceEvidenceInOut({
+    attendance,
+    showMockedWarning = true,
+}) {
     return (
         <div className="space-y-1.5">
             <div className="flex items-center gap-2">
                 <span className="w-7 shrink-0 text-xs text-muted-foreground">
                     In
                 </span>
-                <AttendanceEvidence attendance={attendance} leg="time_in" />
+                <AttendanceEvidence
+                    attendance={attendance}
+                    leg="time_in"
+                    showMockedWarning={showMockedWarning}
+                />
             </div>
             <div className="flex items-center gap-2">
                 <span className="w-7 shrink-0 text-xs text-muted-foreground">
                     Out
                 </span>
-                <AttendanceEvidence attendance={attendance} leg="time_out" />
+                <AttendanceEvidence
+                    attendance={attendance}
+                    leg="time_out"
+                    showMockedWarning={showMockedWarning}
+                />
             </div>
         </div>
     );
