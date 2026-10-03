@@ -287,6 +287,87 @@ class NotificationApiTest extends TestCase
         $this->api('GET', '/api/v1/notifications', $token, ['per_page' => 50])->assertOk();
     }
 
+    /**
+     * Raw cursor payloads (JSON before base64url) that are not cursors this
+     * endpoint issues. Each used to reach Cursor::fromEncoded() and 500.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function forgedCursorPayloads(): array
+    {
+        return [
+            'int' => ['1'],
+            'string' => ['"abc"'],
+            'empty list' => ['[]'],
+            'empty object' => ['{}'],
+            'list of values' => ['["2026-10-03 07:57:44", 222, true]'],
+            'missing points flag' => ['{"created_at":"2026-10-03 07:57:44","id":222}'],
+            'extra key' => ['{"created_at":"2026-10-03 07:57:44","id":222,"foo":true}'],
+            'extra key with flag' => ['{"created_at":"2026-10-03 07:57:44","id":222,"_pointsToNextItems":true,"foo":1}'],
+            'previous-page cursor' => ['{"created_at":"2026-10-03 07:57:44","id":222,"_pointsToNextItems":false}'],
+            'null points flag' => ['{"created_at":"2026-10-03 07:57:44","id":222,"_pointsToNextItems":null}'],
+            'string points flag' => ['{"created_at":"2026-10-03 07:57:44","id":222,"_pointsToNextItems":"x"}'],
+            'impossible date' => ['{"created_at":"2026-02-31 25:61:00","id":222,"_pointsToNextItems":true}'],
+            'string id' => ['{"created_at":"2026-10-03 07:57:44","id":"222","_pointsToNextItems":true}'],
+            'zero id' => ['{"created_at":"2026-10-03 07:57:44","id":0,"_pointsToNextItems":true}'],
+            'nested created_at' => ['{"created_at":{"a":1},"id":222,"_pointsToNextItems":true}'],
+            'not json' => ['not json at all'],
+        ];
+    }
+
+    #[DataProvider('forgedCursorPayloads')]
+    public function test_forged_cursor_payloads_are_422_not_500(string $json): void
+    {
+        [, $token] = $this->userWithToken(2);
+
+        $encoded = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($json));
+
+        $this->api('GET', '/api/v1/notifications', $token, ['cursor' => $encoded])
+            ->assertUnprocessable()
+            ->assertExactJson([
+                'message' => 'The cursor is invalid.',
+                'errors' => ['cursor' => ['The cursor is invalid.']],
+            ]);
+    }
+
+    public function test_a_well_formed_next_cursor_is_accepted(): void
+    {
+        [$user, $token] = $this->userWithToken(2);
+        $note = $this->notificationFor($user, ['created_at' => now()->subDay()]);
+
+        $cursor = (new Cursor(['created_at' => now()->format('Y-m-d H:i:s'), 'id' => 999999], true))->encode();
+
+        $this->api('GET', '/api/v1/notifications', $token, ['cursor' => $cursor])
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $note->id)
+            ->assertJsonPath('meta.has_more', false)
+            ->assertJsonPath('meta.next_cursor', null);
+    }
+
+    public function test_empty_target_params_are_a_json_object(): void
+    {
+        [$user, $token] = $this->userWithToken(1);
+        $note = $this->notificationFor($user, ['type' => 'assignment_updated', 'data' => ['student_id' => 3]]);
+
+        $this->api('GET', '/api/v1/notifications', $token)
+            ->assertOk()
+            ->assertSee('"target":{"screen":"home","params":{}}', false);
+
+        $this->api('POST', "/api/v1/notifications/{$note->id}/read", $token)
+            ->assertOk()
+            ->assertSee('"target":{"screen":"home","params":{}}', false);
+    }
+
+    public function test_filled_target_params_are_a_json_object(): void
+    {
+        [$user, $token] = $this->userWithToken(1);
+        $this->notificationFor($user, ['type' => 'report_reviewed', 'data' => ['report_id' => 8]]);
+
+        $this->api('GET', '/api/v1/notifications', $token)
+            ->assertOk()
+            ->assertSee('"target":{"screen":"my-reports","params":{"report_id":8}}', false);
+    }
+
     public function test_a_cursor_cannot_reveal_another_users_notifications(): void
     {
         [$user, $token] = $this->userWithToken(1);

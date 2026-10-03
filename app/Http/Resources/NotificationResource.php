@@ -17,7 +17,7 @@ use Illuminate\Support\Carbon;
 class NotificationResource extends JsonResource
 {
     /**
-     * @return array{id: int, type: string, title: string, message: string|null, read_at: string|null, created_at: string|null, target: array{screen: string, params: array<string, int>}|null}
+     * @return array{id: int, type: string, title: string, message: string|null, read_at: string|null, created_at: string|null, target: array{screen: string, params: object}|null}
      */
     public function toArray(Request $request): array
     {
@@ -28,7 +28,23 @@ class NotificationResource extends JsonResource
             'message' => $this->body,
             'read_at' => self::iso($this->read_at),
             'created_at' => self::iso($this->created_at),
-            'target' => app(NotificationService::class)->targetFor($this->resource, $request->user()),
+            'target' => $this->target($request),
+        ];
+    }
+
+    /**
+     * `params` is always a JSON object, `{}` when empty (an empty PHP array
+     * would otherwise encode as `[]`).
+     *
+     * @return array{screen: string, params: object}|null
+     */
+    private function target(Request $request): ?array
+    {
+        $target = app(NotificationService::class)->targetFor($this->resource, $request->user());
+
+        return $target === null ? null : [
+            'screen' => $target['screen'],
+            'params' => (object) $target['params'],
         ];
     }
 

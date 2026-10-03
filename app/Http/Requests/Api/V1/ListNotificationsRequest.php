@@ -36,21 +36,49 @@ class ListNotificationsRequest extends FormRequest
      */
     private function validCursor(string $attribute, mixed $value, Closure $fail): void
     {
-        $cursor = is_string($value) ? Cursor::fromEncoded($value) : null;
-        $parameters = $cursor?->toArray() ?? [];
-
-        $createdAt = $parameters['created_at'] ?? null;
-        $id = $parameters['id'] ?? null;
-
-        $valid = $cursor !== null
-            && count($parameters) === 3 // created_at, id, _pointsToNextItems
-            && is_string($createdAt)
-            && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $createdAt) === 1
-            && is_int($id) && $id > 0;
-
-        if (! $valid) {
+        if (! is_string($value) || ! self::isIssuableCursor($value)) {
             $fail('The cursor is invalid.');
         }
+    }
+
+    /**
+     * Decoded here rather than with Cursor::fromEncoded(), which assumes a
+     * well-formed payload and errors (500) on anything else. This endpoint
+     * only ever issues next-page cursors over (created_at, id), so exactly
+     * those keys are accepted.
+     */
+    private static function isIssuableCursor(string $encoded): bool
+    {
+        $json = base64_decode(str_replace(['-', '_'], ['+', '/'], $encoded), true);
+        $parameters = $json === false ? null : json_decode($json, true);
+
+        if (! is_array($parameters) || array_is_list($parameters)) {
+            return false;
+        }
+
+        $keys = array_keys($parameters);
+        sort($keys);
+
+        if ($keys !== ['_pointsToNextItems', 'created_at', 'id']) {
+            return false;
+        }
+
+        $createdAt = $parameters['created_at'];
+        $id = $parameters['id'];
+
+        return $parameters['_pointsToNextItems'] === true
+            && is_int($id) && $id > 0
+            && is_string($createdAt)
+            && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $createdAt) === 1
+            && self::isRealDateTime($createdAt)
+            && Cursor::fromEncoded($encoded) !== null;
+    }
+
+    private static function isRealDateTime(string $value): bool
+    {
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value);
+
+        return $date !== false && $date->format('Y-m-d H:i:s') === $value;
     }
 
     public function onlyUnread(): bool
