@@ -9,7 +9,6 @@ use App\Http\Resources\AttendanceResource;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\AttendanceService;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -56,17 +55,9 @@ class AttendanceController extends Controller
         $student = $this->student($request);
         $validated = $this->validateCapture($request, AttendanceService::captureRules());
 
-        return $this->submit($request, $student, 'Time-in submitted for approval.', function () use ($request, $student, $validated) {
-            try {
-                $this->attendance->timeIn($student, $request->user(), $request->file('photo'), $validated);
-            } catch (UniqueConstraintViolationException) {
-                // Two time-ins for a new day racing each other (e.g. a retried
-                // request): the loser hits the (student_id, date) unique index.
-                throw new AttendanceRuleException(AttendanceService::timeInRefusal(
-                    $this->attendance->todayRecord($student)
-                ) ?? 'You already have a time-in request for today.');
-            }
-        });
+        return $this->submit($request, $student, 'Time-in submitted for approval.', fn () => $this->attendance->timeIn(
+            $student, $request->user(), $request->file('photo'), $validated
+        ));
     }
 
     public function timeOut(Request $request): JsonResponse

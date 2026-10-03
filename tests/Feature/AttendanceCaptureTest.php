@@ -106,6 +106,7 @@ class AttendanceCaptureTest extends TestCase
             $cases["{$label}: missing longitude"] = [$action, ['longitude' => null], 'longitude'];
             $cases["{$label}: longitude out of range"] = [$action, ['longitude' => '-180.5'], 'longitude'];
             $cases["{$label}: negative accuracy"] = [$action, ['accuracy' => '-1'], 'accuracy'];
+            $cases["{$label}: photo over 8000 px"] = [$action, ['photo' => 'huge'], 'photo'];
         }
 
         return $cases;
@@ -119,6 +120,10 @@ class AttendanceCaptureTest extends TestCase
 
         if (($override['photo'] ?? null) === 'pdf') {
             $override['photo'] = UploadedFile::fake()->create('capture.pdf', 10, 'application/pdf');
+        }
+
+        if (($override['photo'] ?? null) === 'huge') {
+            $override['photo'] = UploadedFile::fake()->image('capture.png', 8001, 2);
         }
 
         $payload = array_filter(

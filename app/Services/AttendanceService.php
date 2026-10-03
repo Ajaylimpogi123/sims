@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\Student;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -40,7 +41,9 @@ class AttendanceService
     public static function captureRules(): array
     {
         return [
-            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            // The dimension cap stops a tiny, highly compressed file that
+            // decodes to hundreds of megapixels in reviewers' browsers / app.
+            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:max_width=8000,max_height=8000'],
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
             'accuracy' => ['nullable', 'numeric', 'min:0'],
@@ -93,6 +96,13 @@ class AttendanceService
             return 'You already have a time-in request for today.';
         }
 
+        // A rejected time-in can't be re-submitted once the day's time-out
+        // (e.g. an emergency time-out) is in: the new time-in would land
+        // after it and credit negative hours.
+        if (in_array($today?->time_out_status, ['pending', 'approved'], true)) {
+            return 'Your time-out for today has already been submitted, so your time-in can no longer be re-submitted.';
+        }
+
         return null;
     }
 
@@ -133,24 +143,12 @@ class AttendanceService
      */
     public function timeIn(Student $student, User $actor, UploadedFile $photo, array $capture): Attendance
     {
-        $record = $student->attendances()->firstOrNew([
-            'date' => today()->toDateString(),
-        ]);
-
-        if ($reason = self::timeInRefusal($record)) {
-            throw new AttendanceRuleException($reason);
-        }
-
-        $record->time_in = now()->format('H:i:s');
-        $record->time_in_status = 'pending';
-        $record->time_in_rejection_reason = null;
-        $record->recorded_by = $actor->id;
-
-        $this->saveWithEvidence($record, 'time_in', $student, $photo, $capture);
-
-        $this->notifications->attendanceSubmitted($record, 'time_in');
-
-        return $record;
+        return $this->submitLeg($student, 'time_in', $photo, $capture, self::timeInRefusal(...), function (Attendance $record) use ($actor) {
+            $record->time_in = now()->format('H:i:s');
+            $record->time_in_status = 'pending';
+            $record->time_in_rejection_reason = null;
+            $record->recorded_by = $actor->id;
+        });
     }
 
     /**
@@ -160,24 +158,14 @@ class AttendanceService
      */
     public function timeOut(Student $student, User $actor, UploadedFile $photo, array $capture): Attendance
     {
-        $record = $this->todayRecord($student);
-
-        if ($reason = self::timeOutRefusal($record)) {
-            throw new AttendanceRuleException($reason);
-        }
-
-        $record->time_out = now()->format('H:i:s');
-        $record->time_out_status = 'pending';
-        $record->time_out_rejection_reason = null;
-        $record->is_emergency = false;
-        $record->note = null;
-        $record->recorded_by = $actor->id;
-
-        $this->saveWithEvidence($record, 'time_out', $student, $photo, $capture);
-
-        $this->notifications->attendanceSubmitted($record, 'time_out');
-
-        return $record;
+        return $this->submitLeg($student, 'time_out', $photo, $capture, self::timeOutRefusal(...), function (Attendance $record) use ($actor) {
+            $record->time_out = now()->format('H:i:s');
+            $record->time_out_status = 'pending';
+            $record->time_out_rejection_reason = null;
+            $record->is_emergency = false;
+            $record->note = null;
+            $record->recorded_by = $actor->id;
+        });
     }
 
     /**
@@ -187,24 +175,14 @@ class AttendanceService
      */
     public function emergencyTimeOut(Student $student, User $actor, UploadedFile $photo, array $capture): Attendance
     {
-        $record = $this->todayRecord($student);
-
-        if ($reason = self::emergencyTimeOutRefusal($record)) {
-            throw new AttendanceRuleException($reason);
-        }
-
-        $record->time_out = now()->format('H:i:s');
-        $record->time_out_status = 'pending';
-        $record->time_out_rejection_reason = null;
-        $record->is_emergency = true;
-        $record->note = $capture['note'];
-        $record->recorded_by = $actor->id;
-
-        $this->saveWithEvidence($record, 'time_out', $student, $photo, $capture);
-
-        $this->notifications->attendanceSubmitted($record, 'time_out');
-
-        return $record;
+        return $this->submitLeg($student, 'time_out', $photo, $capture, self::emergencyTimeOutRefusal(...), function (Attendance $record) use ($actor, $capture) {
+            $record->time_out = now()->format('H:i:s');
+            $record->time_out_status = 'pending';
+            $record->time_out_rejection_reason = null;
+            $record->is_emergency = true;
+            $record->note = $capture['note'];
+            $record->recorded_by = $actor->id;
+        });
     }
 
     /**
@@ -353,14 +331,15 @@ class AttendanceService
     /**
      * Hours between time-in and time-out on the given date. Carbon 3's
      * diffIn* methods are signed ($a->diffInMinutes($b) = $b - $a), so the
-     * time-in is the receiver.
+     * time-in is the receiver. Never negative: a time-out earlier than the
+     * time-in (rows saved before timeInRefusal() covered it) credits 0.
      */
     public static function renderedHours(string $date, string $timeIn, string $timeOut): float
     {
         $in = Carbon::parse($date.' '.$timeIn);
         $out = Carbon::parse($date.' '.$timeOut);
 
-        return round($in->diffInMinutes($out) / 60, 2);
+        return round(max($in->diffInMinutes($out), 0) / 60, 2);
     }
 
     /**
@@ -395,33 +374,75 @@ class AttendanceService
     }
 
     /**
-     * Store the photo for this leg, write its coordinates, and save the
-     * record. A photo previously stored for the same leg (re-submission
-     * after a rejection) is deleted only once the new one is persisted.
+     * Submit one self-service leg: check the state rule, store the photo,
+     * then re-check and save under a row lock, so concurrent submissions
+     * (double taps, retries, two devices) can't both succeed. The losers
+     * get the same AttendanceRuleException as a sequential repeat, and
+     * their photo is deleted. A photo previously stored for the same leg
+     * (re-submission after a rejection) is deleted only after commit, and
+     * reviewers are notified once, after commit.
+     *
+     * @param  'time_in'|'time_out'  $leg
+     * @param  callable(?Attendance): ?string  $refusal
+     * @param  callable(Attendance): void  $apply  sets the leg's time / status fields
+     *
+     * @throws AttendanceRuleException
      */
-    private function saveWithEvidence(Attendance $record, string $leg, Student $student, UploadedFile $photo, array $capture): void
+    private function submitLeg(Student $student, string $leg, UploadedFile $photo, array $capture, callable $refusal, callable $apply): Attendance
     {
-        $oldPath = $record->{"{$leg}_photo_path"};
+        // Unlocked first check: an obvious refusal never writes a file.
+        if ($reason = $refusal($this->todayRecord($student))) {
+            throw new AttendanceRuleException($reason);
+        }
+
+        $disk = Storage::disk(self::PHOTO_DISK);
         $newPath = $photo->store("attendance-photos/{$student->id}", self::PHOTO_DISK);
 
-        $record->{"{$leg}_photo_path"} = $newPath;
-        $record->{"{$leg}_latitude"} = $capture['latitude'];
-        $record->{"{$leg}_longitude"} = $capture['longitude'];
-        $record->{"{$leg}_accuracy"} = self::clampAccuracy($capture['accuracy'] ?? null);
-        // Only the mobile app can detect a mocked fix; the website never
-        // passes it, so a web (re-)submission stores null = unknown.
-        $record->{"{$leg}_mocked"} = $capture['mocked'] ?? null;
-
         try {
-            $record->save();
+            [$record, $oldPath] = DB::transaction(function () use ($student, $leg, $capture, $refusal, $apply, $newPath) {
+                $date = today()->toDateString();
+                $record = $student->attendances()->where('date', $date)->lockForUpdate()->first();
+
+                if ($reason = $refusal($record)) {
+                    throw new AttendanceRuleException($reason);
+                }
+
+                $record ??= $student->attendances()->make(['date' => $date]);
+                $oldPath = $record->{"{$leg}_photo_path"};
+
+                $apply($record);
+
+                $record->{"{$leg}_photo_path"} = $newPath;
+                $record->{"{$leg}_latitude"} = $capture['latitude'];
+                $record->{"{$leg}_longitude"} = $capture['longitude'];
+                $record->{"{$leg}_accuracy"} = self::clampAccuracy($capture['accuracy'] ?? null);
+                // Only the mobile app can detect a mocked fix; the website
+                // never passes it, so a web (re-)submission stores null = unknown.
+                $record->{"{$leg}_mocked"} = $capture['mocked'] ?? null;
+                $record->save();
+
+                return [$record, $oldPath];
+            }, 3);
+        } catch (UniqueConstraintViolationException) {
+            // Two first time-ins of the day: both found no row to lock, and
+            // the other request inserted it first.
+            $disk->delete($newPath);
+
+            throw new AttendanceRuleException(
+                $refusal($this->todayRecord($student)) ?? 'You already have a time-in request for today.'
+            );
         } catch (Throwable $e) {
-            Storage::disk(self::PHOTO_DISK)->delete($newPath);
+            $disk->delete($newPath);
 
             throw $e;
         }
 
         if ($oldPath && $oldPath !== $newPath) {
-            Storage::disk(self::PHOTO_DISK)->delete($oldPath);
+            $disk->delete($oldPath);
         }
+
+        $this->notifications->attendanceSubmitted($record, $leg);
+
+        return $record;
     }
 }

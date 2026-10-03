@@ -266,6 +266,16 @@ class AttendanceApiTest extends TestCase
                 'time_out' => 'Your time-in must be approved before you can time out.',
                 'emergency' => 'You already have a time-out request for today.',
             ]],
+            // QA Module 6 BUG 2: re-submitting the time-in after the time-out
+            // would put it after the time-out (negative hours).
+            'time-in rejected after an emergency time-out' => [[
+                'time_in_status' => 'rejected', 'time_out' => '10:00:00', 'time_out_status' => 'approved',
+                'is_emergency' => true, 'note' => 'Sick',
+            ], [
+                'time_in' => 'Your time-out for today has already been submitted, so your time-in can no longer be re-submitted.',
+                'time_out' => 'Your time-in must be approved before you can time out.',
+                'emergency' => 'Your time-in was rejected. Emergency time-out requires a non-rejected time-in.',
+            ]],
             'staff row without a time-in' => [['time_in' => null, 'time_in_status' => null], [
                 'time_in' => null,
                 'time_out' => 'Your time-in must be approved before you can time out.',
@@ -484,6 +494,8 @@ class AttendanceApiTest extends TestCase
             $cases["{$action}: negative accuracy"] = [$action, ['accuracy' => '-1'], 'accuracy'];
             $cases["{$action}: mocked not a boolean"] = [$action, ['mocked' => 'yes'], 'mocked'];
             $cases["{$action}: mocked array"] = [$action, ['mocked' => ['1']], 'mocked'];
+            $cases["{$action}: photo wider than 8000 px"] = [$action, ['photo' => UploadedFile::fake()->image('wide.png', 8001, 2)], 'photo'];
+            $cases["{$action}: photo taller than 8000 px"] = [$action, ['photo' => UploadedFile::fake()->image('tall.jpg', 2, 8001)], 'photo'];
         }
 
         $cases['emergency: missing note'] = ['emergency', ['note' => null], 'note'];
@@ -581,9 +593,41 @@ class AttendanceApiTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('message', 'You already have a time-in request for today.')
             ->assertJsonPath('code', 'attendance_rule')
-            ->assertJsonPath('today.record.time_in', '2026-10-03T08:14:00+08:00');
+            ->assertJsonPath('today.date', '2026-10-03');
 
+        // (The simulated winner's row is rolled back with this request's
+        // savepoint in the test; in production it is committed.)
         $this->assertSame([], Storage::disk('local')->allFiles());
+        $this->assertSame(0, Notification::count());
+    }
+
+    public function test_a_concurrent_submission_that_lands_first_wins(): void
+    {
+        [, $token, $student] = $this->student($this->supervisor());
+        $record = $this->today($student, ['time_in_status' => 'approved']);
+
+        // Another emergency time-out commits between this request's first
+        // (unlocked) read and its locked re-read.
+        $landed = false;
+        DB::listen(function ($query) use (&$landed, $record) {
+            if ($landed || ! str_contains($query->sql, 'from `attendances`')) {
+                return;
+            }
+
+            $landed = true;
+            DB::table('attendances')->where('id', $record->id)->update([
+                'time_out' => '08:14:00', 'time_out_status' => 'pending', 'is_emergency' => true, 'note' => 'First',
+            ]);
+        });
+
+        $this->api('POST', self::URLS['emergency'], $token, $this->payload(['note' => 'Second']))
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'You already have a time-out request for today.')
+            ->assertJsonPath('today.record.note', 'First');
+
+        $this->assertTrue($landed);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+        $this->assertSame(0, Notification::count());
     }
 
     /**
