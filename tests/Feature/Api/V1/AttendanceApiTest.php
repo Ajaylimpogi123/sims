@@ -385,7 +385,7 @@ class AttendanceApiTest extends TestCase
         $supervisor = $this->supervisor();
         $admin = User::factory()->create(['role_id' => 4]);
         $coordinator = User::factory()->create(['role_id' => 2]);
-        [$user, $token, $student] = $this->student($supervisor);
+        [$user, $token] = $this->student($supervisor);
 
         $this->api('POST', self::URLS['time_in'], $token, $this->payload())->assertOk();
         Attendance::sole()->update(['time_in_status' => 'approved']);
