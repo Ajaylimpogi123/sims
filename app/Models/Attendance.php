@@ -17,11 +17,13 @@ class Attendance extends Model
         'time_in_latitude',
         'time_in_longitude',
         'time_in_accuracy',
+        'time_in_mocked',
         'time_in_photo_path',
         'time_out',
         'time_out_latitude',
         'time_out_longitude',
         'time_out_accuracy',
+        'time_out_mocked',
         'time_out_photo_path',
         'rendered_hours',
         'recorded_by',
@@ -37,6 +39,8 @@ class Attendance extends Model
     {
         return [
             'date' => 'date:Y-m-d',
+            'time_in_mocked' => 'boolean',
+            'time_out_mocked' => 'boolean',
         ];
     }
 

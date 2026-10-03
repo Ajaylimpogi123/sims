@@ -62,7 +62,72 @@ class AttendanceService
     }
 
     /**
-     * @param  array{latitude: mixed, longitude: mixed, accuracy?: mixed}  $capture  validated captureRules() data
+     * The student's attendance row for today (app timezone), if any.
+     */
+    public function todayRecord(Student $student): ?Attendance
+    {
+        return $student->attendances()
+            ->where('date', today()->toDateString())
+            ->first();
+    }
+
+    /**
+     * Why each self-service action is currently refused for today's row
+     * (null = allowed). The same checks the actions below throw on, so the
+     * mobile app's "what can I do now" never drifts from what is enforced.
+     *
+     * @return array{time_in: string|null, time_out: string|null, emergency_time_out: string|null}
+     */
+    public static function refusals(?Attendance $today): array
+    {
+        return [
+            'time_in' => self::timeInRefusal($today),
+            'time_out' => self::timeOutRefusal($today),
+            'emergency_time_out' => self::emergencyTimeOutRefusal($today),
+        ];
+    }
+
+    public static function timeInRefusal(?Attendance $today): ?string
+    {
+        if (in_array($today?->time_in_status, ['pending', 'approved'], true)) {
+            return 'You already have a time-in request for today.';
+        }
+
+        return null;
+    }
+
+    public static function timeOutRefusal(?Attendance $today): ?string
+    {
+        if (! $today || $today->time_in_status !== 'approved') {
+            return 'Your time-in must be approved before you can time out.';
+        }
+
+        if (in_array($today->time_out_status, ['pending', 'approved'], true)) {
+            return 'You already have a time-out request for today.';
+        }
+
+        return null;
+    }
+
+    public static function emergencyTimeOutRefusal(?Attendance $today): ?string
+    {
+        if (! $today?->exists || empty($today->time_in)) {
+            return 'You must time in before using emergency time-out.';
+        }
+
+        if ($today->time_in_status === 'rejected') {
+            return 'Your time-in was rejected. Emergency time-out requires a non-rejected time-in.';
+        }
+
+        if (in_array($today->time_out_status, ['pending', 'approved'], true)) {
+            return 'You already have a time-out request for today.';
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array{latitude: mixed, longitude: mixed, accuracy?: mixed, mocked?: bool|null}  $capture  validated captureRules() data
      *
      * @throws AttendanceRuleException
      */
@@ -72,8 +137,8 @@ class AttendanceService
             'date' => today()->toDateString(),
         ]);
 
-        if (in_array($record->time_in_status, ['pending', 'approved'], true)) {
-            throw new AttendanceRuleException('You already have a time-in request for today.');
+        if ($reason = self::timeInRefusal($record)) {
+            throw new AttendanceRuleException($reason);
         }
 
         $record->time_in = now()->format('H:i:s');
@@ -89,22 +154,16 @@ class AttendanceService
     }
 
     /**
-     * @param  array{latitude: mixed, longitude: mixed, accuracy?: mixed}  $capture  validated captureRules() data
+     * @param  array{latitude: mixed, longitude: mixed, accuracy?: mixed, mocked?: bool|null}  $capture  validated captureRules() data
      *
      * @throws AttendanceRuleException
      */
     public function timeOut(Student $student, User $actor, UploadedFile $photo, array $capture): Attendance
     {
-        $record = $student->attendances()
-            ->where('date', today()->toDateString())
-            ->first();
+        $record = $this->todayRecord($student);
 
-        if (! $record || $record->time_in_status !== 'approved') {
-            throw new AttendanceRuleException('Your time-in must be approved before you can time out.');
-        }
-
-        if (in_array($record->time_out_status, ['pending', 'approved'], true)) {
-            throw new AttendanceRuleException('You already have a time-out request for today.');
+        if ($reason = self::timeOutRefusal($record)) {
+            throw new AttendanceRuleException($reason);
         }
 
         $record->time_out = now()->format('H:i:s');
@@ -122,26 +181,16 @@ class AttendanceService
     }
 
     /**
-     * @param  array{latitude: mixed, longitude: mixed, accuracy?: mixed, note: string}  $capture  validated emergencyTimeOutRules() data
+     * @param  array{latitude: mixed, longitude: mixed, accuracy?: mixed, mocked?: bool|null, note: string}  $capture  validated emergencyTimeOutRules() data
      *
      * @throws AttendanceRuleException
      */
     public function emergencyTimeOut(Student $student, User $actor, UploadedFile $photo, array $capture): Attendance
     {
-        $record = $student->attendances()->firstOrNew([
-            'date' => today()->toDateString(),
-        ]);
+        $record = $this->todayRecord($student);
 
-        if (! $record->exists || empty($record->time_in)) {
-            throw new AttendanceRuleException('You must time in before using emergency time-out.');
-        }
-
-        if ($record->time_in_status === 'rejected') {
-            throw new AttendanceRuleException('Your time-in was rejected. Emergency time-out requires a non-rejected time-in.');
-        }
-
-        if (in_array($record->time_out_status, ['pending', 'approved'], true)) {
-            throw new AttendanceRuleException('You already have a time-out request for today.');
+        if ($reason = self::emergencyTimeOutRefusal($record)) {
+            throw new AttendanceRuleException($reason);
         }
 
         $record->time_out = now()->format('H:i:s');
@@ -273,7 +322,7 @@ class AttendanceService
 
             $orphanedPhotos[] = $attendance->{"{$leg}_photo_path"};
 
-            foreach (['photo_path', 'latitude', 'longitude', 'accuracy'] as $field) {
+            foreach (['photo_path', 'latitude', 'longitude', 'accuracy', 'mocked'] as $field) {
                 $attributes["{$leg}_{$field}"] = null;
             }
         }
@@ -359,6 +408,9 @@ class AttendanceService
         $record->{"{$leg}_latitude"} = $capture['latitude'];
         $record->{"{$leg}_longitude"} = $capture['longitude'];
         $record->{"{$leg}_accuracy"} = self::clampAccuracy($capture['accuracy'] ?? null);
+        // Only the mobile app can detect a mocked fix; the website never
+        // passes it, so a web (re-)submission stores null = unknown.
+        $record->{"{$leg}_mocked"} = $capture['mocked'] ?? null;
 
         try {
             $record->save();
