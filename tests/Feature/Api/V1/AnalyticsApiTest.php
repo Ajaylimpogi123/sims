@@ -220,6 +220,30 @@ class AnalyticsApiTest extends TestCase
         $this->assertSame(1, collect($response->json('internship.status_breakdown'))->sum('value'));
     }
 
+    public function test_supervisor_cannot_tell_missing_ids_from_other_supervisors_ids(): void
+    {
+        $fixture = $this->dashboardFixture();
+        $supervisor = $fixture['supervisorA'];
+
+        foreach ([['student_id' => 999999], ['company_id' => 999999]] as $query) {
+            $this->getApi('/api/v1/analytics', $supervisor, $query)
+                ->assertForbidden()
+                ->assertExactJson(['message' => 'Forbidden']);
+        }
+
+        // supervisor_id is ignored for a Supervisor, existing or not.
+        foreach ([999999, $fixture['studentB1']->user_id] as $supervisorId) {
+            $this->getApi('/api/v1/analytics', $supervisor, ['supervisor_id' => $supervisorId])
+                ->assertOk()
+                ->assertJsonPath('filters.supervisor_id', $supervisor->id);
+        }
+
+        // Shape errors are still 422.
+        $this->getApi('/api/v1/analytics', $supervisor, ['student_id' => 'x'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['student_id']);
+    }
+
     #[DataProvider('staffRoles')]
     public function test_staff_are_system_wide_and_can_filter_by_supervisor(int $roleId): void
     {

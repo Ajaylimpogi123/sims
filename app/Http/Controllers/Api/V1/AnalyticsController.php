@@ -53,6 +53,10 @@ class AnalyticsController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        if ((int) $user->role_id === DashboardAnalyticsService::SUPERVISOR_ROLE_ID) {
+            $this->guardSupervisorScope($request, $user);
+        }
+
         $filters = $this->analytics->resolveFilters($request, $user);
         $charts = $this->analytics->charts($user, $filters);
 
@@ -88,6 +92,28 @@ class AnalyticsController extends Controller
                 ], $charts['reports']['submissionTrend']),
             ],
         ]);
+    }
+
+    /**
+     * Scope-check a Supervisor's filters *before* resolveFilters() runs its
+     * `exists` rules, so a missing id and another supervisor's id look the
+     * same (403) and can't be used to probe which ids exist. supervisor_id
+     * is dropped: resolveFilters() forces it to the Supervisor anyway.
+     */
+    private function guardSupervisorScope(AnalyticsFiltersRequest $request, User $user): void
+    {
+        $request->query->remove('supervisor_id');
+
+        $studentId = $request->validated('student_id');
+        $companyId = $request->validated('company_id');
+
+        if ($studentId !== null) {
+            abort_unless($user->supervisedStudents()->whereKey((int) $studentId)->exists(), 403);
+        }
+
+        if ($companyId !== null) {
+            abort_unless($user->supervisedStudents()->where('company_id', (int) $companyId)->exists(), 403);
+        }
     }
 
     /**

@@ -8,9 +8,11 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Carbon;
 
 /**
- * One notification as the mobile app sees it. The viewer is always the
- * signed-in user (the API only ever returns a user's own notifications),
- * and `target` is the app-side counterpart of the web's click-through URL.
+ * One notification as the mobile app sees it. `target` (the app-side
+ * counterpart of the web's click-through URL) is always resolved for the
+ * signed-in user, who is usually the recipient — except in a Supervisor's
+ * dashboard recent_activity, which also lists their students'
+ * notifications (marked `is_own: false` there).
  *
  * @mixin \App\Models\Notification
  */
