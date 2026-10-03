@@ -6,7 +6,9 @@ use App\Models\Evaluation;
 use App\Models\EvaluationCriteria;
 use App\Models\Student;
 use App\Models\User;
+use App\Policies\EvaluationPolicy;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -60,6 +62,16 @@ class EvaluationService
             ->orderBy('category')
             ->orderBy('sort_order')
             ->get();
+    }
+
+    /**
+     * The evaluations a student sees on My Feedback (website and mobile
+     * API): their own, submitted or locked only, never drafts.
+     */
+    public function studentFeedback(Student $student): HasMany
+    {
+        return $student->evaluations()
+            ->whereIn('status', EvaluationPolicy::STUDENT_VISIBLE_STATUSES);
     }
 
     /**

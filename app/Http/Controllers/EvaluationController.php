@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Evaluation;
 use App\Models\Student;
-use App\Policies\EvaluationPolicy;
 use App\Services\EvaluationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -121,9 +120,8 @@ class EvaluationController extends Controller
         $student = Auth::user()->student;
 
         $evaluations = $student
-            ? $student->evaluations()
+            ? $this->evaluations->studentFeedback($student)
                 ->with(['company:id,company_name', 'supervisor:id,name', 'responses.criteria'])
-                ->whereIn('status', EvaluationPolicy::STUDENT_VISIBLE_STATUSES)
                 ->orderByDesc('evaluation_period_start')
                 ->get()
             : collect();
