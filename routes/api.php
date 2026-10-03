@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Middleware\ThrottleFailedAuth;
 use App\Http\Middleware\ThrottleLogin;
@@ -38,5 +40,16 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])
             ->whereNumber('notification')
             ->name('notifications.read');
+
+        // Dashboard: every role, own role's summary (Supervisor scoped to
+        // their own students inside DashboardAnalyticsService).
+        Route::get('dashboard', [DashboardController::class, 'show'])->name('dashboard');
+
+        // Analytics: the website's Analytics tab is Coordinator, Supervisor
+        // and Admin only.
+        Route::middleware('role:2,3,4')->group(function () {
+            Route::get('analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
+            Route::get('analytics/filter-options', [AnalyticsController::class, 'filterOptions'])->name('analytics.filter-options');
+        });
     });
 });
