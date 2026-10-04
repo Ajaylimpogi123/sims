@@ -239,7 +239,7 @@ class AttendanceService
         DB::transaction(function () use ($attendance, $leg, $decision, $reason) {
             $current = Attendance::query()->lockForUpdate()->findOrFail($attendance->id);
 
-            if ($current->{"{$leg}_status"} !== 'pending' || empty($current->{$leg})) {
+            if (! self::isReviewable($current, $leg)) {
                 $label = $leg === 'time_in' ? 'time-in' : 'time-out';
 
                 throw new AttendanceRuleException("This {$label} is not pending review.");
@@ -256,6 +256,17 @@ class AttendanceService
         $this->notifications->attendanceReviewed($attendance, $leg, $decision, $reason);
 
         return $attendance;
+    }
+
+    /**
+     * A leg can be approved / rejected only while it is pending and has a
+     * time (review() re-checks this under the row lock).
+     *
+     * @param  'time_in'|'time_out'  $leg
+     */
+    public static function isReviewable(Attendance $attendance, string $leg): bool
+    {
+        return $attendance->{"{$leg}_status"} === 'pending' && ! empty($attendance->{$leg});
     }
 
     private static function hoursIfFullyApproved(Attendance $attendance): ?float

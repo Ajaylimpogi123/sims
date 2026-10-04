@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\VisibleThroughStudent;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -42,6 +43,17 @@ class Attendance extends Model
             'time_in_mocked' => 'boolean',
             'time_out_mocked' => 'boolean',
         ];
+    }
+
+    /**
+     * Rows with at least one leg awaiting review: the Pending Approvals list
+     * (website and API). Combine with visibleTo() for the reviewer's scope.
+     */
+    public function scopeAwaitingReview(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->where($this->qualifyColumn('time_in_status'), 'pending')
+            ->orWhere($this->qualifyColumn('time_out_status'), 'pending'));
     }
 
     public function student()

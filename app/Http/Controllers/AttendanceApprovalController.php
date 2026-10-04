@@ -19,9 +19,7 @@ class AttendanceApprovalController extends Controller
     {
         $attendances = Attendance::query()
             ->with('student.user:id,name')
-            ->where(fn ($query) => $query
-                ->where('time_in_status', 'pending')
-                ->orWhere('time_out_status', 'pending'))
+            ->awaitingReview()
             ->visibleTo(Auth::user())
             ->orderBy('date')
             ->get();
