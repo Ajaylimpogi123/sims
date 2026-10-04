@@ -80,6 +80,23 @@ class MalformedInputTest extends TestCase
             ->assertJsonValidationErrors(['q']);
     }
 
+    public function test_an_undecodable_json_body_is_422_not_an_empty_request(): void
+    {
+        foreach (["{\"email\":\"juan@example.com\",\"device_name\":\"P\xC3\x28\"}", '{"email":'] as $body) {
+            $this->call('POST', '/api/v1/login', [], [], [], $this->transformHeadersToServerVars([
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+            ]), $body)
+                ->assertStatus(422)
+                ->assertExactJson([
+                    'message' => 'The request body is not valid JSON.',
+                    'errors' => ['input' => ['The request body is not valid JSON.']],
+                ]);
+        }
+
+        $this->assertSame(0, PersonalAccessToken::count());
+    }
+
     public function test_valid_non_ascii_text_still_works(): void
     {
         $this->formLogin(['device_name' => 'Galaxy ñ 日本'])->assertOk();

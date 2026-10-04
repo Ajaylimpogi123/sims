@@ -507,6 +507,59 @@ class ApprovalApiTest extends TestCase
         $this->assertSame(0, Notification::count());
     }
 
+    public static function undecodableBodies(): array
+    {
+        return [
+            'invalid UTF-8 inside JSON' => ["{\"reason\":\"bad\xC3\x28\"}"],
+            'truncated JSON' => ['{"reason":'],
+            'not JSON at all' => ['reason=hello'],
+        ];
+    }
+
+    /**
+     * QA M9: a JSON body that doesn't decode must not be read as "no reason"
+     * and still store the (irreversible) rejection.
+     */
+    #[DataProvider('undecodableBodies')]
+    public function test_a_reject_with_an_undecodable_json_body_is_422_and_changes_nothing(string $body): void
+    {
+        $supervisor = $this->user(3);
+        $record = $this->record($this->student($supervisor));
+        $token = $supervisor->createToken('test')->plainTextToken;
+
+        foreach (['time-in', 'time-out'] as $leg) {
+            $this->app['auth']->forgetGuards();
+            $this->call('POST', $this->decisionUrl($record, $leg, 'reject'), [], [], [], $this->transformHeadersToServerVars([
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+                'Authorization' => "Bearer {$token}",
+            ]), $body)
+                ->assertStatus(422)
+                ->assertExactJson([
+                    'message' => 'The request body is not valid JSON.',
+                    'errors' => ['input' => ['The request body is not valid JSON.']],
+                ]);
+        }
+
+        $this->assertSame('pending', $record->fresh()->time_in_status);
+        $this->assertSame('pending', $record->fresh()->time_out_status);
+        $this->assertSame(0, Notification::count());
+    }
+
+    public function test_a_reject_with_an_empty_json_body_has_no_reason(): void
+    {
+        $supervisor = $this->user(3);
+        $record = $this->record($this->student($supervisor));
+
+        $this->call('POST', $this->decisionUrl($record, 'time-in', 'reject'), [], [], [], $this->transformHeadersToServerVars([
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json',
+            'Authorization' => 'Bearer '.$supervisor->createToken('test')->plainTextToken,
+        ]), '')
+            ->assertOk()
+            ->assertJsonPath('attendance.time_in_rejection_reason', null);
+    }
+
     public function test_a_500_character_reason_is_accepted(): void
     {
         $supervisor = $this->user(3);

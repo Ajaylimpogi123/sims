@@ -24,6 +24,12 @@ class RejectMalformedUtf8
         $this->inspect(array_merge($request->query->all(), $request->request->all()), '', $errors);
 
         if ($request->isJson()) {
+            // An undecodable JSON body (bad UTF-8, truncated, not JSON) would
+            // otherwise read as an empty body and pass "nullable" rules.
+            if (! self::isDecodableJson($request->getContent())) {
+                throw ValidationException::withMessages(['input' => ['The request body is not valid JSON.']]);
+            }
+
             $this->inspect($request->json()->all(), '', $errors);
         }
 
@@ -32,6 +38,21 @@ class RejectMalformedUtf8
         }
 
         return $next($request);
+    }
+
+    /**
+     * A blank body is fine (no fields); anything else must decode the way
+     * Request::json() decodes it.
+     */
+    private static function isDecodableJson(string $content): bool
+    {
+        if (trim($content) === '') {
+            return true;
+        }
+
+        json_decode($content, true);
+
+        return json_last_error() === JSON_ERROR_NONE;
     }
 
     /**
