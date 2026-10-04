@@ -17,13 +17,11 @@ trait ValidatesAttendanceMonitoring
     public const MAX_REQUIRED_HOURS = 4294967295;
 
     /**
-     * Sanity window for entry dates: keeps typos like year 0999 / 9999 out
-     * of the rendered-hours totals (and away from pre-1900 LMT offsets).
-     * Not a "no future entries" rule; that would be a product decision.
+     * Earliest entry date. Together with "not after today" (app timezone)
+     * this keeps typos like year 0999 / 9999 and future days out of the
+     * rendered-hours totals.
      */
     public const MIN_ENTRY_DATE = '2000-01-01';
-
-    public const MAX_ENTRY_DATE = '2099-12-31';
 
     /**
      * A manual entry: the date (unique per student) and optional H:i times.
@@ -43,13 +41,16 @@ trait ValidatesAttendanceMonitoring
                 'required',
                 'date_format:Y-m-d',
                 'after_or_equal:'.self::MIN_ENTRY_DATE,
-                'before_or_equal:'.self::MAX_ENTRY_DATE,
+                'before_or_equal:'.today()->toDateString(),
                 Rule::unique('attendances', 'date')
                     ->where('student_id', $student->id)
                     ->ignore($ignoreId),
             ],
             'time_in' => ['nullable', 'date_format:H:i'],
             'time_out' => ['nullable', 'date_format:H:i', 'after:time_in'],
+        ], [
+            'date.after_or_equal' => 'The date must be on or after January 1, 2000.',
+            'date.before_or_equal' => 'The date cannot be in the future.',
         ]);
     }
 

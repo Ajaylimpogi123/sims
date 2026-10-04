@@ -531,7 +531,7 @@ class MonitoringApiTest extends TestCase
             'year 0000' => [['date' => '0000-01-01'], 'date'],
             'before 2000' => [['date' => '1999-12-31'], 'date'],
             'year 9999' => [['date' => '9999-12-31'], 'date'],
-            'after 2099' => [['date' => '2100-01-01'], 'date'],
+            'tomorrow' => [['date' => '2026-10-04', 'time_in' => '08:00', 'time_out' => '09:00'], 'date'],
             'date array' => [['date' => ['2026-09-01']], 'date'],
             'date number' => [['date' => 20260901], 'date'],
             'time_in seconds' => [['date' => '2026-09-01', 'time_in' => '08:00:00'], 'time_in'],
@@ -580,16 +580,43 @@ class MonitoringApiTest extends TestCase
         $this->assertUntouched($student, $record);
     }
 
-    public function test_the_date_window_edges_are_accepted(): void
+    public function test_entry_dates_run_from_2000_to_today_on_api_and_website(): void
     {
         $supervisor = $this->user(3);
         $student = $this->student($supervisor);
+        $webStudent = $this->student($supervisor);
 
-        foreach (['2000-01-01', '2099-12-31'] as $date) {
+        // Today in Asia/Manila (test clock: 2026-10-03 18:00 +08:00) and the
+        // first allowed day are accepted on both.
+        foreach (['2000-01-01', '2026-10-03'] as $date) {
             $this->api('POST', "/api/v1/monitoring/students/{$student->id}/attendance", $supervisor, ['date' => $date, 'time_in' => '08:00', 'time_out' => '09:00'])
                 ->assertCreated()
                 ->assertJsonPath('attendance.time_in', "{$date}T08:00:00+08:00");
+            $this->web('POST', "/attendance-monitoring/{$webStudent->id}/attendances", $supervisor, ['date' => $date, 'time_in' => '08:00', 'time_out' => '09:00'])
+                ->assertRedirect()->assertSessionHasNoErrors();
         }
+
+        $refusals = [
+            '1999-12-31' => 'The date must be on or after January 1, 2000.',
+            '2026-10-04' => 'The date cannot be in the future.',
+        ];
+
+        foreach ($refusals as $date => $message) {
+            $this->api('POST', "/api/v1/monitoring/students/{$student->id}/attendance", $supervisor, ['date' => $date, 'time_in' => '08:00', 'time_out' => '09:00'])
+                ->assertStatus(422)
+                ->assertJsonPath('errors.date.0', $message);
+            $this->web('POST', "/attendance-monitoring/{$webStudent->id}/attendances", $supervisor, ['date' => $date, 'time_in' => '08:00', 'time_out' => '09:00'])
+                ->assertSessionHasErrors(['date' => $message]);
+        }
+
+        // An existing entry can't be moved into the future either.
+        $row = Attendance::where('student_id', $student->id)->firstOrFail();
+        $this->api('PATCH', "/api/v1/monitoring/attendance/{$row->id}", $supervisor, ['date' => '2026-10-04'])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.date.0', 'The date cannot be in the future.');
+
+        $this->assertSame(2, Attendance::where('student_id', $student->id)->count());
+        $this->assertSame(2, Attendance::where('student_id', $webStudent->id)->count());
     }
 
     public function test_a_duplicate_date_is_422(): void
