@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\FeedbackController;
 use App\Http\Controllers\Api\V1\InternshipReportController;
+use App\Http\Controllers\Api\V1\MonitoringController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ReportAttachmentController;
 use App\Http\Middleware\ThrottleFailedAuth;
@@ -112,6 +113,38 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                         ->name("approvals.{$leg}.{$action}");
                 }
             }
+        });
+
+        // Attendance & Progress Monitoring: reads for Coordinator, Supervisor
+        // (own students) and Administrator, like the website. Per record,
+        // StudentPolicy / AttendancePolicy inside the controller (404 when
+        // not visible).
+        Route::middleware('role:2,3,4')->group(function () {
+            Route::get('monitoring/students', [MonitoringController::class, 'students'])->name('monitoring.students.index');
+            Route::get('monitoring/students/{student}', [MonitoringController::class, 'show'])
+                ->where('student', '[1-9][0-9]{0,17}')
+                ->name('monitoring.students.show');
+            Route::get('monitoring/students/{student}/attendance', [MonitoringController::class, 'attendance'])
+                ->where('student', '[1-9][0-9]{0,17}')
+                ->name('monitoring.students.attendance');
+            Route::get('progress', [MonitoringController::class, 'progress'])->name('progress.index');
+        });
+
+        // Monitoring writes: Supervisor (own students) and Administrator;
+        // Coordinators are view-only (403), as on the website.
+        Route::middleware('role:3,4')->group(function () {
+            Route::post('monitoring/students/{student}/attendance', [MonitoringController::class, 'store'])
+                ->where('student', '[1-9][0-9]{0,17}')
+                ->name('monitoring.attendance.store');
+            Route::patch('monitoring/students/{student}/required-hours', [MonitoringController::class, 'updateRequiredHours'])
+                ->where('student', '[1-9][0-9]{0,17}')
+                ->name('monitoring.students.required-hours');
+            Route::patch('monitoring/attendance/{attendance}', [MonitoringController::class, 'update'])
+                ->where('attendance', '[1-9][0-9]{0,17}')
+                ->name('monitoring.attendance.update');
+            Route::delete('monitoring/attendance/{attendance}', [MonitoringController::class, 'destroy'])
+                ->where('attendance', '[1-9][0-9]{0,17}')
+                ->name('monitoring.attendance.destroy');
         });
 
         // Evidence photos: every role, scoped per record by
