@@ -527,6 +527,11 @@ class MonitoringApiTest extends TestCase
             'relative date' => [['date' => 'next monday'], 'date'],
             'other date format' => [['date' => '09/01/2026'], 'date'],
             'date with time' => [['date' => '2026-09-01 08:00'], 'date'],
+            'year 0999' => [['date' => '0999-12-31', 'time_in' => '08:00', 'time_out' => '09:00'], 'date'],
+            'year 0000' => [['date' => '0000-01-01'], 'date'],
+            'before 2000' => [['date' => '1999-12-31'], 'date'],
+            'year 9999' => [['date' => '9999-12-31'], 'date'],
+            'after 2099' => [['date' => '2100-01-01'], 'date'],
             'date array' => [['date' => ['2026-09-01']], 'date'],
             'date number' => [['date' => 20260901], 'date'],
             'time_in seconds' => [['date' => '2026-09-01', 'time_in' => '08:00:00'], 'time_in'],
@@ -573,6 +578,18 @@ class MonitoringApiTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors('search');
 
         $this->assertUntouched($student, $record);
+    }
+
+    public function test_the_date_window_edges_are_accepted(): void
+    {
+        $supervisor = $this->user(3);
+        $student = $this->student($supervisor);
+
+        foreach (['2000-01-01', '2099-12-31'] as $date) {
+            $this->api('POST', "/api/v1/monitoring/students/{$student->id}/attendance", $supervisor, ['date' => $date, 'time_in' => '08:00', 'time_out' => '09:00'])
+                ->assertCreated()
+                ->assertJsonPath('attendance.time_in', "{$date}T08:00:00+08:00");
+        }
     }
 
     public function test_a_duplicate_date_is_422(): void
@@ -855,6 +872,8 @@ class MonitoringApiTest extends TestCase
 
         // The shared rules refuse the same input on the website.
         $this->web('POST', "/attendance-monitoring/{$webStudent->id}/attendances", $supervisor, ['date' => 'next monday'])
+            ->assertSessionHasErrors('date');
+        $this->web('POST', "/attendance-monitoring/{$webStudent->id}/attendances", $supervisor, ['date' => '0999-12-31', 'time_in' => '08:00', 'time_out' => '09:00'])
             ->assertSessionHasErrors('date');
         $this->web('PATCH', "/attendance-monitoring/{$webStudent->id}/required-hours", $supervisor, ['required_hours' => '4294967296'])
             ->assertSessionHasErrors('required_hours');
