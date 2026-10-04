@@ -7,8 +7,8 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Pagination\Cursor;
 
 /**
- * GET /attendance: the student's own history, cursor-paginated over
- * (date, id) descending.
+ * GET /attendance (the student's own history) and GET /approvals (Pending
+ * Approvals): cursor-paginated over (date, id) descending.
  */
 class ListAttendanceRequest extends FormRequest
 {

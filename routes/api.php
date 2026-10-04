@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AnalyticsController;
+use App\Http\Controllers\Api\V1\ApprovalController;
 use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AttendancePhotoController;
 use App\Http\Controllers\Api\V1\AuthController;
@@ -91,6 +92,26 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('feedback/{evaluation}', [FeedbackController::class, 'show'])
                 ->where('evaluation', '[1-9][0-9]{0,17}')
                 ->name('feedback.show');
+        });
+
+        // Pending Approvals: Supervisor (own students) and Administrator,
+        // like the website's /attendance-approvals. Per record,
+        // AttendancePolicy::review inside the controller (404 when not
+        // reviewable); decisions go through AttendanceService.
+        Route::middleware('role:3,4')->group(function () {
+            Route::get('approvals', [ApprovalController::class, 'index'])->name('approvals.index');
+            Route::get('approvals/count', [ApprovalController::class, 'count'])->name('approvals.count');
+            Route::get('approvals/{attendance}', [ApprovalController::class, 'show'])
+                ->where('attendance', '[1-9][0-9]{0,17}')
+                ->name('approvals.show');
+
+            foreach (['time-in' => 'TimeIn', 'time-out' => 'TimeOut'] as $leg => $method) {
+                foreach (['approve', 'reject'] as $action) {
+                    Route::post("attendance/{attendance}/{$leg}/{$action}", [ApprovalController::class, $action.$method])
+                        ->where('attendance', '[1-9][0-9]{0,17}')
+                        ->name("approvals.{$leg}.{$action}");
+                }
+            }
         });
 
         // Evidence photos: every role, scoped per record by
