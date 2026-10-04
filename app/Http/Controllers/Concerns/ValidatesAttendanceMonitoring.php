@@ -38,6 +38,7 @@ trait ValidatesAttendanceMonitoring
 
         return $request->validate([
             'date' => [
+                'bail',
                 'required',
                 'date_format:Y-m-d',
                 'after_or_equal:'.self::MIN_ENTRY_DATE,
