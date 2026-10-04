@@ -71,6 +71,20 @@ class Student extends Model
     }
 
     /**
+     * The Attendance / Progress Monitoring list for the given user (website
+     * and mobile API): the students they may see, newest profile first,
+     * each with `total_rendered_hours` (sum of credited hours, null when
+     * none).
+     */
+    public function scopeMonitoredBy(Builder $query, User $user): Builder
+    {
+        return $query
+            ->withSum('attendances as total_rendered_hours', 'rendered_hours')
+            ->visibleTo($user)
+            ->orderBy($this->qualifyColumn('created_at'), 'desc');
+    }
+
+    /**
      * Snapshot of the private files this student owns (report attachments
      * and attendance photos).
      *

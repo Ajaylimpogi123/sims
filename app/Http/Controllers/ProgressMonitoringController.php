@@ -13,9 +13,7 @@ class ProgressMonitoringController extends Controller
     {
         $students = Student::query()
             ->with(['user:id,name', 'company:id,company_name'])
-            ->withSum('attendances as total_rendered_hours', 'rendered_hours')
-            ->visibleTo(Auth::user())
-            ->orderBy('created_at', 'desc')
+            ->monitoredBy(Auth::user())
             ->get();
 
         return Inertia::render('ProgressMonitoring/Index', [

@@ -7,10 +7,12 @@ use App\Models\Attendance;
 use App\Models\Student;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
@@ -281,13 +283,21 @@ class AttendanceService
 
     /**
      * Attendance Monitoring: staff add an entry directly. Any leg with a time
-     * counts as approved.
+     * counts as approved. A concurrent request that inserted the same date
+     * first is reported like a sequential duplicate (a `date` validation
+     * error), not as a database error.
      *
      * @param  array{date: string, time_in: ?string, time_out: ?string}  $entry
+     *
+     * @throws ValidationException
      */
     public function createEntry(Student $student, User $actor, array $entry): Attendance
     {
-        return $student->attendances()->create($this->entryAttributes($entry, $actor));
+        try {
+            return $student->attendances()->create($this->entryAttributes($entry, $actor));
+        } catch (UniqueConstraintViolationException) {
+            throw self::dateTaken();
+        }
     }
 
     /**
@@ -296,47 +306,87 @@ class AttendanceService
      * time is merely overridden keeps its evidence on purpose: it still
      * documents what the student sent.
      *
+     * The row is re-read under a lock, so the evidence cleared is what is
+     * stored at that moment (a student's submission landing meanwhile can't
+     * leave an orphaned photo), an entry deleted meanwhile is a 404, and the
+     * files are deleted only after commit.
+     *
      * @param  array{date: string, time_in: ?string, time_out: ?string}  $entry
+     *
+     * @throws ValidationException
+     * @throws ModelNotFoundException
      */
     public function updateEntry(Attendance $attendance, User $actor, array $entry): Attendance
     {
         $attributes = $this->entryAttributes($entry, $actor);
 
-        $orphanedPhotos = [];
+        try {
+            $orphanedPhotos = DB::transaction(function () use ($attendance, $attributes) {
+                $current = Attendance::query()->lockForUpdate()->findOrFail($attendance->id);
+                $orphaned = [];
 
-        foreach (['time_in', 'time_out'] as $leg) {
-            if (($attributes[$leg] ?? null) !== null) {
-                continue;
-            }
+                foreach (['time_in', 'time_out'] as $leg) {
+                    if (($attributes[$leg] ?? null) !== null) {
+                        continue;
+                    }
 
-            $orphanedPhotos[] = $attendance->{"{$leg}_photo_path"};
+                    $orphaned[] = $current->{"{$leg}_photo_path"};
 
-            foreach (['photo_path', 'latitude', 'longitude', 'accuracy', 'mocked'] as $field) {
-                $attributes["{$leg}_{$field}"] = null;
-            }
+                    foreach (['photo_path', 'latitude', 'longitude', 'accuracy', 'mocked'] as $field) {
+                        $attributes["{$leg}_{$field}"] = null;
+                    }
+                }
+
+                $current->update($attributes);
+                $attendance->setRawAttributes($current->getAttributes(), true);
+
+                return array_values(array_filter($orphaned));
+            });
+        } catch (UniqueConstraintViolationException) {
+            throw self::dateTaken();
         }
 
-        $attendance->update($attributes);
-
-        if ($orphanedPhotos = array_filter($orphanedPhotos)) {
+        if ($orphanedPhotos) {
             Storage::disk(self::PHOTO_DISK)->delete($orphanedPhotos);
         }
 
         return $attendance;
     }
 
+    /**
+     * Delete an entry, then (after commit) its evidence photos. The paths
+     * are read under the row lock, so a leg submitted meanwhile isn't
+     * orphaned; an entry already deleted is a 404.
+     *
+     * @throws ModelNotFoundException
+     */
     public function deleteEntry(Attendance $attendance): void
     {
-        $photoPaths = array_filter([
-            $attendance->time_in_photo_path,
-            $attendance->time_out_photo_path,
-        ]);
+        $photoPaths = DB::transaction(function () use ($attendance) {
+            $current = Attendance::query()->lockForUpdate()->findOrFail($attendance->id);
 
-        $attendance->delete();
+            $paths = array_values(array_filter([
+                $current->time_in_photo_path,
+                $current->time_out_photo_path,
+            ]));
+
+            $current->delete();
+
+            return $paths;
+        });
+
+        $attendance->exists = false;
 
         if ($photoPaths) {
             Storage::disk(self::PHOTO_DISK)->delete($photoPaths);
         }
+    }
+
+    private static function dateTaken(): ValidationException
+    {
+        return ValidationException::withMessages([
+            'date' => __('validation.unique', ['attribute' => 'date']),
+        ]);
     }
 
     /**

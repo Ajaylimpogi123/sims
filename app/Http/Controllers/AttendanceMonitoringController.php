@@ -2,18 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ValidatesAttendanceMonitoring;
 use App\Models\Attendance;
 use App\Models\Student;
 use App\Services\AttendanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class AttendanceMonitoringController extends Controller
 {
+    use ValidatesAttendanceMonitoring;
+
     public function __construct(private AttendanceService $attendance) {}
 
     public function index(): Response
@@ -24,9 +26,7 @@ class AttendanceMonitoringController extends Controller
                 'company:id,company_name',
                 'attendances' => fn ($query) => $query->orderByDesc('date'),
             ])
-            ->withSum('attendances as total_rendered_hours', 'rendered_hours')
-            ->visibleTo(Auth::user())
-            ->orderBy('created_at', 'desc')
+            ->monitoredBy(Auth::user())
             ->get();
 
         return Inertia::render('AttendanceMonitoring/Index', [
@@ -38,13 +38,7 @@ class AttendanceMonitoringController extends Controller
     {
         $this->authorize('manageAttendance', $student);
 
-        $request->merge(['required_hours' => $request->required_hours ?: null]);
-
-        $validated = $request->validate([
-            'required_hours' => ['nullable', 'integer', 'min:0'],
-        ]);
-
-        $student->update($validated);
+        $student->update($this->validateRequiredHours($request));
 
         return redirect()->route('attendance-monitoring.index')
             ->with('success', 'Required hours updated.');
@@ -54,7 +48,7 @@ class AttendanceMonitoringController extends Controller
     {
         $this->authorize('manageAttendance', $student);
 
-        $validated = $this->validateEntry($request, $student);
+        $validated = $this->validateAttendanceEntry($request, $student);
 
         $this->attendance->createEntry($student, Auth::user(), $validated);
 
@@ -66,7 +60,7 @@ class AttendanceMonitoringController extends Controller
     {
         $this->authorize('update', $attendance);
 
-        $validated = $this->validateEntry($request, $attendance->student, $attendance->id);
+        $validated = $this->validateAttendanceEntry($request, $attendance->student, $attendance->id);
 
         $this->attendance->updateEntry($attendance, Auth::user(), $validated);
 
@@ -82,25 +76,5 @@ class AttendanceMonitoringController extends Controller
 
         return redirect()->route('attendance-monitoring.index')
             ->with('success', 'Attendance entry deleted.');
-    }
-
-    private function validateEntry(Request $request, Student $student, ?int $ignoreId = null): array
-    {
-        $request->merge([
-            'time_in' => $request->time_in ?: null,
-            'time_out' => $request->time_out ?: null,
-        ]);
-
-        return $request->validate([
-            'date' => [
-                'required',
-                'date',
-                Rule::unique('attendances', 'date')
-                    ->where('student_id', $student->id)
-                    ->ignore($ignoreId),
-            ],
-            'time_in' => ['nullable', 'date_format:H:i'],
-            'time_out' => ['nullable', 'date_format:H:i', 'after:time_in'],
-        ]);
     }
 }
