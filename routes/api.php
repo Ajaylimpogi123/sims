@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\InternshipReportController;
 use App\Http\Controllers\Api\V1\MonitoringController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ReportAttachmentController;
+use App\Http\Controllers\Api\V1\ReportReviewController;
 use App\Http\Middleware\ThrottleFailedAuth;
 use App\Http\Middleware\ThrottleLogin;
 use Illuminate\Support\Facades\Route;
@@ -145,6 +146,25 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::delete('monitoring/attendance/{attendance}', [MonitoringController::class, 'destroy'])
                 ->where('attendance', '[1-9][0-9]{0,17}')
                 ->name('monitoring.attendance.destroy');
+        });
+
+        // Report Reviews: reads for Coordinator, Supervisor (own students)
+        // and Administrator, like the website. Per record,
+        // InternshipReportPolicy::view inside the controller (404 when not
+        // visible).
+        Route::middleware('role:2,3,4')->group(function () {
+            Route::get('report-reviews', [ReportReviewController::class, 'index'])->name('report-reviews.index');
+            Route::get('report-reviews/{report}', [ReportReviewController::class, 'show'])
+                ->where('report', '[1-9][0-9]{0,17}')
+                ->name('report-reviews.show');
+        });
+
+        // Submitting a review: Coordinator and Administrator only;
+        // Supervisors are view-only (403), as on the website.
+        Route::middleware('role:2,4')->group(function () {
+            Route::post('report-reviews/{report}/review', [ReportReviewController::class, 'review'])
+                ->where('report', '[1-9][0-9]{0,17}')
+                ->name('report-reviews.review');
         });
 
         // Evidence photos: every role, scoped per record by
