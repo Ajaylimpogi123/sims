@@ -70,17 +70,30 @@ class FeedbackResource extends JsonResource
      */
     private function categories(): array
     {
+        return self::groupResponses($this->responses);
+    }
+
+    /**
+     * Saved responses grouped by category (see the class doc). Shared with
+     * the staff EvaluationResource, which adds each criterion's `is_active`.
+     *
+     * @param  iterable<EvaluationResponse>  $responses  with `criteria` loaded
+     * @return list<array{category: string, criteria: list<array<string, mixed>>}>
+     */
+    public static function groupResponses(iterable $responses, bool $withActiveFlag = false): array
+    {
         $groups = [];
 
-        $this->responses
+        collect($responses)
             ->filter(fn (EvaluationResponse $response) => $response->criteria !== null)
-            ->each(function (EvaluationResponse $response) use (&$groups) {
+            ->each(function (EvaluationResponse $response) use (&$groups, $withActiveFlag) {
                 $criterion = $response->criteria;
 
                 $groups[$criterion->category][] = [
                     'id' => $criterion->id,
                     'label' => $criterion->label,
                     'description' => $criterion->description,
+                    ...($withActiveFlag ? ['is_active' => (bool) $criterion->is_active] : []),
                     'rating' => $response->rating,
                     'max' => self::RATING_MAX,
                     'comment' => $response->comment,

@@ -72,7 +72,10 @@ class EvaluationService
             ],
             'evaluation_period_end' => [
                 'bail', 'required', 'date_format:Y-m-d',
-                'after_or_equal:evaluation_period_start', 'before_or_equal:'.self::LATEST_DATE,
+                // Compared only against a string start: the date comparison
+                // throws a TypeError (500) on an array.
+                Rule::when(fn ($input) => is_string($input->evaluation_period_start), ['after_or_equal:evaluation_period_start']),
+                'before_or_equal:'.self::LATEST_DATE,
             ],
             'strengths' => $text,
             'areas_for_improvement' => $text,

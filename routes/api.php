@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AttendancePhotoController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\EvaluationController;
+use App\Http\Controllers\Api\V1\EvaluationCriteriaController;
 use App\Http\Controllers\Api\V1\FeedbackController;
 use App\Http\Controllers\Api\V1\InternshipReportController;
 use App\Http\Controllers\Api\V1\MonitoringController;
@@ -165,6 +167,54 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::post('report-reviews/{report}/review', [ReportReviewController::class, 'review'])
                 ->where('report', '[1-9][0-9]{0,17}')
                 ->name('report-reviews.review');
+        });
+
+        // Supervisor Evaluations: reads for Coordinator, Supervisor (own
+        // students) and Administrator, like the website. Per record,
+        // EvaluationPolicy inside the controller (404 when not visible).
+        Route::middleware('role:2,3,4')->group(function () {
+            Route::get('evaluations', [EvaluationController::class, 'index'])->name('evaluations.index');
+            Route::get('evaluations/criteria', [EvaluationController::class, 'criteria'])->name('evaluations.criteria');
+            Route::get('evaluations/{evaluation}', [EvaluationController::class, 'show'])
+                ->where('evaluation', '[1-9][0-9]{0,17}')
+                ->name('evaluations.show');
+        });
+
+        // Evaluation writes: Supervisor (own students) and Administrator;
+        // Coordinators are view-only (403), as on the website.
+        Route::middleware('role:3,4')->group(function () {
+            Route::get('evaluations/students', [EvaluationController::class, 'students'])->name('evaluations.students');
+            Route::post('evaluations', [EvaluationController::class, 'store'])->name('evaluations.store');
+            Route::patch('evaluations/{evaluation}', [EvaluationController::class, 'update'])
+                ->where('evaluation', '[1-9][0-9]{0,17}')
+                ->name('evaluations.update');
+            Route::post('evaluations/{evaluation}/submit', [EvaluationController::class, 'submit'])
+                ->where('evaluation', '[1-9][0-9]{0,17}')
+                ->name('evaluations.submit');
+        });
+
+        // Lock / reopen and Evaluation Criteria: Administrator only.
+        Route::middleware('role:4')->group(function () {
+            foreach (['lock', 'reopen'] as $action) {
+                Route::post("evaluations/{evaluation}/{$action}", [EvaluationController::class, $action])
+                    ->where('evaluation', '[1-9][0-9]{0,17}')
+                    ->name("evaluations.{$action}");
+            }
+
+            Route::get('evaluation-criteria', [EvaluationCriteriaController::class, 'index'])->name('evaluation-criteria.index');
+            Route::post('evaluation-criteria', [EvaluationCriteriaController::class, 'store'])->name('evaluation-criteria.store');
+            Route::patch('evaluation-criteria/{criterion}', [EvaluationCriteriaController::class, 'update'])
+                ->where('criterion', '[1-9][0-9]{0,17}')
+                ->name('evaluation-criteria.update');
+            Route::delete('evaluation-criteria/{criterion}', [EvaluationCriteriaController::class, 'destroy'])
+                ->where('criterion', '[1-9][0-9]{0,17}')
+                ->name('evaluation-criteria.destroy');
+
+            foreach (['activate', 'deactivate'] as $action) {
+                Route::post("evaluation-criteria/{criterion}/{$action}", [EvaluationCriteriaController::class, $action])
+                    ->where('criterion', '[1-9][0-9]{0,17}')
+                    ->name("evaluation-criteria.{$action}");
+            }
         });
 
         // Evidence photos: every role, scoped per record by
