@@ -2,43 +2,31 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Role;
 use App\Models\User;
+use App\Services\UserManagementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * User Management (Coordinator, Administrator). The rules live in
+ * UserManagementService, shared with the mobile API.
+ */
 class UserController extends Controller
 {
-    private const ADMIN_ROLE_ID = 4;
-
-    private const STUDENT_ROLE_ID = 1;
+    public function __construct(private UserManagementService $users) {}
 
     public function index(Request $request): Response
     {
-        $viewerIsAdmin = (int) $request->user()->role_id === self::ADMIN_ROLE_ID;
+        $viewer = $request->user();
 
-        $users = User::with('role:id,role_name')
-            ->when(! $viewerIsAdmin, fn ($query) => $query->where('role_id', '!=', self::ADMIN_ROLE_ID))
-            ->when($request->filled('role_id'), fn ($query) => $query->where('role_id', $request->role_id))
-            ->when(
-                $request->filled('status') && in_array($request->status, ['active', 'inactive'], true),
-                fn ($query) => $query->where('status', $request->status),
-            )
-            ->orderByDesc('created_at')
+        $users = $this->users->query($viewer, $request->only(['role_id', 'status']))
             ->paginate(10)
             ->withQueryString();
 
-        $roles = Role::orderBy('role_name')
-            ->when(! $viewerIsAdmin, fn ($query) => $query->where('id', '!=', self::ADMIN_ROLE_ID))
-            ->get(['id', 'role_name']);
-
         return Inertia::render('UserManagement/Index', [
-            'roles' => $roles,
+            'roles' => $this->users->filterRoles($viewer),
             'users' => $users,
             'filters' => $request->only(['role_id', 'status']),
         ]);
@@ -47,59 +35,16 @@ class UserController extends Controller
     public function update(Request $request, int $id): RedirectResponse
     {
         $user = User::findOrFail($id);
-        $actorIsAdmin = (int) $request->user()->role_id === self::ADMIN_ROLE_ID;
 
-        if (! $actorIsAdmin && (int) $user->role_id === self::ADMIN_ROLE_ID) {
+        if (! $this->users->canEdit($request->user(), $user)) {
             abort(403, 'You cannot manage an Administrator account.');
         }
 
-        // Student is not a selectable role in this admin-driven flow: promoting
-        // an existing non-student user to Student would leave them without the
-        // Student profile row that self-registration normally creates. Editing
-        // a user who is already a Student (e.g. via self-registration) without
-        // changing their role is still allowed.
-        $forbiddenRoles = $actorIsAdmin ? [] : [self::ADMIN_ROLE_ID];
+        $validated = $request->validate(
+            $this->users->updateRules($request->user(), $user, $request->filled('password')),
+        );
 
-        if ((int) $user->role_id !== self::STUDENT_ROLE_ID) {
-            $forbiddenRoles[] = self::STUDENT_ROLE_ID;
-        }
-
-        $rules = [
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,'.$user->id],
-            'role_id' => [
-                'required',
-                'exists:roles,id',
-                Rule::notIn($forbiddenRoles),
-            ],
-        ];
-
-        if ($request->filled('password')) {
-            $rules['password'] = ['required', 'confirmed', Rules\Password::defaults()];
-        }
-
-        $validated = $request->validate($rules);
-
-        $updateData = [
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'role_id' => $validated['role_id'],
-        ];
-
-        if (! empty($validated['password'])) {
-            $updateData['password'] = Hash::make($validated['password']);
-        }
-
-        $roleChanged = (int) $validated['role_id'] !== (int) $user->role_id;
-
-        $user->update($updateData);
-
-        // A role change re-scopes everything the user can reach, and a new
-        // password is how staff lock out a lost phone, so sign the mobile app
-        // out now rather than letting an old token keep working.
-        if ($roleChanged || isset($updateData['password'])) {
-            $user->revokeApiTokens();
-        }
+        $this->users->update($request->user(), $user, $validated);
 
         return redirect()->route('user-management.index')
             ->with('success', 'User updated successfully.');
@@ -113,20 +58,13 @@ class UserController extends Controller
             abort(403, 'You cannot change your own account status.');
         }
 
-        $actorIsAdmin = (int) $request->user()->role_id === self::ADMIN_ROLE_ID;
-
-        if (! $actorIsAdmin && (int) $user->role_id === self::ADMIN_ROLE_ID) {
+        if (! $this->users->canEdit($request->user(), $user)) {
             abort(403, 'You cannot manage an Administrator account.');
         }
 
-        $newStatus = $user->status === 'active' ? 'inactive' : 'active';
-        $user->update(['status' => $newStatus]);
+        $user = $this->users->setStatus($request->user(), $user, $user->status !== 'active');
 
-        if ($newStatus === 'inactive') {
-            $user->revokeApiTokens();
-        }
-
-        $message = $newStatus === 'inactive'
+        $message = $user->status === 'inactive'
             ? 'User account deactivated successfully.'
             : 'User account activated successfully.';
 
