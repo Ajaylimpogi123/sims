@@ -212,4 +212,18 @@ class AnalyticsTest extends TestCase
             ->has('analytics.reports.submissionTrend', 1)
         );
     }
+
+    public function test_an_array_date_from_with_a_date_to_is_a_validation_error_not_a_500(): void
+    {
+        foreach ([[4, '/admin-dashboard'], [3, '/dashboard'], [2, '/dashboard']] as [$role, $uri]) {
+            $user = User::factory()->create(['role_id' => $role]);
+
+            foreach ([['x'], ['a' => '1']] as $dateFrom) {
+                $this->fetchAnalytics($user, $uri, ['date_from' => $dateFrom, 'date_to' => '2026-01-01'])
+                    ->assertRedirect()
+                    ->assertSessionHasErrors('date_from')
+                    ->assertSessionDoesntHaveErrors('date_to');
+            }
+        }
+    }
 }

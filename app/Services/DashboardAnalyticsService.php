@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 /**
  * Single source of truth for every scoped KPI/chart query the Dashboard &
@@ -69,7 +70,9 @@ class DashboardAnalyticsService
     {
         $validated = $request->validate([
             'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            // Compared only against a string date_from: the date comparison
+            // throws a TypeError (500) on an array.
+            'date_to' => ['nullable', 'date', Rule::when(fn ($input) => is_string($input->date_from), ['after_or_equal:date_from'])],
             'company_id' => ['nullable', 'integer', 'exists:companies,id'],
             'supervisor_id' => ['nullable', 'integer', 'exists:users,id'],
             'student_id' => ['nullable', 'integer', 'exists:students,id'],

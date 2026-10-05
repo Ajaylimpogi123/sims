@@ -275,6 +275,8 @@ class AnalyticsApiTest extends TestCase
             'date_from wrong format' => [['date_from' => '10/03/2026'], 'date_from'],
             'date_from with time' => [['date_from' => '2026-10-03 10:00:00'], 'date_from'],
             'date_from array' => [['date_from' => ['2026-10-03']], 'date_from'],
+            'date_from list with date_to' => [['date_from' => ['x'], 'date_to' => '2026-01-01'], 'date_from'],
+            'date_from keyed array with date_to' => [['date_from' => ['a' => '1'], 'date_to' => '2026-01-01'], 'date_from'],
             'date_to before date_from' => [['date_from' => '2026-10-03', 'date_to' => '2026-10-01'], 'date_to'],
             'company_id not an integer' => [['company_id' => 'abc'], 'company_id'],
             'company_id zero' => [['company_id' => 0], 'company_id'],
