@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\EvaluationRuleException;
 use App\Models\Evaluation;
 use App\Models\Student;
 use App\Services\EvaluationService;
@@ -79,7 +80,7 @@ class EvaluationController extends Controller
 
         $validated = $request->validate(EvaluationService::rules(forStudentSwitch: false));
 
-        $this->evaluations->updateDraft($evaluation, $validated);
+        $this->refuseLostRace(fn () => $this->evaluations->updateDraft($evaluation, $validated));
 
         return redirect()->route('supervisor-evaluations.show', $evaluation)
             ->with('success', 'Evaluation draft updated.');
@@ -89,7 +90,7 @@ class EvaluationController extends Controller
     {
         $this->authorize('submit', $evaluation);
 
-        $this->evaluations->submit($evaluation);
+        $this->refuseLostRace(fn () => $this->evaluations->submit($evaluation));
 
         return redirect()->route('supervisor-evaluations.show', $evaluation)
             ->with('success', 'Evaluation submitted.');
@@ -99,7 +100,7 @@ class EvaluationController extends Controller
     {
         $this->authorize('lock', $evaluation);
 
-        $this->evaluations->lock($evaluation, Auth::user());
+        $this->refuseLostRace(fn () => $this->evaluations->lock($evaluation, Auth::user()));
 
         return redirect()->route('supervisor-evaluations.show', $evaluation)
             ->with('success', 'Evaluation locked.');
@@ -109,10 +110,24 @@ class EvaluationController extends Controller
     {
         $this->authorize('reopen', $evaluation);
 
-        $this->evaluations->reopen($evaluation);
+        $this->refuseLostRace(fn () => $this->evaluations->reopen($evaluation));
 
         return redirect()->route('supervisor-evaluations.show', $evaluation)
             ->with('success', 'Evaluation reopened for editing.');
+    }
+
+    /**
+     * The policy has already checked the state; if another request changed
+     * it in the meantime the service refuses under its row lock, and the
+     * answer is the same 403 the policy gives for that state.
+     */
+    private function refuseLostRace(callable $change): void
+    {
+        try {
+            $change();
+        } catch (EvaluationRuleException $e) {
+            abort(403, $e->getMessage());
+        }
     }
 
     public function myFeedback(): Response

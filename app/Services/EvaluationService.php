@@ -2,14 +2,17 @@
 
 namespace App\Services;
 
+use App\Exceptions\EvaluationRuleException;
 use App\Models\Evaluation;
 use App\Models\EvaluationCriteria;
 use App\Models\Student;
 use App\Models\User;
 use App\Policies\EvaluationPolicy;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -17,34 +20,73 @@ use Illuminate\Validation\ValidationException;
  * API: create / update a draft (responses sync + overall rating), submit,
  * and the admin-only lock / reopen.
  *
- * Authorization — including "only drafts can be edited" — is the caller's
- * job (EvaluationPolicy, StudentPolicy::evaluate).
+ * Authorization is the caller's job (EvaluationPolicy,
+ * StudentPolicy::evaluate). The state rules ("only drafts can be edited",
+ * ...) are checked there too, and re-checked here under a row lock so two
+ * requests racing on the same evaluation can't both win: the loser gets an
+ * EvaluationRuleException with the policy's wording.
  */
 class EvaluationService
 {
+    public const RATING_MIN = 1;
+
+    public const RATING_MAX = 5;
+
+    /** Period dates are bounded so an absurd year can't reach MySQL (a 500). */
+    public const EARLIEST_DATE = '2000-01-01';
+
+    public const LATEST_DATE = '2099-12-31';
+
+    public const MAX_TEXT_LENGTH = 5000;
+
+    public const MAX_COMMENT_LENGTH = 2000;
+
+    /** More ratings than any real criteria list; caps the per-item exists queries. */
+    public const MAX_RESPONSES = 200;
+
+    public const UNRATED_MESSAGE = 'Every evaluation criterion must be rated before submitting.';
+
     /** Free-text fields copied straight from the validated input. */
     private const TEXT_FIELDS = ['strengths', 'areas_for_improvement', 'recommendations', 'supervisor_remarks'];
 
     /**
      * @param  bool  $forStudentSwitch  include student_id (creating a draft)
+     * @param  bool  $activeCriteriaOnly  refuse ratings for deactivated criteria
+     *                                    (the API; the website's form only ever
+     *                                    shows active ones)
      */
-    public static function rules(bool $forStudentSwitch = true): array
+    public static function rules(bool $forStudentSwitch = true, bool $activeCriteriaOnly = false): array
     {
+        $criterionExists = Rule::exists('evaluation_criteria', 'id');
+
+        if ($activeCriteriaOnly) {
+            $criterionExists->where('is_active', true);
+        }
+
+        $text = ['nullable', 'string', 'max:'.self::MAX_TEXT_LENGTH];
+
         $rules = [
-            'evaluation_period_start' => ['required', 'date'],
-            'evaluation_period_end' => ['required', 'date', 'after_or_equal:evaluation_period_start'],
-            'strengths' => ['nullable', 'string', 'max:5000'],
-            'areas_for_improvement' => ['nullable', 'string', 'max:5000'],
-            'recommendations' => ['nullable', 'string', 'max:5000'],
-            'supervisor_remarks' => ['nullable', 'string', 'max:5000'],
-            'responses' => ['nullable', 'array'],
-            'responses.*.evaluation_criteria_id' => ['required', 'integer', 'exists:evaluation_criteria,id', 'distinct'],
-            'responses.*.rating' => ['required', 'integer', 'min:1', 'max:5'],
-            'responses.*.comment' => ['nullable', 'string', 'max:2000'],
+            'evaluation_period_start' => [
+                'bail', 'required', 'date_format:Y-m-d',
+                'after_or_equal:'.self::EARLIEST_DATE, 'before_or_equal:'.self::LATEST_DATE,
+            ],
+            'evaluation_period_end' => [
+                'bail', 'required', 'date_format:Y-m-d',
+                'after_or_equal:evaluation_period_start', 'before_or_equal:'.self::LATEST_DATE,
+            ],
+            'strengths' => $text,
+            'areas_for_improvement' => $text,
+            'recommendations' => $text,
+            'supervisor_remarks' => $text,
+            'responses' => ['nullable', 'array', 'max:'.self::MAX_RESPONSES],
+            'responses.*' => ['array'],
+            'responses.*.evaluation_criteria_id' => ['bail', 'required', 'integer', 'numeric', $criterionExists, 'distinct'],
+            'responses.*.rating' => ['bail', 'required', 'integer', 'numeric', 'min:'.self::RATING_MIN, 'max:'.self::RATING_MAX],
+            'responses.*.comment' => ['nullable', 'string', 'max:'.self::MAX_COMMENT_LENGTH],
         ];
 
         if ($forStudentSwitch) {
-            $rules['student_id'] = ['required', 'exists:students,id'];
+            $rules['student_id'] = ['bail', 'required', 'integer', 'numeric', 'exists:students,id'];
         }
 
         return $rules;
@@ -102,68 +144,114 @@ class EvaluationService
 
     /**
      * @param  array  $data  validated rules(forStudentSwitch: false) data
+     *
+     * @throws EvaluationRuleException when it is no longer a draft
      */
     public function updateDraft(Evaluation $evaluation, array $data): Evaluation
     {
-        DB::transaction(function () use ($evaluation, $data) {
-            $evaluation->update([
+        return $this->underLock($evaluation, function (Evaluation $current) use ($data) {
+            if ($current->status !== 'draft') {
+                throw new EvaluationRuleException(EvaluationPolicy::EDIT_MESSAGE);
+            }
+
+            $current->update([
                 'evaluation_period_start' => $data['evaluation_period_start'],
                 'evaluation_period_end' => $data['evaluation_period_end'],
                 ...$this->textFields($data),
             ]);
 
-            $this->syncResponses($evaluation, $data['responses'] ?? []);
-            $this->refreshOverallRating($evaluation);
+            $this->syncResponses($current, $data['responses'] ?? []);
+            $this->refreshOverallRating($current);
         });
-
-        return $evaluation;
     }
 
     /**
+     * @throws EvaluationRuleException when it is no longer a draft
      * @throws ValidationException when an active criterion has no rating
      */
     public function submit(Evaluation $evaluation): Evaluation
     {
-        $activeCriteriaIds = EvaluationCriteria::query()->where('is_active', true)->pluck('id');
-        $respondedCriteriaIds = $evaluation->responses()->pluck('evaluation_criteria_id');
+        return $this->underLock($evaluation, function (Evaluation $current) {
+            if ($current->status !== 'draft') {
+                throw new EvaluationRuleException(EvaluationPolicy::SUBMIT_MESSAGE);
+            }
 
-        if ($activeCriteriaIds->diff($respondedCriteriaIds)->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'responses' => 'Every evaluation criterion must be rated before submitting.',
+            $activeCriteriaIds = EvaluationCriteria::query()->where('is_active', true)->pluck('id');
+            $respondedCriteriaIds = $current->responses()->pluck('evaluation_criteria_id');
+
+            if ($activeCriteriaIds->diff($respondedCriteriaIds)->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'responses' => self::UNRATED_MESSAGE,
+                ]);
+            }
+
+            $this->refreshOverallRating($current);
+
+            $current->update([
+                'status' => 'submitted',
+                'submitted_at' => now(),
             ]);
-        }
-
-        $this->refreshOverallRating($evaluation);
-
-        $evaluation->update([
-            'status' => 'submitted',
-            'submitted_at' => now(),
-        ]);
-
-        return $evaluation;
+        });
     }
 
+    /**
+     * @throws EvaluationRuleException when it is not submitted
+     */
     public function lock(Evaluation $evaluation, User $admin): Evaluation
     {
-        $evaluation->update([
-            'status' => 'locked',
-            'locked_at' => now(),
-            'locked_by' => $admin->id,
-        ]);
+        return $this->underLock($evaluation, function (Evaluation $current) use ($admin) {
+            if ($current->status !== 'submitted') {
+                throw new EvaluationRuleException(EvaluationPolicy::LOCK_MESSAGE);
+            }
 
-        return $evaluation;
+            $current->update([
+                'status' => 'locked',
+                'locked_at' => now(),
+                'locked_by' => $admin->id,
+            ]);
+        });
     }
 
+    /**
+     * @throws EvaluationRuleException when it is not submitted or locked
+     */
     public function reopen(Evaluation $evaluation): Evaluation
     {
-        $evaluation->update([
-            'status' => 'draft',
-            'submitted_at' => null,
-            'locked_at' => null,
-            'locked_by' => null,
-        ]);
+        return $this->underLock($evaluation, function (Evaluation $current) {
+            if (! in_array($current->status, EvaluationPolicy::REOPENABLE_STATUSES, true)) {
+                throw new EvaluationRuleException(EvaluationPolicy::REOPEN_MESSAGE);
+            }
 
-        return $evaluation;
+            $current->update([
+                'status' => 'draft',
+                'submitted_at' => null,
+                'locked_at' => null,
+                'locked_by' => null,
+            ]);
+        });
+    }
+
+    /**
+     * Run $change on a row-locked fresh copy inside a transaction, then copy
+     * the stored state back onto $evaluation (loaded relations are dropped,
+     * since responses / lockedBy may have changed).
+     *
+     * @param  callable(Evaluation): void  $change
+     *
+     * @throws ModelNotFoundException when the evaluation was deleted meanwhile
+     */
+    private function underLock(Evaluation $evaluation, callable $change): Evaluation
+    {
+        DB::transaction(function () use ($evaluation, $change) {
+            $current = Evaluation::query()->lockForUpdate()->find($evaluation->id)
+                ?? throw (new ModelNotFoundException)->setModel(Evaluation::class, [$evaluation->id]);
+
+            $change($current);
+
+            $evaluation->setRawAttributes($current->getAttributes(), true);
+        });
+
+        return $evaluation->setRelations([]);
     }
 
     private function textFields(array $data): array
@@ -183,8 +271,8 @@ class EvaluationService
 
         foreach ($responses as $response) {
             $evaluation->responses()->create([
-                'evaluation_criteria_id' => $response['evaluation_criteria_id'],
-                'rating' => $response['rating'],
+                'evaluation_criteria_id' => (int) $response['evaluation_criteria_id'],
+                'rating' => (int) $response['rating'],
                 'comment' => $response['comment'] ?? null,
             ]);
         }

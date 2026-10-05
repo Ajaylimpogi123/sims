@@ -23,6 +23,23 @@ class EvaluationPolicy
     public const STUDENT_VISIBLE_STATUSES = ['submitted', 'locked'];
 
     /**
+     * Code on the "wrong state" denials below, so a caller can tell them
+     * apart from "not your evaluation" (the API answers 422 for these).
+     */
+    public const STATE_DENIAL_CODE = 'evaluation_rule';
+
+    public const EDIT_MESSAGE = 'Only draft evaluations can be edited.';
+
+    public const SUBMIT_MESSAGE = 'Only draft evaluations can be submitted.';
+
+    public const LOCK_MESSAGE = 'Only submitted evaluations can be locked.';
+
+    public const REOPEN_MESSAGE = 'Only submitted or locked evaluations can be reopened.';
+
+    /** Statuses an Administrator can reopen. */
+    public const REOPENABLE_STATUSES = ['submitted', 'locked'];
+
+    /**
      * Viewing: the student's own supervisor or a Coordinator/Administrator;
      * the evaluated student once it is submitted or locked (My Feedback).
      */
@@ -50,7 +67,7 @@ class EvaluationPolicy
 
         return $evaluation->status === 'draft'
             ? true
-            : Response::deny('Only draft evaluations can be edited.');
+            : Response::deny(self::EDIT_MESSAGE, self::STATE_DENIAL_CODE);
     }
 
     /**
@@ -64,7 +81,7 @@ class EvaluationPolicy
 
         return $evaluation->status === 'draft'
             ? true
-            : Response::deny('Only draft evaluations can be submitted.');
+            : Response::deny(self::SUBMIT_MESSAGE, self::STATE_DENIAL_CODE);
     }
 
     /**
@@ -78,7 +95,7 @@ class EvaluationPolicy
 
         return $evaluation->status === 'submitted'
             ? true
-            : Response::deny('Only submitted evaluations can be locked.');
+            : Response::deny(self::LOCK_MESSAGE, self::STATE_DENIAL_CODE);
     }
 
     /**
@@ -91,9 +108,9 @@ class EvaluationPolicy
             return false;
         }
 
-        return in_array($evaluation->status, ['submitted', 'locked'], true)
+        return in_array($evaluation->status, self::REOPENABLE_STATUSES, true)
             ? true
-            : Response::deny('Only submitted or locked evaluations can be reopened.');
+            : Response::deny(self::REOPEN_MESSAGE, self::STATE_DENIAL_CODE);
     }
 
     /**
