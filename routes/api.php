@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\MonitoringController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ReportAttachmentController;
 use App\Http\Controllers\Api\V1\ReportReviewController;
+use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Middleware\ThrottleFailedAuth;
 use App\Http\Middleware\ThrottleLogin;
 use Illuminate\Support\Facades\Route;
@@ -214,6 +215,27 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                 Route::post("evaluation-criteria/{criterion}/{$action}", [EvaluationCriteriaController::class, $action])
                     ->where('criterion', '[1-9][0-9]{0,17}')
                     ->name("evaluation-criteria.{$action}");
+            }
+        });
+
+        // User Management: Coordinator and Administrator, like the website's
+        // /user-management (role:2,4). Rules live in UserManagementService;
+        // Administrator accounts are 404 for Coordinators.
+        Route::middleware('role:2,4')->group(function () {
+            Route::get('users', [UserController::class, 'index'])->name('users.index');
+            Route::get('users/roles', [UserController::class, 'roles'])->name('users.roles');
+            Route::post('users', [UserController::class, 'store'])->name('users.store');
+            Route::get('users/{user}', [UserController::class, 'show'])
+                ->where('user', '[1-9][0-9]{0,17}')
+                ->name('users.show');
+            Route::patch('users/{user}', [UserController::class, 'update'])
+                ->where('user', '[1-9][0-9]{0,17}')
+                ->name('users.update');
+
+            foreach (['activate', 'deactivate'] as $action) {
+                Route::post("users/{user}/{$action}", [UserController::class, $action])
+                    ->where('user', '[1-9][0-9]{0,17}')
+                    ->name("users.{$action}");
             }
         });
 
