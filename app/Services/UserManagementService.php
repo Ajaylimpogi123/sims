@@ -26,8 +26,8 @@ use Illuminate\Validation\ValidationException;
  *   who isn't an Administrator.
  * - Only Administrators can give out the Administrator role.
  * - Student is never assignable here: students self-register (which also
- *   creates their Student profile). A user who already is a Student can be
- *   edited while keeping that role.
+ *   creates their Student profile). A Student account can be edited but
+ *   always keeps the Student role.
  * - Nobody can change their own account status.
  * - A role change, a new password or a deactivation revokes the user's
  *   mobile API tokens.
@@ -35,6 +35,8 @@ use Illuminate\Validation\ValidationException;
 class UserManagementService
 {
     public const LAST_ADMIN_MESSAGE = 'At least one active Administrator is required.';
+
+    public const STUDENT_ROLE_MESSAGE = "A student account's role can't be changed.";
 
     /** Retries for a deadlock between racing Administrator changes. */
     private const ATTEMPTS = 3;
@@ -110,6 +112,12 @@ class UserManagementService
      */
     public function forbiddenRoleIds(User $actor, ?User $target = null): array
     {
+        // A Student account keeps its role: Student can't be given back, and
+        // converting one would orphan its Student profile and internship.
+        if ($target !== null && $target->hasRole(User::ROLE_STUDENT)) {
+            return Role::query()->whereKeyNot(User::ROLE_STUDENT)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        }
+
         $forbidden = $actor->hasRole(User::ROLE_ADMIN) ? [] : [User::ROLE_ADMIN];
 
         if ($target === null || ! $target->hasRole(User::ROLE_STUDENT)) {
@@ -212,6 +220,7 @@ class UserManagementService
                 Validator::make(
                     ['role_id' => $data['role_id']],
                     ['role_id' => $this->roleRule($actor, $current)],
+                    $this->roleMessages($current),
                 )->validate();
 
                 $attributes = [
@@ -339,6 +348,18 @@ class UserManagementService
             'exists:roles,id',
             Rule::notIn($this->forbiddenRoleIds($actor, $target)),
         ];
+    }
+
+    /**
+     * Messages for the role rule, so a refused Student role change says why.
+     *
+     * @return array<string, string>
+     */
+    public function roleMessages(?User $target = null): array
+    {
+        return $target !== null && $target->hasRole(User::ROLE_STUDENT)
+            ? ['role_id.not_in' => self::STUDENT_ROLE_MESSAGE]
+            : [];
     }
 
     private function lock(User $target): User

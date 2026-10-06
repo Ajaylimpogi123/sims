@@ -71,6 +71,7 @@ class UserController extends Controller
 
         $validated = $request->validate(
             $this->users->updateRules($request->user(), $model, $request->filled('password')),
+            $this->users->roleMessages($model),
         );
 
         $this->guard(fn () => $this->users->update($request->user(), $model, $validated));

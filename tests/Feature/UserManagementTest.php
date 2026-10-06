@@ -66,7 +66,8 @@ class UserManagementTest extends TestCase
     public function test_admin_can_update_a_users_role(): void
     {
         $admin = User::factory()->create(['role_id' => 4]);
-        $target = User::factory()->create(['role_id' => 1]);
+        // Not a Student: a Student account's role is locked.
+        $target = User::factory()->create(['role_id' => 2]);
 
         $response = $this->actingAs($admin)->patch("/user-management/{$target->id}", [
             'name' => $target->name,
@@ -231,7 +232,8 @@ class UserManagementTest extends TestCase
             'role_id' => 4,
         ]);
 
-        $response->assertForbidden();
+        // 404, like an unknown id, so Administrator ids can't be probed.
+        $response->assertNotFound();
         $this->assertDatabaseHas('users', [
             'id' => $admin->id,
             'name' => 'Original Admin',
@@ -281,7 +283,7 @@ class UserManagementTest extends TestCase
 
         $this->actingAs($coordinator)
             ->patch("/user-management/{$admin->id}/toggle-status")
-            ->assertForbidden();
+            ->assertNotFound();
 
         $this->assertDatabaseHas('users', [
             'id' => $admin->id,

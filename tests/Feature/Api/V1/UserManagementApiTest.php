@@ -277,9 +277,10 @@ class UserManagementApiTest extends TestCase
         $roleIds = fn (array $row) => collect($row['assignable_roles'])->pluck('id')->sort()->values()->all();
 
         $this->assertSame([2, 3], $roleIds($row($coordinator, $supervisor)));
-        $this->assertSame([1, 2, 3], $roleIds($row($coordinator, $student)));
+        // A Student account keeps its role.
+        $this->assertSame([1], $roleIds($row($coordinator, $student)));
         $this->assertSame([2, 3, 4], $roleIds($row($admin, $supervisor)));
-        $this->assertSame([1, 2, 3, 4], $roleIds($row($admin, $student)));
+        $this->assertSame([1], $roleIds($row($admin, $student)));
 
         $self = $row($coordinator, $coordinator);
         $this->assertTrue($self['is_self']);
@@ -787,10 +788,10 @@ class UserManagementApiTest extends TestCase
                 ->assertStatus(422)->assertJsonValidationErrors('role_id');
         }
 
-        // Administrator accounts: the website answers 403, the API hides them (404).
-        $this->web('PATCH', "/user-management/{$admin->id}", $coordinator, $this->edit($admin))->assertForbidden();
+        // Administrator accounts are hidden (404) on both the website and the API.
+        $this->web('PATCH', "/user-management/{$admin->id}", $coordinator, $this->edit($admin))->assertNotFound();
         $this->api('PATCH', "/api/v1/users/{$admin->id}", $coordinator, $this->edit($admin))->assertNotFound();
-        $this->web('PATCH', "/user-management/{$admin->id}/toggle-status", $coordinator)->assertForbidden();
+        $this->web('PATCH', "/user-management/{$admin->id}/toggle-status", $coordinator)->assertNotFound();
         $this->api('POST', "/api/v1/users/{$admin->id}/deactivate", $coordinator)->assertNotFound();
         $this->web('PATCH', "/user-management/{$coordinator->id}/toggle-status", $coordinator)->assertForbidden();
         $this->api('POST', "/api/v1/users/{$coordinator->id}/deactivate", $coordinator)->assertForbidden();

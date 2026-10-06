@@ -34,14 +34,11 @@ class UserController extends Controller
 
     public function update(Request $request, int $id): RedirectResponse
     {
-        $user = User::findOrFail($id);
-
-        if (! $this->users->canEdit($request->user(), $user)) {
-            abort(403, 'You cannot manage an Administrator account.');
-        }
+        $user = $this->findManageable($request->user(), $id);
 
         $validated = $request->validate(
             $this->users->updateRules($request->user(), $user, $request->filled('password')),
+            $this->users->roleMessages($user),
         );
 
         $this->users->update(
@@ -57,14 +54,10 @@ class UserController extends Controller
 
     public function toggleStatus(Request $request, int $id): RedirectResponse
     {
-        $user = User::findOrFail($id);
+        $user = $this->findManageable($request->user(), $id);
 
         if ($request->user()->id === $user->id) {
             abort(403, 'You cannot change your own account status.');
-        }
-
-        if (! $this->users->canEdit($request->user(), $user)) {
-            abort(403, 'You cannot manage an Administrator account.');
         }
 
         $user = $this->users->setStatus($request->user(), $user, $user->status !== 'active');
@@ -75,5 +68,19 @@ class UserController extends Controller
 
         return redirect()->route('user-management.index')
             ->with('success', $message);
+    }
+
+    /**
+     * The user, or a 404 when the viewer can't manage them. An Administrator
+     * id answers exactly like an unknown id, so a Coordinator can't probe
+     * which ids belong to Administrators (the API does the same).
+     */
+    private function findManageable(User $viewer, int $id): User
+    {
+        $user = User::find($id);
+
+        abort_if($user === null || ! $this->users->canEdit($viewer, $user), 404);
+
+        return $user;
     }
 }
