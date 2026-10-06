@@ -8,6 +8,7 @@ import {
 } from "@/Components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
 import { router } from "@inertiajs/react";
+import Swal from "sweetalert2";
 import EditModal from "./EditModal";
 import SupervisorRosterModal from "./SupervisorRosterModal";
 
@@ -15,6 +16,19 @@ const handleDelete = (company) => {
     if (confirm(`Are you sure you want to delete "${company.company_name}"?`)) {
         router.delete(route("company-management.destroy", company.id), {
             preserveScroll: true,
+            // A refusal (students assigned / evaluations recorded) comes
+            // back as a redirect with flash.error, not a validation error.
+            onSuccess: (page) => {
+                const error = page.props.flash?.error;
+                if (error) {
+                    Swal.fire({
+                        icon: "error",
+                        title: "Company Not Deleted",
+                        text: error,
+                        confirmButtonColor: "#dc2626",
+                    });
+                }
+            },
         });
     }
 };
