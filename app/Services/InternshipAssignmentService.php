@@ -147,14 +147,17 @@ class InternshipAssignmentService
     }
 
     /**
-     * Blank company / supervisor ("", 0, null) means "none".
+     * A blank company / supervisor ("" or null; the website sends "")
+     * means "none". Anything else is validated as an id, so `true`, `0`
+     * or an array is a 422 rather than being read as an id or as "none".
      */
     public function prepare(Request $request): void
     {
-        $request->merge([
-            'company_id' => $request->input('company_id') ?: null,
-            'supervisor_id' => $request->input('supervisor_id') ?: null,
-        ]);
+        foreach (['company_id', 'supervisor_id'] as $key) {
+            if ($request->input($key) === '') {
+                $request->merge([$key => null]);
+            }
+        }
     }
 
     /**
@@ -171,7 +174,7 @@ class InternshipAssignmentService
         // student's current company, so changing both at once works.
         $resultingCompanyId = $request->input('company_id');
 
-        $supervisorRules = ['bail', 'nullable', 'integer', Rule::exists('users', 'id')->where('role_id', User::ROLE_SUPERVISOR)];
+        $supervisorRules = ['bail', 'nullable', self::idRule(), 'integer', 'min:1', Rule::exists('users', 'id')->where('role_id', User::ROLE_SUPERVISOR)];
 
         if ($rosterCheck) {
             $supervisorRules[] = function (string $attribute, mixed $value, \Closure $fail) use ($resultingCompanyId, $student) {
@@ -201,7 +204,7 @@ class InternshipAssignmentService
             'student_number' => ['bail', 'required', 'string', 'max:50', Rule::unique('students', 'student_number')->ignore($student->id)],
             'course' => ['required', 'string', 'max:255'],
             'section' => ['required', 'string', 'max:255'],
-            'company_id' => ['bail', 'nullable', 'integer', 'exists:companies,id'],
+            'company_id' => ['bail', 'nullable', self::idRule(), 'integer', 'min:1', 'exists:companies,id'],
             'supervisor_id' => $supervisorRules,
             'internship_status' => ['required', 'in:'.implode(',', array_keys(self::STATUSES))],
             'internship_schedule' => ['nullable', 'string', 'max:255'],
@@ -363,7 +366,9 @@ class InternshipAssignmentService
             throw AssignmentRuleException::refuse(self::SUPERVISOR_NOT_ON_ROSTER, 'supervisor_id', self::NOT_ON_ROSTER_MESSAGE);
         }
 
-        if ($supervisorChanged && $supervisor->status === 'inactive') {
+        // A new supervisor, or the current one taken along to a new company,
+        // is a new assignment: an inactive supervisor can't take it.
+        if ($supervisor->status === 'inactive') {
             throw AssignmentRuleException::refuse(self::SUPERVISOR_INACTIVE, 'supervisor_id', self::SUPERVISOR_INACTIVE_MESSAGE);
         }
     }
@@ -376,6 +381,19 @@ class InternshipAssignmentService
     {
         return (string) $supervisorId !== (string) $student->supervisor_id
             || (string) $companyId !== (string) $student->company_id;
+    }
+
+    /**
+     * The `integer` rule lets `true` through (as 1); an id must be a number
+     * or a numeric string.
+     */
+    private static function idRule(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) {
+            if (is_bool($value) || is_array($value)) {
+                $fail(__('validation.integer', ['attribute' => str_replace('_', ' ', $attribute)]));
+            }
+        };
     }
 
     private function onRoster(mixed $companyId, mixed $supervisorId, bool $lock = false): bool

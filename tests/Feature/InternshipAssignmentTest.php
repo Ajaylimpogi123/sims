@@ -569,6 +569,34 @@ class InternshipAssignmentTest extends TestCase
             ->assertSessionHasErrors('company_id');
     }
 
+    public function test_boolean_or_empty_array_ids_are_a_validation_error_and_blank_means_none(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $student = Student::factory()->create(['company_id' => $company->id]);
+
+        foreach ([true, []] as $bad) {
+            $this->actingAs($coordinator)
+                ->patchJson("/internship-assignment/{$student->id}", $this->updatePayload($student, ['company_id' => $bad]))
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('company_id');
+
+            $this->actingAs($coordinator)
+                ->patchJson("/internship-assignment/{$student->id}", $this->updatePayload($student, ['supervisor_id' => $bad]))
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('supervisor_id');
+        }
+
+        $this->assertSame($company->id, $student->fresh()->company_id);
+
+        // The form's "" still means unassigned.
+        $this->actingAs($coordinator)
+            ->patch("/internship-assignment/{$student->id}", $this->updatePayload($student, ['company_id' => '', 'supervisor_id' => '']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull($student->fresh()->company_id);
+    }
+
     public function test_index_exposes_company_and_roster_status_for_the_form(): void
     {
         $coordinator = User::factory()->create(['role_id' => 2]);

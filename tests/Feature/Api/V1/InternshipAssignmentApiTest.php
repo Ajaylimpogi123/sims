@@ -330,7 +330,7 @@ class InternshipAssignmentApiTest extends TestCase
         $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_ADMIN), $this->payload($student, [
             'section' => 'Q',
             'company_id' => '',
-            'supervisor_id' => 0,
+            'supervisor_id' => null,
         ]))->assertOk()->assertJsonPath('student.section', 'Q')->assertJsonPath('student.company', null);
 
         $this->assertSame(0, Notification::count());
@@ -471,6 +471,51 @@ class InternshipAssignmentApiTest extends TestCase
 
         // Unchanged re-save works.
         $this->api('PATCH', "/api/v1/assignments/{$resident->id}", $coordinator, $this->payload($resident, ['internship_status' => 'completed']))
+            ->assertOk();
+    }
+
+    public function test_ids_that_are_not_numbers_are_422_not_an_id_or_none(): void
+    {
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = $this->supervisorAt($company);
+        $student = $this->student(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
+        $coordinator = $this->user(User::ROLE_COORDINATOR);
+
+        foreach ([true, false, [], [$company->id], 0, '0', -1, 1.5, 'abc'] as $bad) {
+            foreach (['company_id', 'supervisor_id'] as $field) {
+                $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator, $this->payload($student, [$field => $bad]))
+                    ->assertUnprocessable()
+                    ->assertJsonValidationErrors($field);
+            }
+        }
+
+        $this->assertDatabaseHas('students', ['id' => $student->id, 'company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
+        $this->assertSame(0, Notification::count());
+
+        // Numeric strings are ids, as the website sends them.
+        $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator, $this->payload($student, [
+            'company_id' => (string) $company->id,
+            'supervisor_id' => (string) $supervisor->id,
+        ]))->assertOk();
+    }
+
+    public function test_an_inactive_supervisor_cannot_be_taken_along_to_a_new_company(): void
+    {
+        $old = Company::factory()->create(['slots' => 5]);
+        $new = Company::factory()->create(['slots' => 5]);
+        $inactive = $this->supervisorAt($old, ['status' => 'inactive']);
+        $new->supervisors()->attach($inactive->id);
+        $student = $this->student(['company_id' => $old->id, 'supervisor_id' => $inactive->id]);
+
+        $this->assertRefused(
+            $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => $new->id])),
+            'supervisor_inactive', 'supervisor_id',
+        );
+
+        $this->assertSame($old->id, $student->fresh()->company_id);
+
+        // Moving without them works.
+        $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => $new->id, 'supervisor_id' => null]))
             ->assertOk();
     }
 
