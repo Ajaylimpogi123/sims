@@ -108,6 +108,21 @@ export default function UsersTable({ users, roles, filters }) {
                 patch(route("user-management.toggle-status", user.id), {
                     preserveScroll: true,
                     only: ["users", "flash"],
+                    // e.g. errors.status when this would deactivate the
+                    // last active Administrator.
+                    onError: (errors) => {
+                        const messages = Object.values(errors || {})
+                            .flat()
+                            .filter(Boolean);
+                        Swal.fire({
+                            icon: "error",
+                            title: "Status Not Changed",
+                            text:
+                                messages.join("\n") ||
+                                "Something went wrong. Please try again.",
+                            confirmButtonColor: "#dc2626",
+                        });
+                    },
                 });
             }
         });
