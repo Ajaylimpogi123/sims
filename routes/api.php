@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApprovalController;
+use App\Http\Controllers\Api\V1\AssignmentController;
 use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AttendancePhotoController;
 use App\Http\Controllers\Api\V1\AuthController;
@@ -273,6 +274,28 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::delete('companies/{company}/supervisors/{user}', [CompanyController::class, 'detachSupervisor'])
                 ->where(['company' => $id, 'user' => $id])
                 ->name('companies.supervisors.detach');
+        });
+
+        // Internship Assignment: Coordinator and Administrator, like the
+        // website's /internship-assignment (role:2,4). {student} is the
+        // student record id. Rules live in InternshipAssignmentService.
+        Route::middleware('role:2,4')->group(function () {
+            $id = '[1-9][0-9]{0,17}';
+
+            Route::get('assignments', [AssignmentController::class, 'index'])->name('assignments.index');
+            Route::get('assignments/options', [AssignmentController::class, 'options'])->name('assignments.options');
+            Route::get('assignments/{student}', [AssignmentController::class, 'show'])
+                ->where('student', $id)
+                ->name('assignments.show');
+            Route::patch('assignments/{student}', [AssignmentController::class, 'update'])
+                ->where('student', $id)
+                ->name('assignments.update');
+
+            foreach (['activate', 'deactivate'] as $action) {
+                Route::post("assignments/{student}/{$action}", [AssignmentController::class, $action])
+                    ->where('student', $id)
+                    ->name("assignments.{$action}");
+            }
         });
 
         // Evidence photos: every role, scoped per record by
