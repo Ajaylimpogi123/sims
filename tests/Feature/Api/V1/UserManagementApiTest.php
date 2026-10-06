@@ -825,4 +825,129 @@ class UserManagementApiTest extends TestCase
             $this->api('GET', '/api/v1/users/roles', $coordinator)->json('roles'),
         );
     }
+
+    // ---- last Administrator ----------------------------------------------
+
+    public function test_the_last_active_administrator_cannot_be_demoted_on_web_or_api(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN);
+        $this->user(User::ROLE_ADMIN, ['status' => 'inactive']);
+
+        foreach ([User::ROLE_COORDINATOR, User::ROLE_SUPERVISOR] as $role) {
+            $this->api('PATCH', "/api/v1/users/{$admin->id}", $admin, $this->edit($admin, ['role_id' => $role]))
+                ->assertStatus(422)
+                ->assertJsonValidationErrors(['role_id' => UserManagementService::LAST_ADMIN_MESSAGE]);
+
+            $this->web('PATCH', "/user-management/{$admin->id}", $admin, $this->edit($admin, ['role_id' => $role]))
+                ->assertSessionHasErrors(['role_id' => UserManagementService::LAST_ADMIN_MESSAGE]);
+        }
+
+        $this->assertSame(User::ROLE_ADMIN, (int) $admin->fresh()->role_id);
+
+        // Other edits of the last admin still work.
+        $this->api('PATCH', "/api/v1/users/{$admin->id}", $admin, $this->edit($admin, ['name' => 'Still Admin']))->assertOk();
+    }
+
+    public function test_an_administrator_can_be_demoted_while_another_active_one_remains(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN);
+        $other = $this->user(User::ROLE_ADMIN);
+
+        $this->api('PATCH', "/api/v1/users/{$other->id}", $admin, $this->edit($other, ['role_id' => User::ROLE_COORDINATOR]))->assertOk();
+
+        // Now $admin is the last one, so they can't demote themselves.
+        $this->api('PATCH', "/api/v1/users/{$admin->id}", $admin, $this->edit($admin, ['role_id' => User::ROLE_COORDINATOR]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('role_id');
+    }
+
+    public function test_the_last_active_administrator_cannot_be_deactivated(): void
+    {
+        // Only reachable when the acting admin is no longer active themselves
+        // (self-deactivation is refused separately).
+        $actor = $this->user(User::ROLE_ADMIN, ['status' => 'inactive']);
+        $last = $this->user(User::ROLE_ADMIN);
+
+        try {
+            app(UserManagementService::class)->setStatus($actor, $last, false);
+            $this->fail('Expected a ValidationException.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->assertSame([UserManagementService::LAST_ADMIN_MESSAGE], $e->errors()['status']);
+        }
+
+        $this->assertSame('active', $last->fresh()->status);
+
+        // With another active admin it's fine.
+        $this->api('POST', "/api/v1/users/{$last->id}/deactivate", $this->user(User::ROLE_ADMIN))->assertOk();
+    }
+
+    // ---- web sessions --------------------------------------------------
+
+    private function webSession(User $user, string $id): void
+    {
+        DB::table('sessions')->insert([
+            'id' => $id, 'user_id' => $user->id, 'ip_address' => '127.0.0.1',
+            'user_agent' => 'test', 'payload' => '', 'last_activity' => time(),
+        ]);
+    }
+
+    public function test_deactivating_ends_the_users_web_sessions_and_remember_token(): void
+    {
+        config(['session.driver' => 'database']);
+        $target = $this->user(User::ROLE_SUPERVISOR, ['remember_token' => 'old-remember-token']);
+        $bystander = $this->user(User::ROLE_SUPERVISOR);
+        $this->webSession($target, 'target-laptop');
+        $this->webSession($target, 'target-phone');
+        $this->webSession($bystander, 'bystander');
+
+        $this->api('POST', "/api/v1/users/{$target->id}/deactivate", $this->user(User::ROLE_ADMIN))->assertOk();
+
+        $this->assertSame(0, DB::table('sessions')->where('user_id', $target->id)->count());
+        $this->assertSame(1, DB::table('sessions')->where('user_id', $bystander->id)->count());
+        $this->assertNotSame('old-remember-token', $target->fresh()->remember_token);
+    }
+
+    public function test_activating_or_renaming_keeps_web_sessions(): void
+    {
+        config(['session.driver' => 'database']);
+        $admin = $this->user(User::ROLE_ADMIN);
+        $target = $this->user(User::ROLE_SUPERVISOR);
+        $this->webSession($target, 'target-laptop');
+
+        $this->api('POST', "/api/v1/users/{$target->id}/activate", $admin)->assertOk();
+        $this->api('PATCH', "/api/v1/users/{$target->id}", $admin, $this->edit($target, ['name' => 'Renamed']))->assertOk();
+
+        $this->assertSame(1, DB::table('sessions')->where('user_id', $target->id)->count());
+    }
+
+    public function test_role_or_password_change_ends_web_sessions_except_the_editors_own(): void
+    {
+        config(['session.driver' => 'database']);
+        $admin = $this->user(User::ROLE_ADMIN);
+        $target = $this->user(User::ROLE_SUPERVISOR);
+        $this->webSession($target, 'target-laptop');
+
+        $this->api('PATCH', "/api/v1/users/{$target->id}", $admin, $this->edit($target, ['role_id' => User::ROLE_COORDINATOR]))->assertOk();
+        $this->assertSame(0, DB::table('sessions')->where('user_id', $target->id)->count());
+
+        // Editing yourself on the website keeps the session you're using.
+        $this->webSession($admin, 'admin-current');
+        $this->webSession($admin, 'admin-other-device');
+
+        app(UserManagementService::class)->update($admin, $admin, $this->edit($admin, [
+            'password' => self::PASSWORD, 'password_confirmation' => self::PASSWORD,
+        ]), 'admin-current');
+
+        $this->assertSame(['admin-current'], DB::table('sessions')->where('user_id', $admin->id)->pluck('id')->all());
+    }
+
+    public function test_users_without_a_role_are_listed_for_coordinators_like_they_are_viewable(): void
+    {
+        $coordinator = $this->user(User::ROLE_COORDINATOR);
+        $noRole = User::factory()->create(['role_id' => null, 'status' => 'active']);
+
+        $this->api('GET', "/api/v1/users/{$noRole->id}", $coordinator)->assertOk();
+        $this->assertContains($noRole->id, collect($this->api('GET', '/api/v1/users', $coordinator)->json('data'))->pluck('id'));
+        $this->assertNotContains($noRole->id, collect($this->api('GET', '/api/v1/users?role_id=2', $coordinator)->json('data'))->pluck('id'));
+    }
 }

@@ -44,7 +44,12 @@ class UserController extends Controller
             $this->users->updateRules($request->user(), $user, $request->filled('password')),
         );
 
-        $this->users->update($request->user(), $user, $validated);
+        $this->users->update(
+            $request->user(),
+            $user,
+            $validated,
+            $request->hasSession() ? $request->session()->getId() : null,
+        );
 
         return redirect()->route('user-management.index')
             ->with('success', 'User updated successfully.');

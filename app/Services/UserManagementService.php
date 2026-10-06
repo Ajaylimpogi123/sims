@@ -13,6 +13,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
@@ -33,6 +34,11 @@ use Illuminate\Validation\ValidationException;
  */
 class UserManagementService
 {
+    public const LAST_ADMIN_MESSAGE = 'At least one active Administrator is required.';
+
+    /** Retries for a deadlock between racing Administrator changes. */
+    private const ATTEMPTS = 3;
+
     /**
      * Users the viewer may see, with the list filters (role_id, status,
      * search) applied, newest first.
@@ -62,7 +68,7 @@ class UserManagementService
     {
         return $query->when(
             ! $viewer->hasRole(User::ROLE_ADMIN),
-            fn (Builder $q) => $q->where('role_id', '!=', User::ROLE_ADMIN),
+            fn (Builder $q) => $q->where(fn (Builder $w) => $w->whereNull('role_id')->orWhere('role_id', '!=', User::ROLE_ADMIN)),
         );
     }
 
@@ -193,10 +199,10 @@ class UserManagementService
      * @throws AuthorizationException when the user became unmanageable meanwhile
      * @throws ModelNotFoundException when the user was deleted meanwhile
      */
-    public function update(User $actor, User $target, array $data): User
+    public function update(User $actor, User $target, array $data, ?string $keepSessionId = null): User
     {
         try {
-            DB::transaction(function () use ($actor, $target, $data) {
+            DB::transaction(function () use ($actor, $target, $data, $keepSessionId) {
                 $current = $this->lock($target);
 
                 if (! $this->canEdit($actor, $current)) {
@@ -220,6 +226,10 @@ class UserManagementService
 
                 $roleChanged = (int) $attributes['role_id'] !== (int) $current->role_id;
 
+                if ($roleChanged && $this->isLastActiveAdministrator($current)) {
+                    throw ValidationException::withMessages(['role_id' => self::LAST_ADMIN_MESSAGE]);
+                }
+
                 $current->update($attributes);
 
                 // A role change re-scopes everything the user can reach, and
@@ -227,11 +237,11 @@ class UserManagementService
                 // the mobile app out now rather than letting an old token
                 // keep working.
                 if ($roleChanged || isset($attributes['password'])) {
-                    $current->revokeApiTokens();
+                    $this->signOut($current, $keepSessionId);
                 }
 
                 $target->setRawAttributes($current->getAttributes(), true);
-            });
+            }, self::ATTEMPTS);
         } catch (UniqueConstraintViolationException) {
             throw self::emailTaken();
         }
@@ -259,16 +269,63 @@ class UserManagementService
                 throw new AuthorizationException('You cannot manage an Administrator account.');
             }
 
+            if (! $active && $this->isLastActiveAdministrator($current)) {
+                throw ValidationException::withMessages(['status' => self::LAST_ADMIN_MESSAGE]);
+            }
+
             $current->update(['status' => $active ? 'active' : 'inactive']);
 
             if (! $active) {
-                $current->revokeApiTokens();
+                $this->signOut($current);
             }
 
             $target->setRawAttributes($current->getAttributes(), true);
-        });
+        }, self::ATTEMPTS);
 
         return $target;
+    }
+
+    /**
+     * True when $user is an active Administrator and no other active
+     * Administrator exists: demoting or deactivating them would leave
+     * nobody able to grant the role again. The other Administrators are
+     * locked too, so two admins demoting each other at once can't both
+     * succeed (the loser of a deadlock is retried and then refused).
+     */
+    private function isLastActiveAdministrator(User $user): bool
+    {
+        if (! $user->hasRole(User::ROLE_ADMIN) || ! $user->isActive()) {
+            return false;
+        }
+
+        return ! User::query()
+            ->where('role_id', User::ROLE_ADMIN)
+            ->where('status', 'active')
+            ->whereKeyNot($user->id)
+            ->lockForUpdate()
+            ->exists();
+    }
+
+    /**
+     * End the user's mobile app (API tokens) and website sessions. With the
+     * database session driver their session rows are deleted, so their
+     * next web request is logged out; $keepSessionId spares the caller's
+     * own session when they edit themselves.
+     */
+    private function signOut(User $user, ?string $keepSessionId = null): void
+    {
+        $user->revokeApiTokens();
+
+        // A "remember me" cookie would otherwise log them straight back in.
+        User::query()->whereKey($user->id)->update(['remember_token' => Str::random(60)]);
+
+        if (config('session.driver') === 'database') {
+            DB::connection(config('session.connection'))
+                ->table(config('session.table', 'sessions'))
+                ->where('user_id', $user->id)
+                ->when($keepSessionId !== null, fn ($q) => $q->where('id', '!=', $keepSessionId))
+                ->delete();
+        }
     }
 
     /**
