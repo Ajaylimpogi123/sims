@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\ApprovalController;
 use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AttendancePhotoController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CompanyController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\EvaluationController;
 use App\Http\Controllers\Api\V1\EvaluationCriteriaController;
@@ -237,6 +238,41 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                     ->where('user', '[1-9][0-9]{0,17}')
                     ->name("users.{$action}");
             }
+        });
+
+        // Company Management and supervisor roster: Coordinator and
+        // Administrator, like the website's /company-management (role:2,4).
+        // Rules live in CompanyManagementService.
+        Route::middleware('role:2,4')->group(function () {
+            $id = '[1-9][0-9]{0,17}';
+
+            Route::get('companies', [CompanyController::class, 'index'])->name('companies.index');
+            Route::post('companies', [CompanyController::class, 'store'])->name('companies.store');
+            Route::get('companies/{company}', [CompanyController::class, 'show'])
+                ->where('company', $id)
+                ->name('companies.show');
+            Route::patch('companies/{company}', [CompanyController::class, 'update'])
+                ->where('company', $id)
+                ->name('companies.update');
+            Route::delete('companies/{company}', [CompanyController::class, 'destroy'])
+                ->where('company', $id)
+                ->name('companies.destroy');
+
+            foreach (['activate', 'deactivate'] as $action) {
+                Route::post("companies/{company}/{$action}", [CompanyController::class, $action])
+                    ->where('company', $id)
+                    ->name("companies.{$action}");
+            }
+
+            Route::get('companies/{company}/supervisors/available', [CompanyController::class, 'availableSupervisors'])
+                ->where('company', $id)
+                ->name('companies.supervisors.available');
+            Route::post('companies/{company}/supervisors', [CompanyController::class, 'attachSupervisor'])
+                ->where('company', $id)
+                ->name('companies.supervisors.attach');
+            Route::delete('companies/{company}/supervisors/{user}', [CompanyController::class, 'detachSupervisor'])
+                ->where(['company' => $id, 'user' => $id])
+                ->name('companies.supervisors.detach');
         });
 
         // Evidence photos: every role, scoped per record by
