@@ -25,6 +25,11 @@ class Company extends Model
         return $this->hasMany(Student::class);
     }
 
+    public function evaluations()
+    {
+        return $this->hasMany(Evaluation::class);
+    }
+
     public function supervisors()
     {
         return $this->belongsToMany(User::class, 'company_supervisors')->withTimestamps();
