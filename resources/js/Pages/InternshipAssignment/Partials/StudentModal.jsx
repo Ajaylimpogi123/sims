@@ -41,22 +41,47 @@ export default function StudentModal({ student, companies, children }) {
         handleSubmit,
     } = useManageStudent(student);
 
+    const isCurrentCompany = (company) =>
+        student?.company_id != null &&
+        String(company.id) === String(student.company_id);
+    const isCurrentSupervisor = (supervisor) =>
+        student?.supervisor_id != null &&
+        String(supervisor.id) === String(student.supervisor_id);
+
+    // Only active companies can take a NEW assignment; the student's current
+    // company stays listed (even if inactive) so the existing placement can
+    // be kept. The server enforces the same rule.
+    const selectableCompanies = useMemo(
+        () =>
+            companies.filter(
+                (c) => c.status === "active" || isCurrentCompany(c),
+            ),
+        [companies, student?.company_id],
+    );
+
     // The supervisor dropdown is dependent on the selected company — only
-    // supervisors on that company's roster (Company Management) are
-    // selectable, not every role-3 user system-wide.
+    // active supervisors on that company's roster (Company Management) are
+    // selectable, plus the student's current supervisor if they're still on
+    // that roster (even if inactive).
+    const rosterFor = (companyId) => {
+        const company = companies.find((c) => String(c.id) === companyId);
+        return (company?.supervisors || []).filter(
+            (s) => s.status === "active" || isCurrentSupervisor(s),
+        );
+    };
+
     const selectedCompany = useMemo(
         () => companies.find((c) => String(c.id) === data.company_id),
         [companies, data.company_id],
     );
-    const rosterSupervisors = selectedCompany?.supervisors || [];
+    const rosterSupervisors = useMemo(
+        () => rosterFor(data.company_id),
+        [companies, data.company_id, student?.supervisor_id],
+    );
 
     const handleCompanyChange = (value) => {
         const newCompanyId = value === UNASSIGNED ? "" : value;
-        const newCompany = companies.find(
-            (c) => String(c.id) === newCompanyId,
-        );
-        const newRoster = newCompany?.supervisors || [];
-        const supervisorStillValid = newRoster.some(
+        const supervisorStillValid = rosterFor(newCompanyId).some(
             (supervisor) => String(supervisor.id) === data.supervisor_id,
         );
 
@@ -177,7 +202,7 @@ export default function StudentModal({ student, companies, children }) {
                                             <SelectItem value={UNASSIGNED}>
                                                 Unassigned
                                             </SelectItem>
-                                            {companies.map((company) => (
+                                            {selectableCompanies.map((company) => (
                                                 <SelectItem
                                                     key={company.id}
                                                     value={String(company.id)}
@@ -186,6 +211,9 @@ export default function StudentModal({ student, companies, children }) {
                                                     {company.students_count ??
                                                         0}
                                                     /{company.slots})
+                                                    {company.status !==
+                                                        "active" &&
+                                                        " (inactive)"}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -225,8 +253,8 @@ export default function StudentModal({ student, companies, children }) {
                                             {rosterSupervisors.length ===
                                                 0 && selectedCompany && (
                                                 <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                                                    No supervisors on this
-                                                    company's roster yet
+                                                    No active supervisors on
+                                                    this company's roster
                                                 </div>
                                             )}
                                             {rosterSupervisors.map(
@@ -238,6 +266,9 @@ export default function StudentModal({ student, companies, children }) {
                                                         )}
                                                     >
                                                         {supervisor.name}
+                                                        {supervisor.status !==
+                                                            "active" &&
+                                                            " (inactive)"}
                                                     </SelectItem>
                                                 ),
                                             )}
