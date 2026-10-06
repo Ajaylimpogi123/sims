@@ -475,6 +475,115 @@ class InternshipAssignmentTest extends TestCase
         ]);
     }
 
+    public function test_assigning_a_student_to_an_inactive_company_is_refused(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->inactive()->create(['slots' => 5, 'company_name' => 'Dormant Inc']);
+        $student = Student::factory()->create();
+
+        $this->actingAs($coordinator)
+            ->patch("/internship-assignment/{$student->id}", $this->updatePayload($student, ['company_id' => $company->id]))
+            ->assertSessionHasErrors(['company_id' => 'Dormant Inc is inactive. Activate it in Company Management before assigning students to it.']);
+
+        $this->assertNull($student->fresh()->company_id);
+    }
+
+    public function test_picking_a_new_supervisor_at_an_inactive_company_is_refused(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->inactive()->create(['slots' => 5]);
+        $supervisor = User::factory()->create(['role_id' => 3, 'status' => 'active']);
+        $company->supervisors()->attach($supervisor->id);
+        $student = Student::factory()->create(['company_id' => $company->id]);
+
+        $this->actingAs($coordinator)
+            ->patch("/internship-assignment/{$student->id}", $this->updatePayload($student, ['supervisor_id' => $supervisor->id]))
+            ->assertSessionHasErrors('company_id');
+
+        $this->assertNull($student->fresh()->supervisor_id);
+    }
+
+    public function test_a_student_already_at_an_inactive_company_with_an_inactive_supervisor_can_still_be_edited(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->inactive()->create(['slots' => 1]);
+        $supervisor = User::factory()->create(['role_id' => 3, 'status' => 'inactive']);
+        $company->supervisors()->attach($supervisor->id);
+        $student = Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
+
+        $this->actingAs($coordinator)
+            ->patch("/internship-assignment/{$student->id}", $this->updatePayload($student, [
+                'section' => 'Z',
+                'internship_status' => 'completed',
+            ]))
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('internship-assignment.index', absolute: false));
+
+        $this->assertDatabaseHas('students', ['id' => $student->id, 'section' => 'Z', 'internship_status' => 'completed']);
+
+        // Removing the supervisor is always allowed.
+        $this->actingAs($coordinator)
+            ->patch("/internship-assignment/{$student->id}", $this->updatePayload($student->fresh(), ['supervisor_id' => null]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull($student->fresh()->supervisor_id);
+    }
+
+    public function test_assigning_an_inactive_supervisor_is_refused(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = User::factory()->create(['role_id' => 3, 'status' => 'inactive']);
+        $company->supervisors()->attach($supervisor->id);
+        $student = Student::factory()->create(['company_id' => $company->id]);
+
+        $this->actingAs($coordinator)
+            ->patch("/internship-assignment/{$student->id}", $this->updatePayload($student, ['supervisor_id' => $supervisor->id]))
+            ->assertSessionHasErrors(['supervisor_id' => "This supervisor's account is inactive. Activate it in User Management before assigning students to them."]);
+
+        $this->assertNull($student->fresh()->supervisor_id);
+    }
+
+    public function test_array_values_are_a_validation_error_not_a_server_error(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $company->supervisors()->attach($supervisor->id);
+        $student = Student::factory()->create();
+
+        $this->actingAs($coordinator)
+            ->patch("/internship-assignment/{$student->id}", $this->updatePayload($student, [
+                'company_id' => [$company->id],
+                'supervisor_id' => [$supervisor->id],
+                'email' => ['a@b.test'],
+                'student_number' => ['X-1'],
+            ]))
+            ->assertSessionHasErrors(['company_id', 'supervisor_id', 'email', 'student_number']);
+
+        $this->actingAs($coordinator)
+            ->patch("/internship-assignment/{$student->id}", $this->updatePayload($student, [
+                'company_id' => [$company->id],
+                'supervisor_id' => $supervisor->id,
+            ]))
+            ->assertSessionHasErrors('company_id');
+    }
+
+    public function test_index_exposes_company_and_roster_status_for_the_form(): void
+    {
+        $coordinator = User::factory()->create(['role_id' => 2]);
+        $company = Company::factory()->inactive()->create();
+        $supervisor = User::factory()->create(['role_id' => 3, 'status' => 'inactive']);
+        $company->supervisors()->attach($supervisor->id);
+
+        $this->actingAs($coordinator)
+            ->get('/internship-assignment')
+            ->assertInertia(fn ($page) => $page
+                ->component('InternshipAssignment/Index')
+                ->where('companies.0.status', 'inactive')
+                ->where('companies.0.supervisors.0.status', 'inactive'));
+    }
+
     public function test_coordinator_can_toggle_a_students_account_status(): void
     {
         $coordinator = User::factory()->create(['role_id' => 2]);
