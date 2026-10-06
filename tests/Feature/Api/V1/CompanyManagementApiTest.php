@@ -314,6 +314,7 @@ class CompanyManagementApiTest extends TestCase
             'slots text' => [['slots' => 'five'], 'slots'],
             'slots too big' => [['slots' => 4294967296], 'slots'],
             'slots array' => [['slots' => [1]], 'slots'],
+            'slots boolean' => [['slots' => true], 'slots'],
         ];
     }
 

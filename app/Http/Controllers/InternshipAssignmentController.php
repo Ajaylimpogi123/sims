@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -113,28 +114,34 @@ class InternshipAssignmentController extends Controller
             'internship_schedule' => ['nullable', 'string', 'max:255'],
         ]);
 
-        if (
-            $validated['company_id']
-            && (int) $validated['company_id'] !== (int) $student->company_id
-        ) {
-            $company = Company::findOrFail($validated['company_id']);
-
-            $assignedCount = Student::where('company_id', $company->id)->count();
-
-            if ($assignedCount >= $company->slots) {
-                return back()
-                    ->withErrors([
-                        'company_id' => "{$company->company_name} has no available slots ({$assignedCount}/{$company->slots} filled).",
-                    ])
-                    ->withInput();
-            }
-        }
-
         $hasAssignmentChanges = collect($validated)
             ->only(self::ASSIGNMENT_FIELDS)
             ->contains(fn ($value, $key) => (string) $student->{$key} !== (string) $value);
 
         DB::transaction(function () use ($student, $validated) {
+            // Lock the target company so this save is serialised with other
+            // assignments to it (slot count) and with a company delete
+            // (CompanyManagementService::delete locks the same row first).
+            if ($validated['company_id']) {
+                $company = Company::query()->lockForUpdate()->find($validated['company_id']);
+
+                if ($company === null) {
+                    throw ValidationException::withMessages([
+                        'company_id' => __('validation.exists', ['attribute' => 'company id']),
+                    ]);
+                }
+
+                if ((int) $company->id !== (int) $student->company_id) {
+                    $assignedCount = Student::query()->where('company_id', $company->id)->lockForUpdate()->count();
+
+                    if ($assignedCount >= $company->slots) {
+                        throw ValidationException::withMessages([
+                            'company_id' => "{$company->company_name} has no available slots ({$assignedCount}/{$company->slots} filled).",
+                        ]);
+                    }
+                }
+            }
+
             $student->user->update([
                 'name' => $validated['name'],
                 'email' => $validated['email'],

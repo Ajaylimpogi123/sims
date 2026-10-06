@@ -90,7 +90,7 @@ class CompanyManagementService
             'contact_number' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'string', 'email', 'max:255'],
             'industry' => ['nullable', 'string', 'max:255'],
-            'slots' => ['required', 'integer', 'min:0', 'max:'.self::MAX_SLOTS],
+            'slots' => ['required', 'numeric', 'integer', 'min:0', 'max:'.self::MAX_SLOTS],
         ];
     }
 
