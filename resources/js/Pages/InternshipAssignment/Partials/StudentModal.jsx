@@ -62,11 +62,17 @@ export default function StudentModal({ student, companies, children }) {
     // The supervisor dropdown is dependent on the selected company — only
     // active supervisors on that company's roster (Company Management) are
     // selectable, plus the student's current supervisor if they're still on
-    // that roster (even if inactive).
+    // that roster (even if inactive) — but an inactive supervisor can't follow
+    // the student to a different company.
     const rosterFor = (companyId) => {
         const company = companies.find((c) => String(c.id) === companyId);
+        const sameCompany =
+            student?.company_id != null &&
+            String(student.company_id) === companyId;
         return (company?.supervisors || []).filter(
-            (s) => s.status === "active" || isCurrentSupervisor(s),
+            (s) =>
+                s.status === "active" ||
+                (sameCompany && isCurrentSupervisor(s)),
         );
     };
 
