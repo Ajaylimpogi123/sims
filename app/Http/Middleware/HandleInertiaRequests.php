@@ -38,7 +38,6 @@ class HandleInertiaRequests extends Middleware
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
-                'sale_id' => $request->session()->get('sale_id'),
             ],
             'pendingApprovalsCount' => fn () => in_array($request->user()?->role_id, [3, 4], true)
                 ? \App\Models\Attendance::query()
