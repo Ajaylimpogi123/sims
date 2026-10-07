@@ -12,8 +12,10 @@ Route::middleware(['auth', 'role:2,4'])->group(function () {
         ->name('user-management.store');
 
     Route::patch('/user-management/{id}', [UserController::class, 'update'])
+        ->where('id', '[1-9][0-9]{0,17}')
         ->name('user-management.update');
 
     Route::patch('/user-management/{id}/toggle-status', [UserController::class, 'toggleStatus'])
+        ->where('id', '[1-9][0-9]{0,17}')
         ->name('user-management.toggle-status');
 });

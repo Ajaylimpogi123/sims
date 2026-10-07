@@ -123,4 +123,14 @@ class UserManagementHardeningTest extends TestCase
         $this->assertSame(User::ROLE_ADMIN, (int) $admin->fresh()->role_id);
         $this->assertSame('active', $admin->fresh()->status);
     }
+
+    public function test_a_non_numeric_or_overflowing_user_id_is_not_found(): void
+    {
+        $admin = User::factory()->create(['role_id' => User::ROLE_ADMIN]);
+
+        foreach (['abc', '0', '-1', '99999999999999999999'] as $id) {
+            $this->actingAs($admin)->patch("/user-management/{$id}", [])->assertNotFound();
+            $this->actingAs($admin)->patch("/user-management/{$id}/toggle-status")->assertNotFound();
+        }
+    }
 }
