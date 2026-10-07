@@ -55,7 +55,7 @@ class NotificationService
      */
     public function attendanceSubmitted(Attendance $attendance, string $leg): void
     {
-        $recipients = User::where('role_id', self::ADMIN_ROLE_ID)->get();
+        $recipients = $this->activeUsers(self::ADMIN_ROLE_ID);
 
         $supervisor = $this->attendanceSupervisor($attendance);
 
@@ -90,11 +90,12 @@ class NotificationService
 
     /**
      * The student's assigned supervisor, but only while that account still
-     * holds the Supervisor role — only role 3 can act on approvals.
+     * holds the Supervisor role — only role 3 can act on approvals — and is
+     * active.
      */
     public function attendanceSupervisor(Attendance $attendance): ?User
     {
-        $supervisor = $attendance->student?->supervisor;
+        $supervisor = $this->activeSupervisor($attendance->student);
 
         return $supervisor && (int) $supervisor->role_id === self::SUPERVISOR_ROLE_ID
             ? $supervisor
@@ -139,8 +140,8 @@ class NotificationService
 
         $recipients = $this->staffUsers();
 
-        if ($student?->supervisor) {
-            $recipients->push($student->supervisor);
+        if ($supervisor = $this->activeSupervisor($student)) {
+            $recipients->push($supervisor);
         }
 
         $this->notifyMany(
@@ -188,12 +189,14 @@ class NotificationService
 
         $recipients = collect();
 
+        // The student is told even while deactivated: it's the record of
+        // their own internship (and feeds their supervisor's Recent Activity).
         if ($student->user) {
             $recipients->push($student->user);
         }
 
-        if ($student->supervisor) {
-            $recipients->push($student->supervisor);
+        if ($supervisor = $this->activeSupervisor($student)) {
+            $recipients->push($supervisor);
         }
 
         $this->notifyMany(
@@ -211,7 +214,7 @@ class NotificationService
     public function studentRegistered(User $studentUser, string $studentNumber): void
     {
         $this->notifyMany(
-            User::where('role_id', self::ADMIN_ROLE_ID)->get(),
+            $this->activeUsers(self::ADMIN_ROLE_ID),
             'student_registered',
             'New student registration',
             "{$studentUser->name} ({$studentNumber}) just registered.",
@@ -245,7 +248,34 @@ class NotificationService
      */
     private function staffUsers(): Collection
     {
-        return User::whereIn('role_id', self::STAFF_ROLE_IDS)->get();
+        return $this->activeUsers(...self::STAFF_ROLE_IDS);
+    }
+
+    /**
+     * Every *active* user holding one of the roles. Role-wide notifications
+     * never go to deactivated accounts: they can't sign in to act on them,
+     * and would otherwise find a stale backlog if reactivated.
+     *
+     * @return Collection<int, User>
+     */
+    private function activeUsers(int ...$roleIds): Collection
+    {
+        return User::query()
+            ->whereIn('role_id', $roleIds)
+            ->where('status', 'active')
+            ->get();
+    }
+
+    /**
+     * The student's assigned supervisor as a staff recipient, or null when
+     * there is none or the account is deactivated (same reasoning as
+     * activeUsers()).
+     */
+    private function activeSupervisor(?Student $student): ?User
+    {
+        $supervisor = $student?->supervisor;
+
+        return $supervisor && $supervisor->isActive() ? $supervisor : null;
     }
 
     /**
