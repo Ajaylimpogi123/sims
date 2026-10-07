@@ -133,4 +133,32 @@ class UserManagementHardeningTest extends TestCase
             $this->actingAs($admin)->patch("/user-management/{$id}/toggle-status")->assertNotFound();
         }
     }
+
+    public function test_the_last_active_administrator_cannot_delete_their_own_account(): void
+    {
+        $admin = User::factory()->create(['role_id' => User::ROLE_ADMIN]);
+        User::factory()->create(['role_id' => User::ROLE_ADMIN, 'status' => 'inactive']);
+
+        $this->actingAs($admin)
+            ->from('/profile')
+            ->delete('/profile', ['password' => 'password'])
+            ->assertSessionHasErrors(['password' => UserManagementService::LAST_ADMIN_MESSAGE])
+            ->assertRedirect('/profile');
+
+        $this->assertNotNull($admin->fresh());
+        $this->assertAuthenticatedAs($admin);
+    }
+
+    public function test_an_administrator_can_delete_their_own_account_when_another_active_one_exists(): void
+    {
+        $admin = User::factory()->create(['role_id' => User::ROLE_ADMIN]);
+        User::factory()->create(['role_id' => User::ROLE_ADMIN]);
+
+        $this->actingAs($admin)
+            ->delete('/profile', ['password' => 'password'])
+            ->assertRedirect('/');
+
+        $this->assertNull($admin->fresh());
+        $this->assertGuest();
+    }
 }

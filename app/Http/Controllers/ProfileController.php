@@ -4,11 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\Student;
+use App\Models\User;
+use App\Services\UserManagementService;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -58,9 +62,31 @@ class ProfileController extends Controller
         // them only once the delete has succeeded.
         $storedFiles = $user->student?->storedFiles();
 
-        Auth::logout();
+        DB::transaction(function () use ($user) {
+            // Same guard as User Management: the last active Administrator
+            // can't remove themselves, or nobody could grant the role again.
+            // Locking the admins makes two admins deleting at once safe.
+            $current = User::query()->lockForUpdate()->find($user->id);
 
-        $user->delete();
+            if ($current?->hasRole(User::ROLE_ADMIN) && $current->isActive()) {
+                $otherAdmins = User::query()
+                    ->where('role_id', User::ROLE_ADMIN)
+                    ->where('status', 'active')
+                    ->whereKeyNot($user->id)
+                    ->lockForUpdate()
+                    ->exists();
+
+                if (! $otherAdmins) {
+                    throw ValidationException::withMessages([
+                        'password' => UserManagementService::LAST_ADMIN_MESSAGE,
+                    ]);
+                }
+            }
+
+            Auth::logout();
+
+            $user->delete();
+        }, 3);
 
         if ($storedFiles) {
             Student::deleteStoredFiles($storedFiles);
