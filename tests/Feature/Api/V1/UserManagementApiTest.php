@@ -892,20 +892,21 @@ class UserManagementApiTest extends TestCase
         ]);
     }
 
-    public function test_deactivating_ends_the_users_web_sessions_and_remember_token(): void
+    public function test_deactivating_leaves_web_sessions_for_the_deactivated_message(): void
     {
+        // The website sessions are ended by EnsureAccountIsActive on the
+        // user's next request, which shows them the "deactivated" message
+        // (DeactivationMessageTest); only the API tokens go now.
         config(['session.driver' => 'database']);
         $target = $this->user(User::ROLE_SUPERVISOR, ['remember_token' => 'old-remember-token']);
-        $bystander = $this->user(User::ROLE_SUPERVISOR);
+        $target->createToken('phone');
         $this->webSession($target, 'target-laptop');
         $this->webSession($target, 'target-phone');
-        $this->webSession($bystander, 'bystander');
 
         $this->api('POST', "/api/v1/users/{$target->id}/deactivate", $this->user(User::ROLE_ADMIN))->assertOk();
 
-        $this->assertSame(0, DB::table('sessions')->where('user_id', $target->id)->count());
-        $this->assertSame(1, DB::table('sessions')->where('user_id', $bystander->id)->count());
-        $this->assertNotSame('old-remember-token', $target->fresh()->remember_token);
+        $this->assertSame(0, $target->tokens()->count());
+        $this->assertSame(2, DB::table('sessions')->where('user_id', $target->id)->count());
     }
 
     public function test_activating_or_renaming_keeps_web_sessions(): void

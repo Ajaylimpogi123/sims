@@ -31,7 +31,9 @@ use Illuminate\Validation\ValidationException;
  *   always keeps the Student role.
  * - Nobody can change their own account status.
  * - A role change, a new password or a deactivation revokes the user's
- *   mobile API tokens.
+ *   mobile API tokens. A role or password change also ends their website
+ *   sessions; a deactivation leaves those to EnsureAccountIsActive, which
+ *   logs them out with the "deactivated" message on their next request.
  */
 class UserManagementService
 {
@@ -261,7 +263,7 @@ class UserManagementService
 
     /**
      * Set the account status (idempotent); deactivating revokes the user's
-     * API tokens.
+     * API tokens (their website sessions are ended by EnsureAccountIsActive).
      *
      * @throws AuthorizationException on yourself or an unmanageable user
      * @throws ModelNotFoundException when the user was deleted meanwhile
@@ -285,8 +287,13 @@ class UserManagementService
 
             $current->update(['status' => $active ? 'active' : 'inactive']);
 
+            // Only the mobile app is signed out here. The website sessions
+            // (and the remember-me cookie) are left alone on purpose:
+            // EnsureAccountIsActive refuses every web request of an inactive
+            // account, ending that session with the "deactivated" message
+            // instead of a silent bounce to the login page.
             if (! $active) {
-                $this->signOut($current);
+                $current->revokeApiTokens();
             }
 
             $target->setRawAttributes($current->getAttributes(), true);
