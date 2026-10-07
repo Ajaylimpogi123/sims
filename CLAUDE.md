@@ -4,22 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state — read this first
 
-This repo was repurposed from a different application and shares the Laravel installation with its leftovers:
+**SIMS (Student Internship Management System, referred to as "Student Information Management System" in `APP_NAME`)** — for Bacolod City College's OJT/internship program. Domain: Students, Companies (internship host companies), Users with roles (`Student`, `Internship Coordinator`, `Supervisor`, `Administrator` — role IDs 1–4, see `database/seeders/RoleSeeder.php`).
 
-1. **"Westpoint"** — a multi-branch pharmacy POS / medicine inventory system that used to live here. Its controllers, models, and migrations (Product, MedicineProduct, ProductQty, StockIn/StockOut/StockTransfer, Pos, Order, Quotation, Branch, Customer, Table, etc.) have been deleted from the working tree.
-2. **SIMS (Student Internship Management System, referred to as "Student Information Management System" in `APP_NAME`)** — the app actively being built now, for Bacolod City College's OJT/internship program (see `PRINTER_STORE_NAME` in `.env`). Domain: Students, Companies (internship host companies), Users with roles (`Student`, `Internship Coordinator`, `Supervisor`, `Administrator` — role IDs 1–4, see `database/seeders/RoleSeeder.php`).
+This repo was repurposed from an old pharmacy POS app ("Westpoint"). Its code and tests were fully removed on 2026-10-07 (commits 0b23616…53349e9); `docs/QA-AUDIT-REPORT.md` remains as historical reference only. The full test suite (`db_sims_testing`) is expected to pass with **0 failures**. The `PRINTER_*` keys in `.env` are unused leftovers.
 
-Because the old system's models/controllers were deleted but not every reference to them was cleaned up, **some currently-committed files still point at classes that no longer exist and are dead code**:
-
-- `app/Services/{InventoryStockService,InventoryMovementLogger,ReceiptPrinterService,DocumentNumberService}.php`, `app/Console/Commands/ExpireLapsedBatches.php`, `app/Exceptions/{InsufficientStockException,InvalidPackSizeException}.php`, and `app/Enums/UnitType.php` reference deleted models (`ProductQty`, `MedicineProduct`, etc.).
-- Several tests reference the old domain and will not run: `tests/Feature/{WestpointFeatureTest,PosSplitBatchSaleTest,StockBatchMergeTest,StockInDuplicateLotTest,BatchDeactivationTest,QuotationMedicineSearchTest}.php`, `tests/Support/SeedsWestpoint.php`. `phpunit.xml` still points `DB_DATABASE` at `db_westpoint_testing`.
-- `docs/QA-AUDIT-REPORT.md` is a QA audit of the old pharmacy system — historical reference only, not current.
-
-When working on SIMS features, don't assume these files compile/run correctly, and don't be surprised by orphaned references — check whether a class you're about to use was actually part of the cleanup before trusting it. If asked to finish the cleanup, these are the pieces still needing removal.
+Only one `php artisan test` run at a time across agents — every run shares `db_sims_testing`, and concurrent runs produce false failures.
 
 ## Agent Team
 
-This repo has three named Claude Code agents (`.claude/agents/`):
+A mobile app (Expo/React Native, Android, all four roles) is being built against a new `/api/v1` JSON API in this Laravel app — see `docs/MOBILE-APP-ROADMAP.md`. The app code lives in a separate repo at `C:\xampp\htdocs\sims-mobile`, owned by the **mobile-developer** agent.
+
+This repo has these named Claude Code agents (`.claude/agents/`), plus `mobile-developer`:
 
 - **backend-developer** — Laravel side: routes, controllers, services, models, migrations, validation, role-based authorization, PHP feature tests. Owns the Inertia props contract (what each controller passes to `Inertia::render`).
 - **frontend-developer** — React/Inertia side: everything under `resources/js` (pages, partials, hooks, shared/shadcn components, charts, responsive layout). Consumes the backend's props contract; doesn't edit PHP.
@@ -65,13 +60,13 @@ There is no configured JS test runner or linter (no eslint config present).
 **Routing** is split by domain instead of one `web.php`:
 - `routes/web.php` — dashboard + profile, and requires the others
 - `routes/auth.php` — login/register/password reset (Breeze-based), plus a separate student self-registration flow (`StudentRegisteredUserController`, distinct from the admin-created-user flow in `RegisteredUserController`)
-- `routes/user.php` — `/user-management/*`, admin-only (`role:4`)
+- `routes/user.php` — `/user-management/*`, coordinator + admin (`role:2,4`); coordinators can't see, create or promote Admins, nobody creates Students (self-registration only)
 - `routes/company.php` — `/company-management/*`, coordinator + admin (`role:2,4`)
 
 **Role-based access** is enforced by `App\Http\Middleware\CheckRoleMiddleware`, registered as the `role:` middleware alias, taking role IDs as params (e.g. `role:2,4`). Role IDs are not an enum — they're plain integers matched against `users.role_id`; the canonical mapping lives in `RoleSeeder`. `User::dashboardRouteName()` decides which dashboard a role lands on after login (`admin-dashboard` for role 4, `dashboard` otherwise) — there's no dedicated Student/Supervisor dashboard route yet, they fall through to the generic one.
 
 **Domain model:** `User` (auth + role_id) → optionally has one `Student` → optionally `belongsTo` a `Company`. `Company` `hasMany` `Student`. Users who aren't students (coordinators, supervisors, admins) have no `Student` row.
 
-**Inertia shared props** (`HandleInertiaRequests::share`) expose `auth.user` and flash messages (`success`/`error`/`sale_id` — `sale_id` is a leftover from the POS flow).
+**Inertia shared props** (`HandleInertiaRequests::share`) expose `auth.user` and flash messages (`success`/`error`).
 
 **Page/controller naming convention:** Inertia views live under `resources/js/Pages/<Feature>/{Index,...}`, matching the controller/route group name (e.g. `CompanyManagement/Index`, `UserManagement/Index`), each with local `Hooks/` and `Partials/` subfolders for feature-specific hooks and sub-components.

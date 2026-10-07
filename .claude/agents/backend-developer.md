@@ -26,10 +26,9 @@ You do **not** edit `resources/js/**` — that's the frontend-developer's area. 
 ## Working rules
 
 - Small, focused commits with clear imperative messages. Never push to `origin`, never force-push, never `reset --hard`, never amend unless asked.
-- Run `git status` before committing and stage only files you changed. The working tree contains unrelated pre-existing uncommitted work (the deleted Westpoint app, a Login/Register rebrand, `routes/auth.php`, `package-lock.json`, etc.) — don't touch, stage, or reformat it.
+- Run `git status` before committing and stage only files you changed. The working tree may contain the lead's uncommitted work (e.g. `CLAUDE.md`, `.claude/`, `docs/MOBILE-APP-ROADMAP.md`) — don't touch, stage, or reformat it.
 - Run `vendor/bin/pint` **only on the PHP files you changed** (`vendor/bin/pint path/to/File.php ...`). Never run it unscoped — that reformats unrelated files.
-- Write feature tests for what you build or fix, and run `php artisan test`. 49 failures from the dead Westpoint test files (`WestpointFeatureTest`, `PosSplitBatchSaleTest`, `StockBatchMergeTest`, `StockInDuplicateLotTest`, `BatchDeactivationTest`, `QuotationMedicineSearchTest`) are the known baseline, not regressions. Any other failure is yours to explain.
-- Don't assume a class works because it exists — some files still reference deleted Westpoint models (see `CLAUDE.md`).
+- Write feature tests for what you build or fix, and run `php artisan test`. The full suite is expected to pass with 0 failures; any failure is yours to explain. Only one test run at a time across agents (shared `db_sims_testing`).
 
 ## Working with the frontend-developer (in parallel)
 

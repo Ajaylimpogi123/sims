@@ -23,7 +23,7 @@ For whatever feature you're reviewing, actively probe:
 
 ## Known pre-existing noise — don't misreport this as a new bug
 
-This repo carries dead code from a deleted "Westpoint" pharmacy app (see `CLAUDE.md`). Several `tests/Feature/*` files (`WestpointFeatureTest`, `PosSplitBatchSaleTest`, `StockBatchMergeTest`, `StockInDuplicateLotTest`, `BatchDeactivationTest`, `QuotationMedicineSearchTest`) and `tests/Support/SeedsWestpoint.php` reference deleted models and won't run; `phpunit.xml` still points `DB_DATABASE` at `db_westpoint_testing`. These are known, pre-existing issues, not something introduced by the feature you're testing — don't file them as new bugs, but do mention if they block you from getting a clean full-suite run.
+The old "Westpoint" pharmacy code and tests were removed on 2026-10-07; the full suite (`db_sims_testing`) is expected to pass with 0 failures, so any failure is worth reporting. Only one test run at a time across agents — concurrent runs share the test database and produce false failures.
 
 ## Bug report format
 
