@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Rules\NotBoolean;
+
 /**
  * GET /evaluations: the website's Supervisor Evaluations list (newest period
  * first), optionally filtered, cursor-paginated over
@@ -21,7 +23,7 @@ class ListEvaluationsRequest extends ListFeedbackRequest
         return [
             ...parent::rules(),
             'status' => ['sometimes', 'nullable', 'string', 'in:'.implode(',', self::STATUSES)],
-            'student_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'student_id' => ['sometimes', 'nullable', new NotBoolean, 'integer', 'min:1'],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
     }

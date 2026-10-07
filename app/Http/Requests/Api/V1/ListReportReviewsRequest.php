@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Rules\NotBoolean;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Pagination\Cursor;
@@ -31,7 +32,7 @@ class ListReportReviewsRequest extends FormRequest
         return [
             'type' => ['sometimes', 'nullable', 'string', 'in:daily,weekly'],
             'status' => ['sometimes', 'nullable', 'string', 'in:pending,reviewed'],
-            'student_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'student_id' => ['sometimes', 'nullable', new NotBoolean, 'integer', 'min:1'],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],
             'cursor' => ['sometimes', 'nullable', 'string', 'max:1000', $this->validCursor(...)],

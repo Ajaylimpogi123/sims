@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\Evaluation;
 use App\Models\Student;
 use App\Models\User;
+use App\Rules\NotBoolean;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -186,7 +187,9 @@ class CompanyManagementService
     {
         return [
             'user_id' => [
+                'bail',
                 'required',
+                new NotBoolean,
                 'integer',
                 'min:1',
                 Rule::exists('users', 'id')->where('role_id', User::ROLE_SUPERVISOR),

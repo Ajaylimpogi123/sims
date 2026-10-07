@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Rules\NotBoolean;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -26,7 +27,7 @@ class ListUsersRequest extends FormRequest
     {
         return [
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'role_id' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:2147483647'],
+            'role_id' => ['sometimes', 'nullable', new NotBoolean, 'integer', 'min:1', 'max:2147483647'],
             'status' => ['sometimes', 'nullable', 'string', 'in:active,inactive'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],

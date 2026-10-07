@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Role;
 use App\Models\User;
+use App\Rules\NotBoolean;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Database\Eloquent\Builder;
@@ -344,6 +345,7 @@ class UserManagementService
     {
         return [
             'required',
+            new NotBoolean,
             'integer',
             'exists:roles,id',
             Rule::notIn($this->forbiddenRoleIds($actor, $target)),

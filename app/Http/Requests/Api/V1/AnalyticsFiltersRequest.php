@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Rules\NotBoolean;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -28,9 +29,9 @@ class AnalyticsFiltersRequest extends FormRequest
             // Compared only against a string date_from: the date comparison
             // throws a TypeError (500) on an array.
             'date_to' => ['nullable', 'date_format:Y-m-d', Rule::when(fn ($input) => is_string($input->date_from), ['after_or_equal:date_from'])],
-            'company_id' => ['nullable', 'integer', 'min:1'],
-            'supervisor_id' => ['nullable', 'integer', 'min:1'],
-            'student_id' => ['nullable', 'integer', 'min:1'],
+            'company_id' => ['nullable', new NotBoolean, 'integer', 'min:1'],
+            'supervisor_id' => ['nullable', new NotBoolean, 'integer', 'min:1'],
+            'student_id' => ['nullable', new NotBoolean, 'integer', 'min:1'],
         ];
     }
 }

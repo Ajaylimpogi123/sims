@@ -9,6 +9,7 @@ use App\Models\EvaluationResponse;
 use App\Models\InternshipReport;
 use App\Models\Student;
 use App\Models\User;
+use App\Rules\NotBoolean;
 use App\Support\AppScreen;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -73,9 +74,9 @@ class DashboardAnalyticsService
             // Compared only against a string date_from: the date comparison
             // throws a TypeError (500) on an array.
             'date_to' => ['nullable', 'date', Rule::when(fn ($input) => is_string($input->date_from), ['after_or_equal:date_from'])],
-            'company_id' => ['nullable', 'integer', 'exists:companies,id'],
-            'supervisor_id' => ['nullable', 'integer', 'exists:users,id'],
-            'student_id' => ['nullable', 'integer', 'exists:students,id'],
+            'company_id' => ['nullable', new NotBoolean, 'integer', 'exists:companies,id'],
+            'supervisor_id' => ['nullable', new NotBoolean, 'integer', 'exists:users,id'],
+            'student_id' => ['nullable', new NotBoolean, 'integer', 'exists:students,id'],
         ]);
 
         $filters = [
