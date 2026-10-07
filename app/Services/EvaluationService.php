@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\EvaluationRuleException;
 use App\Models\Evaluation;
 use App\Models\EvaluationCriteria;
+use App\Models\EvaluationResponse;
 use App\Models\Student;
 use App\Models\User;
 use App\Policies\EvaluationPolicy;
@@ -189,6 +190,7 @@ class EvaluationService
             }
 
             $this->refreshOverallRating($current);
+            $this->snapshotCriteria($current);
 
             $current->update([
                 'status' => 'submitted',
@@ -231,6 +233,10 @@ class EvaluationService
                 'locked_at' => null,
                 'locked_by' => null,
             ]);
+
+            // Back to a draft, so back to the live criteria; resubmitting
+            // takes a fresh snapshot.
+            $current->responses()->update(array_fill_keys(array_keys(EvaluationResponse::SNAPSHOT), null));
         });
     }
 
@@ -279,6 +285,31 @@ class EvaluationService
                 'comment' => $response['comment'] ?? null,
             ]);
         }
+    }
+
+    /**
+     * Copy each rated criterion's current label / category / description
+     * onto its response, so a later rename doesn't change what this
+     * submitted evaluation shows (EvaluationResponse::displayCriterion()).
+     */
+    private function snapshotCriteria(Evaluation $evaluation): void
+    {
+        $evaluation->responses()->with('criteria')->get()
+            ->each(function (EvaluationResponse $response) {
+                $criterion = $response->criteria;
+
+                if ($criterion === null) {
+                    return;
+                }
+
+                $snapshot = [];
+
+                foreach (EvaluationResponse::SNAPSHOT as $column => $attribute) {
+                    $snapshot[$column] = $criterion->getAttribute($attribute);
+                }
+
+                $response->update($snapshot);
+            });
     }
 
     private function refreshOverallRating(Evaluation $evaluation): void

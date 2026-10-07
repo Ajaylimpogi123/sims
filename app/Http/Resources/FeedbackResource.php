@@ -12,8 +12,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * saved ratings grouped by category, built exactly like the website's
  * MyFeedback page: responses in their stored order, grouped by category in
  * first-appearance order, criteria taken from the saved responses (so a
- * criterion deactivated later still shows) and responses whose criterion
- * no longer exists skipped.
+ * criterion deactivated later still shows, worded as it was when the
+ * evaluation was submitted) and responses whose criterion no longer exists
+ * skipped.
  *
  * Load `company:id,company_name` and `supervisor:id,name` (plus
  * `responses.criteria` for the detail) to avoid a query per item.
@@ -85,9 +86,10 @@ class FeedbackResource extends JsonResource
         $groups = [];
 
         collect($responses)
-            ->filter(fn (EvaluationResponse $response) => $response->criteria !== null)
-            ->each(function (EvaluationResponse $response) use (&$groups, $withActiveFlag) {
-                $criterion = $response->criteria;
+            ->map(fn (EvaluationResponse $response) => [$response, $response->displayCriterion()])
+            ->filter(fn (array $pair) => $pair[1] !== null)
+            ->each(function (array $pair) use (&$groups, $withActiveFlag) {
+                [$response, $criterion] = $pair;
 
                 $groups[$criterion->category][] = [
                     'id' => $criterion->id,

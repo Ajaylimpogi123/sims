@@ -53,6 +53,9 @@ class EvaluationController extends Controller
             'responses.criteria',
         ]);
 
+        // A submitted evaluation shows its criteria as worded on submit.
+        $evaluation->responses->each->useDisplayCriterion();
+
         return Inertia::render('SupervisorEvaluations/Show', [
             'evaluation' => $evaluation,
             'criteria' => $this->evaluations->activeCriteria(),
@@ -139,6 +142,7 @@ class EvaluationController extends Controller
                 ->with(['company:id,company_name', 'supervisor:id,name', 'responses.criteria'])
                 ->orderByDesc('evaluation_period_start')
                 ->get()
+                ->each(fn ($evaluation) => $evaluation->responses->each->useDisplayCriterion())
             : collect();
 
         return Inertia::render('SupervisorEvaluations/MyFeedback', [

@@ -912,7 +912,10 @@ class EvaluationApiTest extends TestCase
         $flat = collect($detail['categories'])->flatMap(fn ($group) => $group['criteria'])->keyBy('id');
         $this->assertFalse($flat[$a->id]['is_active']);
         $this->assertSame(5, $flat[$a->id]['rating']);
-        $this->assertSame('Renamed', $flat[$b->id]['label']);
+        // Submitted evaluations keep the wording they were submitted with
+        // (owner decision 2026-10-07; EvaluationCriterionSnapshotTest).
+        $this->assertSame($b->label, $flat[$b->id]['label']);
+        $this->assertNotSame('Renamed', $flat[$b->id]['label']);
         $this->assertSame(3, $flat[$b->id]['rating']);
     }
 
