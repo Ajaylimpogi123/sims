@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
-use Inertia\Inertia;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -54,33 +53,5 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', fn (Request $request) => Limit::perMinute(120)->by(
             (string) ($request->user()?->id ?: $request->ip())
         ));
-    }
-
-    /**
-     * Share common data with Inertia.
-     */
-    protected function shareInertiaData(): void
-    {
-        Inertia::share([
-            'auth' => function () {
-                $user = auth()->user(); // ✅ Store user once
-
-                return [
-                    'user' => $user ? [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        'avatar' => $user->avatar ?? '/images/logo/Westpoint.png',
-                    ] : null,
-                ];
-            },
-
-            'flash' => function () {
-                return [
-                    'success' => session('success'),
-                    'error' => session('error'),
-                ];
-            },
-        ]);
     }
 }
