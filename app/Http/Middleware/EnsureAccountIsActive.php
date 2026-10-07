@@ -27,7 +27,7 @@ class EnsureAccountIsActive
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
-            return redirect()->route('login')->withErrors(['email' => self::MESSAGE]);
+            return redirect()->route('login', status: 303)->withErrors(['email' => self::MESSAGE]);
         }
 
         return $next($request);

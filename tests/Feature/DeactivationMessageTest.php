@@ -8,6 +8,7 @@ use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -134,6 +135,34 @@ class DeactivationMessageTest extends TestCase
 
         $this->assertSame(0, DB::table('attendances')->where('student_id', $student->id)->count());
         $this->assertGuest('web');
+    }
+
+    public static function mutatingInertiaRequests(): array
+    {
+        return [
+            'patch' => ['patch', '/notifications/read-all'],
+            'put' => ['put', '/password'],
+            'delete' => ['delete', '/profile'],
+        ];
+    }
+
+    #[DataProvider('mutatingInertiaRequests')]
+    public function test_an_inertia_patch_put_or_delete_is_sent_to_login_with_a_303(string $method, string $uri): void
+    {
+        // A 302 makes the browser repeat PATCH/PUT/DELETE against /login
+        // (405), so the message would never show.
+        $user = User::factory()->create(['role_id' => User::ROLE_STUDENT, 'status' => 'active']);
+        $sessionId = $this->loginSession($user);
+        $user->forceFill(['status' => 'inactive'])->save();
+
+        $this->asSession($sessionId)
+            ->withHeaders(['X-Inertia' => 'true', 'X-Requested-With' => 'XMLHttpRequest'])
+            ->{$method}($uri)
+            ->assertStatus(303)
+            ->assertRedirect(route('login'))
+            ->assertSessionHasErrors(['email' => EnsureAccountIsActive::MESSAGE]);
+
+        $this->assertNotNull($user->fresh());
     }
 
     public function test_role_or_password_change_still_ends_web_sessions_without_the_message(): void
