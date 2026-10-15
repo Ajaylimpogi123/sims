@@ -50,6 +50,13 @@ export default function StudentModal({
     const hasOffRosterSupervisor =
         student?.supervisor_id != null &&
         student?.supervisor_on_roster === false;
+    // Flagged, has a supervisor, and on the roster: the only remaining
+    // reason is that the account no longer holds the Supervisor role (a role
+    // change in User Management leaves the assignment and roster row behind).
+    const hasNonSupervisorAccount =
+        Boolean(student?.needs_supervisor) &&
+        student?.supervisor_id != null &&
+        student?.supervisor_on_roster !== false;
 
     const isCurrentCompany = (company) =>
         student?.company_id != null &&
@@ -81,19 +88,24 @@ export default function StudentModal({
             String(student.company_id) === companyId;
         const roster = (company?.supervisors || []).filter(
             (s) =>
-                s.status === "active" ||
-                (sameCompany && isCurrentSupervisor(s)),
+                // A current supervisor who's no longer a Supervisor is never
+                // a normal choice (re-added below, flagged, same company).
+                !(hasNonSupervisorAccount && isCurrentSupervisor(s)) &&
+                (s.status === "active" ||
+                    (sameCompany && isCurrentSupervisor(s))),
         );
 
         // The current supervisor may have been removed from this company's
-        // roster since the assignment. Keep them listed (for the same
-        // company only) so the field shows who's assigned instead of a
-        // blank — the server lets an unchanged assignment be kept.
-        if (sameCompany && hasOffRosterSupervisor) {
+        // roster, or lost the Supervisor role, since the assignment. Keep
+        // them listed (for the same company only), flagged, so the field
+        // shows who's assigned instead of a blank.
+        if (sameCompany && (hasOffRosterSupervisor || hasNonSupervisorAccount)) {
             roster.push({
                 id: student.supervisor_id,
                 name: student.supervisor_name,
-                offRoster: true,
+                flag: hasOffRosterSupervisor
+                    ? "not on roster"
+                    : "not a supervisor",
             });
         }
 
@@ -111,6 +123,7 @@ export default function StudentModal({
             data.company_id,
             student?.supervisor_id,
             student?.supervisor_on_roster,
+            student?.needs_supervisor,
         ],
     );
 
@@ -286,7 +299,7 @@ export default function StudentModal({
                                                 Unassigned
                                             </SelectItem>
                                             {!rosterSupervisors.some(
-                                                (s) => !s.offRoster,
+                                                (s) => !s.flag,
                                             ) &&
                                                 selectedCompany && (
                                                 <div className="px-2 py-1.5 text-sm text-muted-foreground">
@@ -303,8 +316,8 @@ export default function StudentModal({
                                                         )}
                                                     >
                                                         {supervisor.name}
-                                                        {supervisor.offRoster
-                                                            ? " (not on roster)"
+                                                        {supervisor.flag
+                                                            ? ` (${supervisor.flag})`
                                                             : supervisor.status !==
                                                                   "active" &&
                                                               " (inactive)"}
@@ -336,6 +349,20 @@ export default function StudentModal({
                                                 one from the roster, or add
                                                 them back in Company
                                                 Management.
+                                            </p>
+                                        )}
+                                    {hasNonSupervisorAccount &&
+                                        !hasOffRosterSupervisor &&
+                                        data.company_id ===
+                                            String(student.company_id) &&
+                                        data.supervisor_id ===
+                                            String(student.supervisor_id) &&
+                                        !errors.supervisor_id && (
+                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                                                This account is no longer a
+                                                Supervisor. Choose a supervisor
+                                                from the company's roster.
                                             </p>
                                         )}
                                     <InputError

@@ -55,8 +55,9 @@ export function getColumns(companies, { needsSupervisorOnly = false } = {}) {
                 const student = row.original;
                 const name = row.getValue("supervisor_name");
 
-                // needs_supervisor (server): placed at a company but either
-                // no supervisor, or one who's no longer on its roster.
+                // needs_supervisor (server): placed at a company with no
+                // supervisor, one off its roster, or one whose account is no
+                // longer a Supervisor.
                 if (student.needs_supervisor && student.supervisor_id == null) {
                     return <StatusBadge status="no_supervisor" />;
                 }
@@ -69,6 +70,17 @@ export function getColumns(companies, { needsSupervisorOnly = false } = {}) {
                         <div className="flex flex-col items-start gap-1">
                             <span>{name}</span>
                             <StatusBadge status="not_on_roster" />
+                        </div>
+                    );
+                }
+
+                // Flagged with a supervisor who's on the roster: the account
+                // no longer holds the Supervisor role.
+                if (student.needs_supervisor) {
+                    return (
+                        <div className="flex flex-col items-start gap-1">
+                            <span>{name}</span>
+                            <StatusBadge status="not_a_supervisor" />
                         </div>
                     );
                 }

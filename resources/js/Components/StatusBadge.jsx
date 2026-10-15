@@ -14,6 +14,7 @@ const STATUS_CONFIG = {
     // Internship Assignment: a placed student whose supervisor is missing.
     no_supervisor: { label: "No supervisor", className: "bg-amber-100 text-amber-700" },
     not_on_roster: { label: "Not on roster", className: "bg-amber-100 text-amber-700" },
+    not_a_supervisor: { label: "Not a supervisor", className: "bg-amber-100 text-amber-700" },
 };
 
 /**
