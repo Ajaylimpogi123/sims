@@ -4,7 +4,7 @@ import { useForm } from "@inertiajs/react";
 export default function useEditReport(report) {
     const [open, setOpen] = useState(false);
 
-    const { data, setData, post, errors, processing, reset } = useForm({
+    const { data, setData, post, errors, processing, reset, clearErrors } = useForm({
         _method: "patch",
         type: "daily",
         period_start: "",
@@ -24,12 +24,15 @@ export default function useEditReport(report) {
             content: report.content || "",
             attachment: null,
         });
-    }, [report, open]);
+        // Seed only when the dialog opens: a validation (422) response re-sends
+        // the props as new objects and must not overwrite what was typed.
+    }, [open]);
 
     const openModal = () => setOpen(true);
     const closeModal = () => {
         setOpen(false);
         reset();
+        clearErrors();
     };
 
     const handleSubmit = (e) => {

@@ -13,7 +13,10 @@ export default function Index({ students, companies, filters }) {
         Boolean(filters?.needs_supervisor),
     );
 
-    const columns = getColumns(companies, { needsSupervisorOnly });
+    const columns = useMemo(
+        () => getColumns(companies, { needsSupervisorOnly }),
+        [companies, needsSupervisorOnly],
+    );
 
     const studentData = useMemo(
         () =>

@@ -4,7 +4,7 @@ import { router, useForm } from "@inertiajs/react";
 export default function useSupervisorRoster(company, availableSupervisors) {
     const [open, setOpen] = useState(false);
 
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors, reset, clearErrors } = useForm({
         user_id: "",
     });
 
@@ -12,6 +12,7 @@ export default function useSupervisorRoster(company, availableSupervisors) {
     const closeModal = () => {
         setOpen(false);
         reset();
+        clearErrors();
     };
 
     const rosterIds = useMemo(

@@ -7,7 +7,7 @@ export default function useManageStudent(
 ) {
     const [open, setOpen] = useState(false);
 
-    const { data, setData, patch, transform, errors, processing, reset } =
+    const { data, setData, patch, transform, errors, processing, reset, clearErrors } =
         useForm({
             name: "",
             email: "",
@@ -36,12 +36,15 @@ export default function useManageStudent(
             internship_status: student.internship_status || "not_started",
             internship_schedule: student.internship_schedule || "",
         });
-    }, [student, open]);
+        // Seed only when the dialog opens: a validation (422) response re-sends
+        // the props as new objects and must not overwrite what was typed.
+    }, [open]);
 
     const openModal = () => setOpen(true);
     const closeModal = () => {
         setOpen(false);
         reset();
+        clearErrors();
     };
 
     const handleSubmit = (e) => {

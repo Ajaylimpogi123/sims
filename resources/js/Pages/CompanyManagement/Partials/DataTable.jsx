@@ -5,8 +5,12 @@ import {
     getPaginationRowModel,
     getSortedRowModel,
     getFilteredRowModel,
-    flexRender,
 } from "@tanstack/react-table";
+import {
+    renderTableContent,
+    STABLE_TABLE_OPTIONS,
+    useClampPageIndex,
+} from "@/lib/dataTable";
 
 import {
     Table,
@@ -31,12 +35,19 @@ export function DataTable({ columns, data }) {
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
+        onColumnFiltersChange: (updater) => {
+            setColumnFilters(updater);
+            // Filtering starts from the first page (no auto-reset, below).
+            table.setPageIndex(0);
+        },
+        ...STABLE_TABLE_OPTIONS,
         state: {
             sorting,
             columnFilters,
         },
     });
+
+    useClampPageIndex(table);
 
     return (
         <div className="space-y-4">
@@ -60,7 +71,7 @@ export function DataTable({ columns, data }) {
                                     <TableHead key={header.id}>
                                         {header.isPlaceholder
                                             ? null
-                                            : flexRender(
+                                            : renderTableContent(
                                                   header.column.columnDef
                                                       .header,
                                                   header.getContext(),
@@ -77,7 +88,7 @@ export function DataTable({ columns, data }) {
                                 <TableRow key={row.id}>
                                     {row.getVisibleCells().map((cell) => (
                                         <TableCell key={cell.id}>
-                                            {flexRender(
+                                            {renderTableContent(
                                                 cell.column.columnDef.cell,
                                                 cell.getContext(),
                                             )}

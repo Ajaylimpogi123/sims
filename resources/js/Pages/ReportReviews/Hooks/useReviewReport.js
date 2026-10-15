@@ -4,7 +4,7 @@ import { useForm } from "@inertiajs/react";
 export default function useReviewReport(report) {
     const [open, setOpen] = useState(false);
 
-    const { data, setData, patch, errors, processing, reset } = useForm({
+    const { data, setData, patch, errors, processing, reset, clearErrors } = useForm({
         comment: "",
     });
 
@@ -12,6 +12,7 @@ export default function useReviewReport(report) {
     const closeModal = () => {
         setOpen(false);
         reset();
+        clearErrors();
     };
 
     const handleSubmit = (e) => {

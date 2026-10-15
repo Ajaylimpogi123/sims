@@ -1,5 +1,6 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head } from "@inertiajs/react";
+import { useMemo } from "react";
 import { Button } from "@/Components/ui/button";
 import { Plus } from "lucide-react";
 import AddModal from "./Partials/AddModal";
@@ -7,7 +8,10 @@ import { DataTable } from "./Partials/DataTable";
 import { getColumns } from "./Partials/Columns";
 
 export default function Index({ companies, availableSupervisors }) {
-    const columns = getColumns(availableSupervisors);
+    const columns = useMemo(
+        () => getColumns(availableSupervisors),
+        [availableSupervisors],
+    );
 
     const companyData =
         companies.map((company) => ({

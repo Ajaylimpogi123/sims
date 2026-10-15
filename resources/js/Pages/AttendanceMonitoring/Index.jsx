@@ -1,5 +1,6 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, usePage } from "@inertiajs/react";
+import { useMemo } from "react";
 import { DataTable } from "./Partials/DataTable";
 import { getColumns } from "./Partials/Columns";
 import ExportButtons from "@/Components/ExportButtons";
@@ -15,7 +16,7 @@ const EXPORT_COLUMNS = [
 export default function Index({ students }) {
     const { auth } = usePage().props;
     const canWrite = [3, 4].includes(auth?.user?.role_id);
-    const columns = getColumns(canWrite);
+    const columns = useMemo(() => getColumns(canWrite), [canWrite]);
 
     const studentData =
         students.map((student) => {

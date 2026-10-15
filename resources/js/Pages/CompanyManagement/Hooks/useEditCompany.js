@@ -4,7 +4,7 @@ import { useForm } from "@inertiajs/react";
 export default function useEditCompany(company) {
     const [open, setOpen] = useState(false);
 
-    const { data, setData, patch, errors, processing, reset } = useForm({
+    const { data, setData, patch, errors, processing, reset, clearErrors } = useForm({
         company_name: "",
         address: "",
         contact_person: "",
@@ -26,12 +26,15 @@ export default function useEditCompany(company) {
             industry: company.industry || "",
             slots: company.slots || 0,
         });
-    }, [company, open]);
+        // Seed only when the dialog opens: a validation (422) response re-sends
+        // the props as new objects and must not overwrite what was typed.
+    }, [open]);
 
     const openModal = () => setOpen(true);
     const closeModal = () => {
         setOpen(false);
         reset();
+        clearErrors();
     };
 
     const handleSubmit = (e) => {

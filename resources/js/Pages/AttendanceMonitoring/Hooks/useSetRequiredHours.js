@@ -4,7 +4,7 @@ import { useForm } from "@inertiajs/react";
 export default function useSetRequiredHours(student) {
     const [open, setOpen] = useState(false);
 
-    const { data, setData, patch, errors, processing, reset } = useForm({
+    const { data, setData, patch, errors, processing, reset, clearErrors } = useForm({
         required_hours: "",
     });
 
@@ -17,12 +17,15 @@ export default function useSetRequiredHours(student) {
                     ? String(student.required_hours)
                     : "",
         });
-    }, [student, open]);
+        // Seed only when the dialog opens: a validation (422) response re-sends
+        // the props as new objects and must not overwrite what was typed.
+    }, [open]);
 
     const openModal = () => setOpen(true);
     const closeModal = () => {
         setOpen(false);
         reset();
+        clearErrors();
     };
 
     const handleSubmit = (e) => {
