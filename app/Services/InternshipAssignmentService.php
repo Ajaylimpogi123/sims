@@ -31,7 +31,8 @@ use Illuminate\Validation\ValidationException;
  * - All of the above are checked under a lock on the target company (the
  *   same row CompanyManagementService locks for edits and deletes).
  * - Changing company, supervisor or internship status notifies the student
- *   and their supervisor.
+ *   and their supervisor; a newly assigned supervisor is also told about the
+ *   student's attendance and reports still awaiting review.
  * - Deactivating the account revokes the student's API tokens.
  */
 class InternshipAssignmentService
@@ -227,7 +228,7 @@ class InternshipAssignmentService
         $supervisorId = $data['supervisor_id'] ? (int) $data['supervisor_id'] : null;
 
         try {
-            $notify = DB::transaction(function () use ($student, $data, $companyId, $supervisorId) {
+            [$notify, $newSupervisor] = DB::transaction(function () use ($student, $data, $companyId, $supervisorId) {
                 // Lock the target company first, so this save is serialised
                 // with other assignments to it (slot count), with its status
                 // changes and with a company delete
@@ -254,6 +255,9 @@ class InternshipAssignmentService
                     'internship_status' => $data['internship_status'],
                 ])->contains(fn ($value, $key) => (string) $current->{$key} !== (string) $value);
 
+                // A different, non-null supervisor takes over this student.
+                $newSupervisor = $supervisorId !== null && (string) $current->supervisor_id !== (string) $supervisorId;
+
                 $current->user->update([
                     'name' => $data['name'],
                     'email' => $data['email'],
@@ -269,7 +273,7 @@ class InternshipAssignmentService
                     'internship_schedule' => $data['internship_schedule'] ?? null,
                 ]);
 
-                return $hasAssignmentChanges;
+                return [$hasAssignmentChanges, $newSupervisor];
             });
         } catch (UniqueConstraintViolationException $e) {
             // Another request took the email / student number meanwhile.
@@ -284,6 +288,13 @@ class InternshipAssignmentService
 
         if ($notify) {
             $this->notifications->assignmentUpdated($student);
+        }
+
+        // Items submitted while the student had no (or another) supervisor
+        // only notified whoever was responsible then: bring the new
+        // supervisor up to date on what still awaits review.
+        if ($newSupervisor) {
+            $this->notifications->supervisorCatchUp($student);
         }
 
         return $student;

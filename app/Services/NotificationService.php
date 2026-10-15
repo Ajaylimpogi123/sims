@@ -144,13 +144,104 @@ class NotificationService
             $recipients->push($supervisor);
         }
 
-        $this->notifyMany(
-            $recipients->unique('id'),
+        foreach ($recipients->unique('id') as $recipient) {
+            $this->notifyReportSubmitted($recipient, $report, $studentName);
+        }
+    }
+
+    /**
+     * Send the report_submitted notification to a single recipient.
+     * reportSubmitted() and supervisorCatchUp() share it so the wording
+     * never drifts.
+     */
+    public function notifyReportSubmitted(User $recipient, InternshipReport $report, ?string $studentName = null): Notification
+    {
+        $studentName ??= $report->student?->user?->name ?? 'A student';
+
+        return $this->notify(
+            $recipient,
             'report_submitted',
             'New '.$report->type.' report submitted',
             "{$studentName} submitted a {$report->type} report for review.",
             ['report_id' => $report->id],
         );
+    }
+
+    /**
+     * A student was just given a (new) supervisor. Anything they submitted
+     * before only notified whoever was responsible then, so tell the new
+     * supervisor about what still awaits review: one attendance_pending per
+     * attendance with a pending leg (as notifications:backfill-supervisor-
+     * attendance does) and one report_submitted per pending report, worded
+     * as the live notifications so they open the same screens.
+     *
+     * Only an active role-3 supervisor is told, and an item they already
+     * have an unread notification for is skipped.
+     *
+     * @return int how many notifications were created
+     */
+    public function supervisorCatchUp(Student $student): int
+    {
+        $supervisor = $this->activeSupervisor($student);
+
+        if (! $supervisor || (int) $supervisor->role_id !== self::SUPERVISOR_ROLE_ID) {
+            return 0;
+        }
+
+        $unread = fn (string $type, string $key) => Notification::query()
+            ->where('user_id', $supervisor->id)
+            ->where('type', $type)
+            ->whereNull('read_at')
+            ->pluck('data')
+            ->map(fn ($data) => is_array($data) ? $this->positiveInt($data[$key] ?? null) : null)
+            ->filter()
+            ->flip();
+
+        $created = 0;
+
+        $alreadyAttendance = $unread('attendance_pending', 'attendance_id');
+
+        $pendingAttendance = $student->attendances()
+            ->where(fn ($q) => $q->where('time_in_status', 'pending')->orWhere('time_out_status', 'pending'))
+            ->orderBy('date')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($pendingAttendance as $attendance) {
+            if ($alreadyAttendance->has($attendance->id)) {
+                continue;
+            }
+
+            $attendance->setRelation('student', $student);
+
+            // A pending time-out is the most recent submission; otherwise
+            // the time-in. The approvals page shows both legs.
+            $leg = $attendance->time_out_status === 'pending' ? 'time_out' : 'time_in';
+
+            $this->notifyAttendanceSubmitted($supervisor, $attendance, $leg);
+            $created++;
+        }
+
+        $alreadyReports = $unread('report_submitted', 'report_id');
+
+        $pendingReports = $student->internshipReports()
+            ->where('status', 'pending')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($pendingReports as $report) {
+            if ($alreadyReports->has($report->id)) {
+                continue;
+            }
+
+            $report->setRelation('student', $student);
+
+            $this->notifyReportSubmitted($supervisor, $report);
+            $created++;
+        }
+
+        return $created;
     }
 
     /**
