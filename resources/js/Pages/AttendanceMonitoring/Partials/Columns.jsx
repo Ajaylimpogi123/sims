@@ -8,6 +8,10 @@ import {
 import { MoreHorizontal } from "lucide-react";
 import RequiredHoursModal from "./RequiredHoursModal";
 import LogModal from "./LogModal";
+import {
+    RequiredHoursNotSet,
+    RemainingHoursUnknown,
+} from "@/Components/RequiredHoursNotSet";
 
 export function getColumns(canWrite) {
     return [
@@ -27,12 +31,35 @@ export function getColumns(canWrite) {
         {
             accessorKey: "required_hours",
             header: "Required Hours",
-            cell: ({ row }) => row.getValue("required_hours") ?? "Not set",
+            cell: ({ row }) => {
+                const requiredHours = row.getValue("required_hours");
+                if (requiredHours != null) return requiredHours;
+
+                return (
+                    <RequiredHoursNotSet
+                        action={
+                            canWrite && (
+                                <RequiredHoursModal student={row.original}>
+                                    <Button
+                                        type="button"
+                                        variant="link"
+                                        size="sm"
+                                        className="h-auto p-0 text-xs"
+                                    >
+                                        Set
+                                    </Button>
+                                </RequiredHoursModal>
+                            )
+                        }
+                    />
+                );
+            },
         },
         {
             accessorKey: "remaining_hours",
             header: "Remaining Hours",
-            cell: ({ row }) => row.getValue("remaining_hours") ?? "—",
+            cell: ({ row }) =>
+                row.getValue("remaining_hours") ?? <RemainingHoursUnknown />,
         },
         {
             id: "actions",

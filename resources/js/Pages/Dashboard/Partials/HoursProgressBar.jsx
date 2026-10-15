@@ -1,6 +1,8 @@
+import { RequiredHoursNotSet } from "@/Components/RequiredHoursNotSet";
+
 export default function HoursProgressBar({ rendered, required }) {
     if (required == null) {
-        return <span className="text-sm text-muted-foreground">—</span>;
+        return <RequiredHoursNotSet />;
     }
 
     const percent =

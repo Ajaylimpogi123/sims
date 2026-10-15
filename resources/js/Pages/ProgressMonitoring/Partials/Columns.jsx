@@ -1,3 +1,8 @@
+import {
+    RequiredHoursNotSet,
+    RemainingHoursUnknown,
+} from "@/Components/RequiredHoursNotSet";
+
 const STATUS_LABELS = {
     not_started: "Not Started",
     ongoing: "Ongoing",
@@ -12,7 +17,7 @@ const STATUS_STYLES = {
 
 function ProgressBar({ rendered, required }) {
     if (required == null) {
-        return <span className="text-muted-foreground text-sm">—</span>;
+        return <RequiredHoursNotSet />;
     }
 
     const percent =
@@ -75,6 +80,7 @@ export const columns = [
     {
         accessorKey: "remaining_hours",
         header: "Remaining Hours",
-        cell: ({ row }) => row.getValue("remaining_hours") ?? "—",
+        cell: ({ row }) =>
+            row.getValue("remaining_hours") ?? <RemainingHoursUnknown />,
     },
 ];
