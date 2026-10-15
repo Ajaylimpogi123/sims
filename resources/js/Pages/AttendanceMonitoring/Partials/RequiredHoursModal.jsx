@@ -13,7 +13,12 @@ import { Label } from "@/Components/ui/label";
 import InputError from "@/Components/InputError";
 import useSetRequiredHours from "../Hooks/useSetRequiredHours";
 
-export default function RequiredHoursModal({ student, children }) {
+export default function RequiredHoursModal({
+    student,
+    children,
+    open: controlledOpen,
+    onOpenChange,
+}) {
     const {
         open,
         openModal,
@@ -23,11 +28,11 @@ export default function RequiredHoursModal({ student, children }) {
         errors,
         processing,
         handleSubmit,
-    } = useSetRequiredHours(student);
+    } = useSetRequiredHours(student, { open: controlledOpen, onOpenChange });
 
     return (
         <>
-            <div onClick={openModal}>{children}</div>
+            {children && <div onClick={openModal}>{children}</div>}
 
             <Dialog open={open} onOpenChange={closeModal}>
                 <DialogContent className="sm:max-w-[425px]">

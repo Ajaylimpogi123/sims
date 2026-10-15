@@ -13,7 +13,12 @@ import { Label } from "@/Components/ui/label";
 import InputError from "@/Components/InputError";
 import useEditCompany from "../Hooks/useEditCompany";
 
-export default function EditModal({ company, children }) {
+export default function EditModal({
+    company,
+    children,
+    open: controlledOpen,
+    onOpenChange,
+}) {
     const {
         open,
         openModal,
@@ -23,11 +28,11 @@ export default function EditModal({ company, children }) {
         errors,
         processing,
         handleSubmit,
-    } = useEditCompany(company);
+    } = useEditCompany(company, { open: controlledOpen, onOpenChange });
 
     return (
         <>
-            <div onClick={openModal}>{children}</div>
+            {children && <div onClick={openModal}>{children}</div>}
 
             <Dialog open={open} onOpenChange={closeModal}>
                 <DialogContent className="sm:max-w-[425px]">

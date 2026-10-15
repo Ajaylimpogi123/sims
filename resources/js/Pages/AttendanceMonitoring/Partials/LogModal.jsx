@@ -1,4 +1,5 @@
 import { useState } from "react";
+import useControllableOpen from "@/hooks/useControllableOpen";
 import { router } from "@inertiajs/react";
 import { Button } from "@/Components/ui/button";
 import {
@@ -136,15 +137,21 @@ function AttendanceRow({ attendance, studentUserId, canWrite, onDone }) {
     );
 }
 
-export default function LogModal({ student, canWrite = true, children }) {
-    const [open, setOpen] = useState(false);
+export default function LogModal({
+    student,
+    canWrite = true,
+    children,
+    open: controlledOpen,
+    onOpenChange,
+}) {
+    const [open, setOpen] = useControllableOpen(controlledOpen, onOpenChange);
 
     const { data, setData, errors, processing, handleSubmit } =
         useAddAttendanceEntry(student.id);
 
     return (
         <>
-            <div onClick={() => setOpen(true)}>{children}</div>
+            {children && <div onClick={() => setOpen(true)}>{children}</div>}
 
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent className="sm:max-w-3xl">

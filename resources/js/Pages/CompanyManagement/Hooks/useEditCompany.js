@@ -1,8 +1,12 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useForm } from "@inertiajs/react";
+import useControllableOpen from "@/hooks/useControllableOpen";
 
-export default function useEditCompany(company) {
-    const [open, setOpen] = useState(false);
+export default function useEditCompany(
+    company,
+    { open: controlledOpen, onOpenChange } = {},
+) {
+    const [open, setOpen] = useControllableOpen(controlledOpen, onOpenChange);
 
     const { data, setData, patch, errors, processing, reset, clearErrors } = useForm({
         company_name: "",

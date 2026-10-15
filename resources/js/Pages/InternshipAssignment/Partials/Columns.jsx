@@ -1,12 +1,4 @@
-import { Button } from "@/Components/ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuTrigger,
-} from "@/Components/ui/dropdown-menu";
-import { MoreHorizontal } from "lucide-react";
+import RowActionsMenu from "@/Components/RowActionsMenu";
 import { router } from "@inertiajs/react";
 import StudentModal from "./StudentModal";
 import StatusBadge from "@/Components/StatusBadge";
@@ -122,38 +114,31 @@ export function getColumns(companies, { needsSupervisorOnly = false } = {}) {
                 const student = row.original;
 
                 return (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <div className="pl-2 pr-4 py-2 text-sm text-gray-800 hover:bg-gray-100 rounded-md cursor-pointer">
-                                <StudentModal
-                                    student={student}
-                                    companies={companies}
-                                    needsSupervisorOnly={needsSupervisorOnly}
-                                >
-                                    Edit
-                                </StudentModal>
-                            </div>
-                            <DropdownMenuItem
-                                onClick={() =>
+                    <RowActionsMenu
+                        actions={[
+                            { label: "Edit", dialog: "edit" },
+                            {
+                                label:
+                                    student.status === "active"
+                                        ? "Deactivate"
+                                        : "Activate",
+                                onSelect: () =>
                                     handleToggleStatus(
                                         student,
                                         needsSupervisorOnly,
-                                    )
-                                }
-                                className="pl-2 pr-4 py-2 text-sm text-gray-800 hover:bg-gray-100 rounded-md cursor-pointer"
-                            >
-                                {student.status === "active"
-                                    ? "Deactivate"
-                                    : "Activate"}
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                                    ),
+                            },
+                        ]}
+                        renderDialogs={({ isOpen, onOpenChange }) => (
+                            <StudentModal
+                                student={student}
+                                companies={companies}
+                                needsSupervisorOnly={needsSupervisorOnly}
+                                open={isOpen("edit")}
+                                onOpenChange={onOpenChange}
+                            />
+                        )}
+                    />
                 );
             },
         },

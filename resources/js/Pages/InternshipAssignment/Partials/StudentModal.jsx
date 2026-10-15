@@ -37,6 +37,8 @@ export default function StudentModal({
     student,
     companies,
     needsSupervisorOnly = false,
+    open: controlledOpen,
+    onOpenChange,
     children,
 }) {
     const {
@@ -48,7 +50,11 @@ export default function StudentModal({
         errors,
         processing,
         handleSubmit,
-    } = useManageStudent(student, { needsSupervisorOnly });
+    } = useManageStudent(student, {
+        needsSupervisorOnly,
+        open: controlledOpen,
+        onOpenChange,
+    });
 
     // supervisor_issue (server) picks one reason by precedence: no supervisor
     // > not on roster > not a supervisor (a role change in User Management
@@ -161,7 +167,7 @@ export default function StudentModal({
 
     return (
         <>
-            <div onClick={openModal}>{children}</div>
+            {children && <div onClick={openModal}>{children}</div>}
 
             <Dialog open={open} onOpenChange={closeModal}>
                 <DialogContent className="sm:max-w-[500px]">

@@ -1,12 +1,4 @@
-import { Button } from "@/Components/ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuTrigger,
-} from "@/Components/ui/dropdown-menu";
-import { MoreHorizontal } from "lucide-react";
+import RowActionsMenu from "@/Components/RowActionsMenu";
 import { router } from "@inertiajs/react";
 import Swal from "sweetalert2";
 import EditModal from "./EditModal";
@@ -92,41 +84,40 @@ export function getColumns(availableSupervisors) {
             const company = row.original;
 
             return (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <div className="pl-2 pr-4 py-2 text-sm text-gray-800 hover:bg-gray-100 rounded-md cursor-pointer">
-                            <EditModal company={company}>Edit</EditModal>
-                        </div>
-                        <div className="pl-2 pr-4 py-2 text-sm text-gray-800 hover:bg-gray-100 rounded-md cursor-pointer">
+                <RowActionsMenu
+                    actions={[
+                        { label: "Edit", dialog: "edit" },
+                        { label: "Manage Supervisors", dialog: "roster" },
+                        {
+                            label:
+                                company.status === "active"
+                                    ? "Deactivate"
+                                    : "Activate",
+                            onSelect: () => handleToggleStatus(company),
+                        },
+                        {
+                            label: "Delete",
+                            onSelect: () => handleDelete(company),
+                            className:
+                                "pl-2 pr-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md cursor-pointer",
+                        },
+                    ]}
+                    renderDialogs={({ isOpen, onOpenChange }) => (
+                        <>
+                            <EditModal
+                                company={company}
+                                open={isOpen("edit")}
+                                onOpenChange={onOpenChange}
+                            />
                             <SupervisorRosterModal
                                 company={company}
                                 availableSupervisors={availableSupervisors}
-                            >
-                                Manage Supervisors
-                            </SupervisorRosterModal>
-                        </div>
-                        <DropdownMenuItem
-                            onClick={() => handleToggleStatus(company)}
-                            className="pl-2 pr-4 py-2 text-sm text-gray-800 hover:bg-gray-100 rounded-md cursor-pointer"
-                        >
-                            {company.status === "active"
-                                ? "Deactivate"
-                                : "Activate"}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => handleDelete(company)}
-                            className="pl-2 pr-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md cursor-pointer"
-                        >
-                            Delete
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                                open={isOpen("roster")}
+                                onOpenChange={onOpenChange}
+                            />
+                        </>
+                    )}
+                />
             );
         },
     },

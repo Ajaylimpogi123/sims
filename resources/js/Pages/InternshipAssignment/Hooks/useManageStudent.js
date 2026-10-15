@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useForm } from "@inertiajs/react";
+import useControllableOpen from "@/hooks/useControllableOpen";
 
 export default function useManageStudent(
     student,
-    { needsSupervisorOnly = false } = {},
+    { needsSupervisorOnly = false, open: controlledOpen, onOpenChange } = {},
 ) {
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useControllableOpen(controlledOpen, onOpenChange);
 
     const { data, setData, patch, transform, errors, processing, reset, clearErrors } =
         useForm({

@@ -1,8 +1,13 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { router, useForm } from "@inertiajs/react";
+import useControllableOpen from "@/hooks/useControllableOpen";
 
-export default function useSupervisorRoster(company, availableSupervisors) {
-    const [open, setOpen] = useState(false);
+export default function useSupervisorRoster(
+    company,
+    availableSupervisors,
+    { open: controlledOpen, onOpenChange } = {},
+) {
+    const [open, setOpen] = useControllableOpen(controlledOpen, onOpenChange);
 
     const { data, setData, post, processing, errors, reset, clearErrors } = useForm({
         user_id: "",

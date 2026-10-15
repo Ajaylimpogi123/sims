@@ -23,6 +23,8 @@ import useSupervisorRoster from "../Hooks/useSupervisorRoster";
 export default function SupervisorRosterModal({
     company,
     availableSupervisors,
+    open: controlledOpen,
+    onOpenChange,
     children,
 }) {
     const {
@@ -36,13 +38,16 @@ export default function SupervisorRosterModal({
         selectableSupervisors,
         handleAttach,
         handleDetach,
-    } = useSupervisorRoster(company, availableSupervisors);
+    } = useSupervisorRoster(company, availableSupervisors, {
+        open: controlledOpen,
+        onOpenChange,
+    });
 
     const roster = company.supervisors || [];
 
     return (
         <>
-            <div onClick={openModal}>{children}</div>
+            {children && <div onClick={openModal}>{children}</div>}
 
             <Dialog open={open} onOpenChange={closeModal}>
                 <DialogContent className="sm:max-w-[450px]">
