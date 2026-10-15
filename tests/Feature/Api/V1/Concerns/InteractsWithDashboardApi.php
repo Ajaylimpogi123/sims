@@ -115,6 +115,11 @@ trait InteractsWithDashboardApi
         ]);
         $unassigned = Student::factory()->create(['required_hours' => null]);
 
+        // Rosters: A is on both companies' rosters; B was dropped from
+        // Yarrow's, so B1 is the one student who "needs a supervisor".
+        $companyX->supervisors()->attach($supervisorA->id);
+        $companyY->supervisors()->attach($supervisorA->id);
+
         // A1: today pending time-out, plus enough approved hours to be
         // nearing completion (91.5 of 100).
         Attendance::factory()->create([

@@ -67,8 +67,9 @@ class InternshipAssignmentService
      * their user, company and supervisor.
      *
      * company_id / supervisor_id: an id, or 'none' for unassigned.
+     * needs_supervisor: truthy keeps only Student::needsSupervisor() rows.
      *
-     * @param  array{search?: mixed, internship_status?: mixed, status?: mixed, company_id?: mixed, supervisor_id?: mixed}  $filters
+     * @param  array{search?: mixed, internship_status?: mixed, status?: mixed, company_id?: mixed, supervisor_id?: mixed, needs_supervisor?: mixed}  $filters
      */
     public function query(array $filters = []): Builder
     {
@@ -104,6 +105,10 @@ class InternshipAssignmentService
             }
         }
 
+        if (filter_var($filters['needs_supervisor'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $query->needsSupervisor();
+        }
+
         return $query->orderByDesc('created_at')->orderByDesc('id');
     }
 
@@ -127,7 +132,9 @@ class InternshipAssignmentService
 
     /**
      * Sets `supervisor_on_roster` on each student: whether their supervisor
-     * is on their company's roster (null without a supervisor).
+     * is on their company's roster (null without a supervisor), and
+     * `needs_supervisor`: placed at a company with no supervisor or one off
+     * that roster (the same rows as Student::needsSupervisor()).
      *
      * @param  iterable<int, Student>  $students
      */
@@ -141,9 +148,12 @@ class InternshipAssignmentService
             ->mapWithKeys(fn ($row) => [$row->company_id.':'.$row->user_id => true]);
 
         foreach ($students as $student) {
-            $student->setAttribute('supervisor_on_roster', $student->supervisor_id === null
+            $onRoster = $student->supervisor_id === null
                 ? null
-                : isset($pairs[$student->company_id.':'.$student->supervisor_id]));
+                : isset($pairs[$student->company_id.':'.$student->supervisor_id]);
+
+            $student->setAttribute('supervisor_on_roster', $onRoster);
+            $student->setAttribute('needs_supervisor', $student->company_id !== null && $onRoster !== true);
         }
     }
 

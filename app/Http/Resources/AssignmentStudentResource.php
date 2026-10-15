@@ -39,6 +39,7 @@ class AssignmentStudentResource extends JsonResource
                 'status' => $status($this->supervisor),
             ] : null,
             'supervisor_on_roster' => $this->supervisor_on_roster,
+            'needs_supervisor' => (bool) $this->needs_supervisor,
             'internship_status' => $this->internship_status,
             'internship_schedule' => $this->internship_schedule,
             'created_at' => $this->created_at?->toIso8601String(),

@@ -71,6 +71,26 @@ class Student extends Model
     }
 
     /**
+     * Students placed at a company who have no working supervisor: none
+     * assigned, or one who is no longer on that company's roster
+     * (company_supervisors). The same rows as the `needs_supervisor` flag
+     * InternshipAssignmentService::loadRosterFlags() sets; the dashboard's
+     * "need a supervisor" action item counts these.
+     */
+    public function scopeNeedsSupervisor(Builder $query): Builder
+    {
+        return $query
+            ->whereNotNull($this->qualifyColumn('company_id'))
+            ->where(fn (Builder $q) => $q
+                ->whereNull($this->qualifyColumn('supervisor_id'))
+                ->orWhereNotExists(fn ($roster) => $roster
+                    ->selectRaw('1')
+                    ->from('company_supervisors')
+                    ->whereColumn('company_supervisors.company_id', $this->qualifyColumn('company_id'))
+                    ->whereColumn('company_supervisors.user_id', $this->qualifyColumn('supervisor_id'))));
+    }
+
+    /**
      * The Attendance / Progress Monitoring list for the given user (website
      * and mobile API): the students they may see, newest profile first,
      * each with `total_rendered_hours` (sum of credited hours, null when

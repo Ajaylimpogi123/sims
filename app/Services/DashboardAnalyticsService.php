@@ -488,7 +488,7 @@ class DashboardAnalyticsService
             'key' => $item['key'],
             'label' => $item['label'],
             'count' => $item['count'],
-            'href' => AppScreen::url($item['screen']),
+            'href' => AppScreen::url($item['screen'], $item['params']),
         ], $this->collectActionItems($user));
     }
 
@@ -504,7 +504,7 @@ class DashboardAnalyticsService
             'key' => $item['key'],
             'label' => $item['label'],
             'count' => $item['count'],
-            'target' => AppScreen::target($item['screen']),
+            'target' => AppScreen::target($item['screen'], $item['params']),
         ], $this->collectActionItems($user));
     }
 
@@ -514,7 +514,7 @@ class DashboardAnalyticsService
      * approvals only for Supervisor/Admin, students only for
      * Coordinator/Admin; the rest are open to roles 2-4.
      *
-     * @return array<int, array{key: string, label: string, count: int, screen: string}>
+     * @return array<int, array{key: string, label: string, count: int, screen: string, params: array<string, int>}>
      */
     private function collectActionItems(User $user): array
     {
@@ -532,6 +532,13 @@ class DashboardAnalyticsService
             $withoutCompany = Student::whereNull('company_id')->count();
             if ($withoutCompany > 0) {
                 $items[] = $this->item('students_without_company', "{$withoutCompany} student(s) without a company assignment", $withoutCompany, 'students');
+            }
+
+            // Placed at a company but nobody (on its roster) supervises
+            // them: their attendance and reports reach no supervisor.
+            $withoutSupervisor = Student::query()->needsSupervisor()->count();
+            if ($withoutSupervisor > 0) {
+                $items[] = $this->item('students_without_supervisor', "{$withoutSupervisor} student(s) need a supervisor", $withoutSupervisor, 'students', ['needs_supervisor' => 1]);
             }
 
             $reportsAwaiting = InternshipReport::where('status', 'pending')->count();
@@ -585,13 +592,18 @@ class DashboardAnalyticsService
         return $items;
     }
 
-    private function item(string $key, string $label, int $count, string $screen): array
+    /**
+     * @param  array<string, int>  $params  the screen's filter, as web query
+     *                                      parameters and app target params
+     */
+    private function item(string $key, string $label, int $count, string $screen, array $params = []): array
     {
         return [
             'key' => $key,
             'label' => $label,
             'count' => $count,
             'screen' => $screen,
+            'params' => $params,
         ];
     }
 

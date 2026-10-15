@@ -303,7 +303,8 @@ class SupervisorCatchUpNotificationsTest extends TestCase
             'Authorization' => 'Bearer '.$coordinator->createToken('test')->plainTextToken,
         ])->patchJson("/api/v1/assignments/{$student->id}", $this->payload($student, ['supervisor_id' => $supervisor->id]))
             ->assertOk()
-            ->assertJsonPath('student.supervisor.id', $supervisor->id);
+            ->assertJsonPath('student.supervisor.id', $supervisor->id)
+            ->assertJsonPath('student.needs_supervisor', false);
 
         $this->assertSame(
             [$items['time_out']->id, $items['time_in']->id],

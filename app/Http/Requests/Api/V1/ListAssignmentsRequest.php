@@ -35,6 +35,9 @@ class ListAssignmentsRequest extends FormRequest
             'status' => ['sometimes', 'nullable', 'string', 'in:active,inactive'],
             'company_id' => ['sometimes', 'nullable', 'regex:'.self::ID_OR_NONE],
             'supervisor_id' => ['sometimes', 'nullable', 'regex:'.self::ID_OR_NONE],
+            // 1: only students placed at a company with no supervisor or one
+            // off that company's roster (Student::needsSupervisor()).
+            'needs_supervisor' => ['sometimes', 'nullable', 'string', 'in:0,1,true,false'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],
         ];
@@ -45,6 +48,8 @@ class ListAssignmentsRequest extends FormRequest
         return [
             'company_id.regex' => 'The company id must be a company id or "none".',
             'supervisor_id.regex' => 'The supervisor id must be a supervisor id or "none".',
+            'needs_supervisor.in' => 'The needs supervisor filter must be 1 or 0.',
+            'needs_supervisor.string' => 'The needs supervisor filter must be 1 or 0.',
         ];
     }
 
@@ -53,7 +58,7 @@ class ListAssignmentsRequest extends FormRequest
      */
     public function filters(): array
     {
-        return collect(['search', 'internship_status', 'status', 'company_id', 'supervisor_id'])
+        return collect(['search', 'internship_status', 'status', 'company_id', 'supervisor_id', 'needs_supervisor'])
             ->mapWithKeys(fn (string $key) => [$key => $this->validated($key)])
             ->all();
     }

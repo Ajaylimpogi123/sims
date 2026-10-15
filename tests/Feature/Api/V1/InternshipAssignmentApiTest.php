@@ -189,6 +189,7 @@ class InternshipAssignmentApiTest extends TestCase
             'company' => ['id' => $company->id, 'company_name' => 'Acme Corp', 'status' => 'active'],
             'supervisor' => ['id' => $supervisor->id, 'name' => 'Maria Santos', 'email' => $supervisor->email, 'status' => 'active'],
             'supervisor_on_roster' => true,
+            'needs_supervisor' => false,
             'internship_status' => 'ongoing',
             'internship_schedule' => 'Mon-Fri',
             'created_at' => $student->fresh()->created_at->toIso8601String(),

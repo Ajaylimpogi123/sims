@@ -13,17 +13,23 @@ use Inertia\Response;
 /**
  * Internship Assignment (Coordinator, Administrator). The rules live in
  * InternshipAssignmentService, shared with the mobile API.
+ *
+ * `?needs_supervisor=1` (the dashboard's "need a supervisor" link) only
+ * seeds the page's client-side filter: `students` is always the full list.
  */
 class InternshipAssignmentController extends Controller
 {
     public function __construct(private InternshipAssignmentService $assignments) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $students = Student::query()
             ->with(['user:id,name,email,status', 'company:id,company_name', 'supervisor:id,name'])
             ->orderBy('created_at', 'desc')
             ->get();
+
+        // Adds supervisor_on_roster and needs_supervisor to each student.
+        $this->assignments->loadRosterFlags($students);
 
         // `status` on companies and roster supervisors lets the form keep
         // inactive ones out of new picks (the save refuses them).
@@ -36,6 +42,9 @@ class InternshipAssignmentController extends Controller
         return Inertia::render('InternshipAssignment/Index', [
             'students' => $students,
             'companies' => $companies,
+            'filters' => [
+                'needs_supervisor' => $request->boolean('needs_supervisor'),
+            ],
         ]);
     }
 
@@ -49,15 +58,23 @@ class InternshipAssignmentController extends Controller
 
         $this->assignments->update($student, $request->validate($this->assignments->rules($student, $request)));
 
-        return redirect()->route('internship-assignment.index')
-            ->with('success', 'Student updated successfully.');
+        return $this->backToIndex($request)->with('success', 'Student updated successfully.');
     }
 
-    public function toggleStatus(Student $student): RedirectResponse
+    public function toggleStatus(Request $request, Student $student): RedirectResponse
     {
         $this->assignments->setStatus($student);
 
-        return redirect()->route('internship-assignment.index')
-            ->with('success', 'Student status updated.');
+        return $this->backToIndex($request)->with('success', 'Student status updated.');
+    }
+
+    /**
+     * Back to the list, keeping the "needs supervisor" filter when the page
+     * sends `needs_supervisor` along with the save.
+     */
+    private function backToIndex(Request $request): RedirectResponse
+    {
+        return redirect()->route('internship-assignment.index',
+            $request->boolean('needs_supervisor') ? ['needs_supervisor' => 1] : []);
     }
 }

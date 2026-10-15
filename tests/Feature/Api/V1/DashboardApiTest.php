@@ -283,7 +283,7 @@ class DashboardApiTest extends TestCase
             ->assertJsonPath('kpis.attendance_summary', ['present' => 2, 'rejected' => 6]);
 
         $this->assertSame(
-            ['students_without_company', 'reports_awaiting_review', 'evaluations_awaiting_completion', 'nearing_completion', 'frequent_rejections'],
+            ['students_without_company', 'students_without_supervisor', 'reports_awaiting_review', 'evaluations_awaiting_completion', 'nearing_completion', 'frequent_rejections'],
             collect($response->json('action_items'))->pluck('key')->all(),
             'Coordinators never get the approvals action item.',
         );
@@ -346,7 +346,7 @@ class DashboardApiTest extends TestCase
             $this->assertArrayHasKey($screen, AppScreen::ROUTES);
 
             $this->app['auth']->forgetGuards();
-            $this->actingAs($user)->get(AppScreen::url($screen))->assertOk();
+            $this->actingAs($user)->get(AppScreen::url($screen, $item['target']['params']))->assertOk();
         }
     }
 
@@ -368,7 +368,7 @@ class DashboardApiTest extends TestCase
 
         $this->assertSame(
             collect($web['actionItems'])->map(fn ($item) => [$item['key'], $item['label'], $item['count'], $item['href']])->all(),
-            collect($api['action_items'])->map(fn ($item) => [$item['key'], $item['label'], $item['count'], AppScreen::url($item['target']['screen'])])->all(),
+            collect($api['action_items'])->map(fn ($item) => [$item['key'], $item['label'], $item['count'], AppScreen::url($item['target']['screen'], $item['target']['params'])])->all(),
         );
 
         $this->assertSame(
