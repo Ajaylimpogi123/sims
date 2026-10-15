@@ -4,6 +4,7 @@ import { Head, usePage } from "@inertiajs/react";
 import { Button } from "@/Components/ui/button";
 import { AttendanceEvidenceInOut } from "@/Components/AttendanceEvidence";
 import CaptureDialog from "./Partials/CaptureDialog";
+import SubmissionClosedNotice from "@/Components/SubmissionClosedNotice";
 import {
     Table,
     TableBody,
@@ -44,6 +45,7 @@ export default function Index({
     attendances,
     totalRenderedHours,
     todayRecord,
+    submission,
 }) {
     const { flash } = usePage().props;
     // "time_in" | "time_out" | "emergency" while the capture dialog is open.
@@ -56,15 +58,23 @@ export default function Index({
 
     // Mirrors the server: a rejected time-in can't be re-submitted once
     // today's time-out is pending or approved (it would credit negative hours).
+    // Mirrors the server: attendance is only accepted while the internship is
+    // Ongoing. Treat a missing prop as allowed; the server still refuses.
+    const canSubmit = submission?.can_submit !== false;
+
     const canTimeIn =
+        canSubmit &&
         (!timeInStatus || timeInStatus === "rejected") &&
         !["pending", "approved"].includes(timeOutStatus);
     const canTimeOut =
+        canSubmit &&
         timeInStatus === "approved" &&
         (!timeOutStatus || timeOutStatus === "rejected");
     // Mirrors AttendanceController::emergencyTimeOut — a rejected time-in
     // can't be followed by an emergency time-out.
-    const canReportEmergency =
+    // The link is shown whenever today's record qualifies, but disabled
+    // while submissions are closed.
+    const showEmergency =
         !!todayRecord?.time_in &&
         timeInStatus !== "rejected" &&
         (!timeOutStatus || timeOutStatus === "rejected");
@@ -100,6 +110,12 @@ export default function Index({
                         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                             {flash.error}
                         </div>
+                    )}
+                    {!canSubmit && (
+                        <SubmissionClosedNotice
+                            internshipStatus={submission?.internship_status}
+                            reason={submission?.reason}
+                        />
                     )}
 
                     <div className="grid gap-4 sm:grid-cols-3">
@@ -192,11 +208,12 @@ export default function Index({
                             your camera and your current location.
                         </p>
 
-                        {canReportEmergency && (
+                        {showEmergency && (
                             <div className="border-t pt-4">
                                 <Button
                                     variant="link"
                                     className="h-auto p-0 text-sm text-red-600"
+                                    disabled={!canSubmit}
                                     onClick={() => setCaptureMode("emergency")}
                                 >
                                     Report Emergency (time out without an

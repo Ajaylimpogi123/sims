@@ -11,6 +11,7 @@ import { Clock, FileText, Building2 } from "lucide-react";
 import { formatLongDate, formatTime } from "@/lib/dates";
 import StatCard from "./StatCard";
 import HoursProgressBar from "./HoursProgressBar";
+import SubmissionClosedNotice from "@/Components/SubmissionClosedNotice";
 
 const STATUS_LABELS = {
     not_started: "Not Started",
@@ -32,6 +33,12 @@ export default function StudentSummary({
 }) {
     return (
         <div className="space-y-6">
+            {student.can_submit === false && (
+                <SubmissionClosedNotice
+                    internshipStatus={student.internship_status}
+                />
+            )}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <StatCard
                     title="Hours Rendered"

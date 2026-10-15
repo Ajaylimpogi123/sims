@@ -21,6 +21,7 @@ import {
 } from "@/Components/ui/table";
 import InputError from "@/Components/InputError";
 import EditReportModal from "./Partials/EditReportModal";
+import SubmissionClosedNotice from "@/Components/SubmissionClosedNotice";
 import { router } from "@inertiajs/react";
 import { formatLongDate } from "@/lib/dates";
 import useHighlightRow from "@/hooks/useHighlightRow";
@@ -42,10 +43,15 @@ function StatusBadge({ status }) {
     );
 }
 
-export default function Index({ reports }) {
+export default function Index({ reports, submission }) {
     const { flash } = usePage().props;
     const [showForm, setShowForm] = useState(false);
     const { getRowProps } = useHighlightRow();
+
+    // Mirrors the server: new reports and edits are only accepted while the
+    // internship is Ongoing (deleting a pending report stays allowed). Treat
+    // a missing prop as allowed; the server still refuses.
+    const canSubmit = submission?.can_submit !== false;
 
     const { data, setData, post, processing, errors, reset } = useForm({
         type: "daily",
@@ -108,8 +114,11 @@ export default function Index({ reports }) {
                                 reports for review
                             </p>
                         </div>
-                        <Button onClick={() => setShowForm((prev) => !prev)}>
-                            {showForm ? "Cancel" : "New Report"}
+                        <Button
+                            onClick={() => setShowForm((prev) => !prev)}
+                            disabled={!canSubmit}
+                        >
+                            {showForm && canSubmit ? "Cancel" : "New Report"}
                         </Button>
                     </div>
 
@@ -123,8 +132,14 @@ export default function Index({ reports }) {
                             {flash.error}
                         </div>
                     )}
+                    {!canSubmit && (
+                        <SubmissionClosedNotice
+                            internshipStatus={submission?.internship_status}
+                            reason={submission?.reason}
+                        />
+                    )}
 
-                    {showForm && (
+                    {showForm && canSubmit && (
                         <div className="rounded-sm border bg-card p-6 text-card-foreground shadow">
                             <form
                                 onSubmit={handleSubmit}
@@ -298,13 +313,28 @@ export default function Index({ reports }) {
                                                     {report.status ===
                                                         "pending" && (
                                                         <>
-                                                            <EditReportModal
-                                                                report={
-                                                                    report
-                                                                }
-                                                            >
-                                                                Edit
-                                                            </EditReportModal>
+                                                            {canSubmit ? (
+                                                                <EditReportModal
+                                                                    report={
+                                                                        report
+                                                                    }
+                                                                >
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                    >
+                                                                        Edit
+                                                                    </Button>
+                                                                </EditReportModal>
+                                                            ) : (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    disabled
+                                                                >
+                                                                    Edit
+                                                                </Button>
+                                                            )}
                                                             <Button
                                                                 size="sm"
                                                                 variant="destructive"
