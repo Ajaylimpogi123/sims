@@ -113,7 +113,7 @@ trait InteractsWithDashboardApi
             'internship_status' => 'ongoing',
             'required_hours' => 100,
         ]);
-        $unassigned = Student::factory()->create(['required_hours' => null]);
+        $unassigned = Student::factory()->notStarted()->create(['required_hours' => null]);
 
         // Rosters: A is on both companies' rosters; B was dropped from
         // Yarrow's, so B1 is the one student who "needs a supervisor".

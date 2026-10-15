@@ -39,7 +39,9 @@ class InternshipReportResource extends JsonResource
             'attachment' => $this->attachment(),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
-            'can_edit' => (bool) $user?->can('update', $this->resource),
+            // Editing also needs an ongoing internship (deleting a pending
+            // report doesn't); only the owning student can pass the policy.
+            'can_edit' => (bool) $user?->can('update', $this->resource) && (bool) $user->student?->canSubmitWork(),
             'can_delete' => (bool) $user?->can('delete', $this->resource),
         ];
     }

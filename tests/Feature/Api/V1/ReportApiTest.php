@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Services\InternshipReportService;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -242,7 +243,10 @@ class ReportApiTest extends TestCase
         $response = $this->api('GET', '/api/v1/reports', $token)->assertOk();
 
         $this->assertSame([$newest->id, $reviewed->id, $older->id], array_column($response->json('data'), 'id'));
-        $response->assertJsonPath('meta', ['per_page' => 20, 'next_cursor' => null, 'has_more' => false]);
+        $response->assertJsonPath('meta', [
+            'per_page' => 20, 'next_cursor' => null, 'has_more' => false,
+            'submission' => ['can_submit' => true, 'internship_status' => 'ongoing', 'reason' => null],
+        ]);
 
         $response->assertJsonPath('data.1', [
             'id' => $reviewed->id,
@@ -595,11 +599,13 @@ class ReportApiTest extends TestCase
         $supervisor = $this->user(3);
         [, $token, $student] = $this->student($supervisor);
 
-        // Another request inserts the same report between the duplicate
-        // check and this insert.
+        // Another request inserts (and commits) the same report between the
+        // duplicate check and this insert. Hooked on the duplicate check
+        // query, so the row lands outside create()'s own transaction and
+        // isn't rolled back with it.
         $raced = false;
-        InternshipReport::creating(function () use (&$raced, $student) {
-            if ($raced) {
+        DB::listen(function (QueryExecuted $query) use (&$raced, $student) {
+            if ($raced || ! str_contains($query->sql, 'exists') || ! str_contains($query->sql, 'internship_reports')) {
                 return;
             }
 

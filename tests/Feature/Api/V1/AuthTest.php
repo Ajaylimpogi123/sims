@@ -285,6 +285,7 @@ class AuthTest extends TestCase
                 'course' => 'BSIT',
                 'section' => 'A',
                 'internship_status' => 'ongoing',
+                'can_submit' => true,
                 'required_hours' => 486,
                 'company' => ['id' => $company->id, 'name' => 'Acme Corp'],
                 'supervisor' => ['id' => $supervisor->id, 'name' => 'Supervisor Santos'],

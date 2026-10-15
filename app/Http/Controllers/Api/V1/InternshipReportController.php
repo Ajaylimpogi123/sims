@@ -23,7 +23,9 @@ use Illuminate\Validation\ValidationException;
  * shared with the website's InternshipReportController.
  *
  * Another student's report is a 404 (ids can't be probed); the owner's
- * report that is no longer pending is a 422 with code report_not_pending.
+ * report that is no longer pending is a 422 with code report_not_pending;
+ * creating or editing while the internship isn't ongoing is a 422 with
+ * code report_rule.
  */
 class InternshipReportController extends Controller
 {
@@ -39,7 +41,9 @@ class InternshipReportController extends Controller
      */
     public function index(ListReportsRequest $request): JsonResponse
     {
-        $page = $this->student($request)->internshipReports()
+        $student = $this->student($request);
+
+        $page = $student->internshipReports()
             ->with('reviewer:id,name')
             ->when($request->type(), fn ($query, string $type) => $query->where('type', $type))
             ->when($request->status(), fn ($query, string $status) => $query->where('status', $status))
@@ -53,6 +57,7 @@ class InternshipReportController extends Controller
                 'per_page' => $page->perPage(),
                 'next_cursor' => $page->nextCursor()?->encode(),
                 'has_more' => $page->hasMorePages(),
+                'submission' => InternshipReportService::submissionState($student),
             ],
         ]);
     }
@@ -69,7 +74,11 @@ class InternshipReportController extends Controller
         $student = $this->student($request);
         $validated = $request->validate(InternshipReportService::rules());
 
-        $report = $this->reports->create($student, $validated, $request->file('attachment'));
+        try {
+            $report = $this->reports->create($student, $validated, $request->file('attachment'));
+        } catch (ReportRuleException $e) {
+            return $this->notOngoing($student->refresh(), $e);
+        }
 
         return response()->json([
             'message' => 'Report submitted for review.',
@@ -144,9 +153,31 @@ class InternshipReportController extends Controller
     {
         try {
             return $action();
-        } catch (ReportRuleException) {
+        } catch (ReportRuleException $e) {
+            if ($e->isNotOngoing()) {
+                $student = $this->student($request)->refresh();
+
+                return $this->notOngoing($student, $e, [
+                    'report' => $this->present($request, $report->refresh()),
+                ]);
+            }
+
             return $this->notPending($request, $report->refresh());
         }
+    }
+
+    /**
+     * The internship isn't ongoing: 422 with `code: report_rule` and the
+     * current `submission` state (plus the report, on an edit).
+     */
+    private function notOngoing(Student $student, ReportRuleException $e, array $extra = []): JsonResponse
+    {
+        return response()->json([
+            'message' => $e->getMessage(),
+            'code' => $e->apiCode,
+            'submission' => InternshipReportService::submissionState($student),
+            ...$extra,
+        ], 422);
     }
 
     private function notPending(Request $request, InternshipReport $report): JsonResponse

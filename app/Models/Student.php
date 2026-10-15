@@ -25,6 +25,39 @@ class Student extends Model
         'required_hours',
     ];
 
+    /**
+     * The only internship_status in which the student may submit their own
+     * attendance and reports (AttendanceService / InternshipReportService
+     * enforce it; staff actions don't depend on it).
+     */
+    public const SUBMITTING_STATUS = 'ongoing';
+
+    /**
+     * Whether the student may submit attendance and reports right now.
+     */
+    public function canSubmitWork(): bool
+    {
+        return $this->internship_status === self::SUBMITTING_STATUS;
+    }
+
+    /**
+     * The `submission` object both UIs read to enable / disable the
+     * student's submit actions up front: whether submitting is open, the
+     * status it depends on, and the refusal message (null when open).
+     *
+     * @return array{can_submit: bool, internship_status: string|null, reason: string|null}
+     */
+    public function submissionState(string $refusalMessage): array
+    {
+        $canSubmit = $this->canSubmitWork();
+
+        return [
+            'can_submit' => $canSubmit,
+            'internship_status' => $this->internship_status,
+            'reason' => $canSubmit ? null : $refusalMessage,
+        ];
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

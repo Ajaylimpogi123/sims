@@ -90,6 +90,7 @@ class DashboardApiTest extends TestCase
                 'student' => [
                     'internship' => [
                         'status' => 'ongoing',
+                        'can_submit' => true,
                         'company' => ['id' => $fixture['companyX']->id, 'name' => 'Xylo Corp'],
                         'supervisor' => ['id' => $fixture['supervisorA']->id, 'name' => $fixture['supervisorA']->name],
                     ],

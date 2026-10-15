@@ -33,6 +33,7 @@ class InternshipReportController extends Controller
 
         return Inertia::render('InternshipReports/Index', [
             'reports' => $reports,
+            'submission' => InternshipReportService::submissionState($student),
         ]);
     }
 
@@ -47,7 +48,12 @@ class InternshipReportController extends Controller
                 ->with('error', self::NO_PROFILE_MESSAGE);
         }
 
-        $this->reports->create($student, $validated, $request->file('attachment'));
+        try {
+            $this->reports->create($student, $validated, $request->file('attachment'));
+        } catch (ReportRuleException $e) {
+            // The internship isn't ongoing.
+            return redirect()->route('reports.index')->with('error', $e->getMessage());
+        }
 
         return redirect()->route('reports.index')
             ->with('success', 'Report submitted for review.');
@@ -67,8 +73,9 @@ class InternshipReportController extends Controller
         try {
             $this->reports->update($report, $validated, $request->file('attachment'));
         } catch (ReportRuleException $e) {
-            // Reviewed between the policy check above and the service's
-            // locked re-check.
+            // The internship isn't ongoing, or the report was reviewed
+            // between the policy check above and the service's locked
+            // re-check.
             return redirect()->route('reports.index')->with('error', $e->getMessage());
         }
 

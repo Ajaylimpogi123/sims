@@ -35,6 +35,9 @@ class AttendanceService
     /** Largest value the decimal(8,2) *_accuracy columns can hold. */
     public const MAX_ACCURACY = 999999.99;
 
+    /** Refusal for any self-service leg while the internship isn't ongoing. */
+    public const NOT_ONGOING_MESSAGE = 'You can only submit attendance while your internship is Ongoing.';
+
     public function __construct(private NotificationService $notifications) {}
 
     /**
@@ -77,19 +80,32 @@ class AttendanceService
     }
 
     /**
-     * Why each self-service action is currently refused for today's row
-     * (null = allowed). The same checks the actions below throw on, so the
-     * mobile app's "what can I do now" never drifts from what is enforced.
+     * Why each self-service action is currently refused for the student and
+     * today's row (null = allowed). The same checks the actions below throw
+     * on, so the mobile app's "what can I do now" never drifts from what is
+     * enforced. An internship that isn't ongoing refuses every leg first.
      *
      * @return array{time_in: string|null, time_out: string|null, emergency_time_out: string|null}
      */
-    public static function refusals(?Attendance $today): array
+    public static function refusals(Student $student, ?Attendance $today): array
     {
+        $closed = $student->canSubmitWork() ? null : self::NOT_ONGOING_MESSAGE;
+
         return [
-            'time_in' => self::timeInRefusal($today),
-            'time_out' => self::timeOutRefusal($today),
-            'emergency_time_out' => self::emergencyTimeOutRefusal($today),
+            'time_in' => $closed ?? self::timeInRefusal($today),
+            'time_out' => $closed ?? self::timeOutRefusal($today),
+            'emergency_time_out' => $closed ?? self::emergencyTimeOutRefusal($today),
         ];
+    }
+
+    /**
+     * The `submission` object the student's attendance screens read.
+     *
+     * @return array{can_submit: bool, internship_status: string|null, reason: string|null}
+     */
+    public static function submissionState(Student $student): array
+    {
+        return $student->submissionState(self::NOT_ONGOING_MESSAGE);
     }
 
     public static function timeInRefusal(?Attendance $today): ?string
@@ -435,11 +451,13 @@ class AttendanceService
     }
 
     /**
-     * Submit one self-service leg: check the state rule, store the photo,
-     * then re-check and save under a row lock, so concurrent submissions
-     * (double taps, retries, two devices) can't both succeed. The losers
-     * get the same AttendanceRuleException as a sequential repeat, and
-     * their photo is deleted. A photo previously stored for the same leg
+     * Submit one self-service leg: check the internship is ongoing and the
+     * state rule, store the photo, then re-check both and save under row
+     * locks (the student's row first, so a status change by staff can't
+     * slip in between, then today's attendance row), so concurrent
+     * submissions (double taps, retries, two devices) can't both succeed.
+     * The losers get the same AttendanceRuleException as a sequential
+     * repeat, and their photo is deleted. A photo previously stored for the same leg
      * (re-submission after a rejection) is deleted only after commit, and
      * reviewers are notified once, after commit.
      *
@@ -452,6 +470,10 @@ class AttendanceService
     private function submitLeg(Student $student, string $leg, UploadedFile $photo, array $capture, callable $refusal, callable $apply): Attendance
     {
         // Unlocked first check: an obvious refusal never writes a file.
+        if (! $student->canSubmitWork()) {
+            throw new AttendanceRuleException(self::NOT_ONGOING_MESSAGE);
+        }
+
         if ($reason = $refusal($this->todayRecord($student))) {
             throw new AttendanceRuleException($reason);
         }
@@ -461,6 +483,13 @@ class AttendanceService
 
         try {
             [$record, $oldPath] = DB::transaction(function () use ($student, $leg, $capture, $refusal, $apply, $newPath) {
+                $current = Student::query()->lockForUpdate()->find($student->id)
+                    ?? throw (new ModelNotFoundException)->setModel(Student::class, [$student->id]);
+
+                if (! $current->canSubmitWork()) {
+                    throw new AttendanceRuleException(self::NOT_ONGOING_MESSAGE);
+                }
+
                 $date = today()->toDateString();
                 $record = $student->attendances()->where('date', $date)->lockForUpdate()->first();
 

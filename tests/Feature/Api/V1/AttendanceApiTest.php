@@ -185,6 +185,7 @@ class AttendanceApiTest extends TestCase
             ->assertExactJson([
                 'date' => '2026-10-03',
                 'record' => null,
+                'submission' => ['can_submit' => true, 'internship_status' => 'ongoing', 'reason' => null],
                 'actions' => [
                     'time_in' => ['allowed' => true, 'reason' => null],
                     'time_out' => ['allowed' => false, 'reason' => 'Your time-in must be approved before you can time out.'],

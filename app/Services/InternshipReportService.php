@@ -55,6 +55,9 @@ class InternshipReportService
 
     public const ALREADY_REVIEWED_MESSAGE = 'This report has already been reviewed.';
 
+    /** Refusal for creating / editing a report while the internship isn't ongoing. */
+    public const NOT_ONGOING_MESSAGE = 'You can only submit reports while your internship is Ongoing.';
+
     /** Report fields a student fills in (the attachment is handled apart). */
     private const FIELDS = ['type', 'period_start', 'period_end', 'content'];
 
@@ -130,13 +133,30 @@ class InternshipReportService
     }
 
     /**
+     * The `submission` object the student's report screens read.
+     *
+     * @return array{can_submit: bool, internship_status: string|null, reason: string|null}
+     */
+    public static function submissionState(Student $student): array
+    {
+        return $student->submissionState(self::NOT_ONGOING_MESSAGE);
+    }
+
+    /**
+     * Only while the internship is ongoing. Checked before any file is
+     * written, then re-checked under the student's row lock, so a status
+     * change by staff can't slip in between.
+     *
      * @param  array{type: string, period_start: string, period_end: string, content: string}  $data  validated rules() data
      *
      * @throws ValidationException when a report of this type already exists for the period
+     * @throws ReportRuleException when the internship isn't ongoing
      */
     public function create(Student $student, array $data, ?UploadedFile $attachment = null): InternshipReport
     {
         $attributes = $this->fields($data);
+
+        self::guardSubmitting($student);
 
         // Checked before any file is written; the unique index settles races.
         $this->guardAgainstDuplicate($student, $attributes);
@@ -144,11 +164,15 @@ class InternshipReportService
         $stored = $attachment ? $this->storeAttachment($attachment) : [];
 
         try {
-            $report = $student->internshipReports()->create([
-                ...$attributes,
-                ...$stored,
-                'status' => 'pending',
-            ]);
+            $report = DB::transaction(function () use ($student, $attributes, $stored) {
+                self::guardSubmitting($this->lockStudent($student->id));
+
+                return $student->internshipReports()->create([
+                    ...$attributes,
+                    ...$stored,
+                    'status' => 'pending',
+                ]);
+            });
         } catch (Throwable $e) {
             $this->deleteFile($stored['attachment_path'] ?? null);
 
@@ -163,18 +187,23 @@ class InternshipReportService
     /**
      * A new attachment replaces the old one; `$removeAttachment` (mobile app
      * only) drops it without a replacement; otherwise it is kept. The
-     * pending rule is re-checked under a row lock, so a review that lands
-     * first wins, and the replaced file is deleted only after commit.
+     * pending rule and the ongoing internship rule are re-checked under row
+     * locks (the student's, then the report's), so a review or a status
+     * change that lands first wins, and the replaced file is deleted only
+     * after commit. A report that is no longer pending is refused as such
+     * even when the internship isn't ongoing either.
      *
      * @param  array{type: string, period_start: string, period_end: string, content: string}  $data  validated rules() data
      *
      * @throws ValidationException when another report of this type already exists for the period
-     * @throws ReportRuleException when the report is no longer pending
+     * @throws ReportRuleException when the report is no longer pending, or the internship isn't ongoing
      * @throws ModelNotFoundException when the report was deleted meanwhile
      */
     public function update(InternshipReport $report, array $data, ?UploadedFile $attachment = null, bool $removeAttachment = false): InternshipReport
     {
         $attributes = $this->fields($data);
+
+        self::guardSubmitting($report->student);
 
         $this->guardAgainstDuplicate($report->student, $attributes, $report->id);
 
@@ -187,7 +216,9 @@ class InternshipReportService
 
         try {
             $oldPath = DB::transaction(function () use ($report, $attributes, $stored) {
+                $student = $this->lockStudent($report->student_id);
                 $current = $this->lockPending($report);
+                self::guardSubmitting($student);
                 $oldPath = $current->attachment_path;
 
                 $current->fill([...$attributes, ...$stored])->save();
@@ -277,6 +308,27 @@ class InternshipReportService
             'Content-Security-Policy' => "default-src 'none'; sandbox",
             ...$headers,
         ]);
+    }
+
+    /**
+     * @throws ReportRuleException when the internship isn't ongoing
+     */
+    private static function guardSubmitting(Student $student): void
+    {
+        if (! $student->canSubmitWork()) {
+            throw ReportRuleException::notOngoing();
+        }
+    }
+
+    /**
+     * The student's row, locked for the rest of the transaction (taken
+     * before the report's row, as everywhere a student and a report are
+     * both locked).
+     */
+    private function lockStudent(int $studentId): Student
+    {
+        return Student::query()->lockForUpdate()->find($studentId)
+            ?? throw (new ModelNotFoundException)->setModel(Student::class, [$studentId]);
     }
 
     /**

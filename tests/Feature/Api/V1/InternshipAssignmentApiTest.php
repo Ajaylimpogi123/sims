@@ -225,7 +225,7 @@ class InternshipAssignmentApiTest extends TestCase
         $supervisor = $this->supervisorAt($company);
         $a = $this->student(['company_id' => $company->id, 'supervisor_id' => $supervisor->id, 'internship_status' => 'ongoing', 'student_number' => 'SN-100'], ['name' => 'Alice Reyes', 'email' => 'alice@example.com']);
         $b = $this->student(['internship_status' => 'completed', 'student_number' => 'SN-200'], ['name' => 'Bob 100% Tan', 'email' => 'bob@example.com', 'status' => 'inactive']);
-        $c = $this->student(['company_id' => $company->id, 'student_number' => 'SN-300'], ['name' => 'Carla', 'email' => 'carla@example.com']);
+        $c = $this->student(['company_id' => $company->id, 'internship_status' => 'not_started', 'student_number' => 'SN-300'], ['name' => 'Carla', 'email' => 'carla@example.com']);
 
         $coordinator = $this->user(User::ROLE_COORDINATOR);
         $ids = fn (string $query) => collect($this->api('GET', '/api/v1/assignments?'.$query, $coordinator)->assertOk()->json('data'))->pluck('id')->sort()->values()->all();

@@ -74,6 +74,7 @@ class DashboardController extends Controller
         return [
             'internship' => [
                 'status' => $summary['internship_status'],
+                'can_submit' => $student->canSubmitWork(),
                 'company' => $summary['company']
                     ? ['id' => $summary['company']->id, 'name' => $summary['company']->company_name]
                     : null,

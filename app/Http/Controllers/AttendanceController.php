@@ -38,6 +38,7 @@ class AttendanceController extends Controller
             'attendances' => $attendances,
             'totalRenderedHours' => (float) $attendances->sum('rendered_hours'),
             'todayRecord' => $today,
+            'submission' => AttendanceService::submissionState($student),
         ]);
     }
 

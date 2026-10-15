@@ -107,6 +107,10 @@ class AttendanceController extends Controller
         try {
             $action();
         } catch (AttendanceRuleException $e) {
+            // The status may have changed since the student was loaded (the
+            // service re-reads it under a lock): report the current one.
+            $student->refresh();
+
             return response()->json([
                 'message' => $e->getMessage(),
                 'code' => 'attendance_rule',
@@ -121,7 +125,7 @@ class AttendanceController extends Controller
     }
 
     /**
-     * @return array{date: string, record: array|null, actions: array, hours: array}
+     * @return array{date: string, record: array|null, submission: array, actions: array, hours: array}
      */
     private function todayState(Request $request, Student $student): array
     {
@@ -132,7 +136,8 @@ class AttendanceController extends Controller
         return [
             'date' => today()->toDateString(),
             'record' => $record ? (new AttendanceResource($record))->resolve($request) : null,
-            'actions' => collect(AttendanceService::refusals($record))
+            'submission' => AttendanceService::submissionState($student),
+            'actions' => collect(AttendanceService::refusals($student, $record))
                 ->map(fn (?string $reason) => ['allowed' => $reason === null, 'reason' => $reason])
                 ->all(),
             'hours' => [

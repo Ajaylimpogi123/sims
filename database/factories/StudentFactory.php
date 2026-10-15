@@ -11,7 +11,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 class StudentFactory extends Factory
 {
     /**
-     * Define the model's default state.
+     * Define the model's default state. Ongoing by default: the only status
+     * in which a student may submit attendance and reports (the column's
+     * own default for a new registration is not_started).
      *
      * @return array<string, mixed>
      */
@@ -25,8 +27,23 @@ class StudentFactory extends Factory
             'company_id' => null,
             'internship_schedule' => null,
             'supervisor_id' => null,
-            'internship_status' => 'not_started',
+            'internship_status' => 'ongoing',
             'required_hours' => 486,
         ];
+    }
+
+    public function notStarted(): static
+    {
+        return $this->state(['internship_status' => 'not_started']);
+    }
+
+    public function ongoing(): static
+    {
+        return $this->state(['internship_status' => 'ongoing']);
+    }
+
+    public function completed(): static
+    {
+        return $this->state(['internship_status' => 'completed']);
     }
 }

@@ -22,6 +22,8 @@ class StudentProfileResource extends JsonResource
             'course' => $this->course,
             'section' => $this->section,
             'internship_status' => $this->internship_status,
+            // Attendance and reports can be submitted only while ongoing.
+            'can_submit' => $this->resource->canSubmitWork(),
             'required_hours' => $this->required_hours === null ? null : (int) $this->required_hours,
             'company' => $this->company ? [
                 'id' => $this->company->id,

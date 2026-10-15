@@ -54,6 +54,7 @@ class DashboardController extends Controller
             'roleId' => 1,
             'student' => [
                 'internship_status' => $summary['internship_status'],
+                'can_submit' => $student->canSubmitWork(),
                 'company_name' => $summary['company']?->company_name,
                 'supervisor_name' => $summary['supervisor']?->name,
             ],
