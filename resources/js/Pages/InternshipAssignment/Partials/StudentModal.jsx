@@ -415,6 +415,7 @@ export default function StudentModal({
                                         id="assignment-required-hours"
                                         type="number"
                                         min="0"
+                                        max="2000"
                                         step="1"
                                         inputMode="numeric"
                                         placeholder="e.g. 486"

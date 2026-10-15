@@ -51,6 +51,8 @@ export default function RequiredHoursModal({
                                 <Input
                                     type="number"
                                     min="0"
+                                    max="2000"
+                                    step="1"
                                     value={data.required_hours}
                                     onChange={(e) =>
                                         setData(
