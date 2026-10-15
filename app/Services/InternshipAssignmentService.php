@@ -114,7 +114,10 @@ class InternshipAssignmentService
 
     /**
      * Every company for the assignment form, by name: slots,
-     * students_count, status and the roster (by name, with status).
+     * students_count, status and the roster (by name, with status). Only
+     * roster accounts that still hold the Supervisor role are offered: a
+     * role change in User Management leaves the roster row behind, and
+     * rules() refuses them as a new pick.
      */
     public function companyOptions(): Collection
     {
@@ -122,6 +125,7 @@ class InternshipAssignmentService
             ->withCount('students')
             ->with(['supervisors' => fn ($q) => $q
                 ->select('users.id', 'users.name', 'users.email', 'users.status')
+                ->where('users.role_id', User::ROLE_SUPERVISOR)
                 ->orderBy('users.name')
                 ->orderBy('users.id'),
             ])
@@ -195,7 +199,17 @@ class InternshipAssignmentService
         // student's current company, so changing both at once works.
         $resultingCompanyId = $request->input('company_id');
 
-        $supervisorRules = ['bail', 'nullable', self::idRule(), 'integer', 'min:1', Rule::exists('users', 'id')->where('role_id', User::ROLE_SUPERVISOR)];
+        // A new supervisor (or the current one taken along to a new company)
+        // must hold the Supervisor role. The unchanged current one may be
+        // kept even if a role change in User Management demoted them since,
+        // like an inactive or off-roster one; needs_supervisor flags it.
+        $existing = Rule::exists('users', 'id');
+
+        if (! $this->keepsCurrentSupervisor($student, $resultingCompanyId, $request->input('supervisor_id'))) {
+            $existing->where('role_id', User::ROLE_SUPERVISOR);
+        }
+
+        $supervisorRules = ['bail', 'nullable', self::idRule(), 'integer', 'min:1', $existing];
 
         if ($rosterCheck) {
             $supervisorRules[] = function (string $attribute, mixed $value, \Closure $fail) use ($resultingCompanyId, $student) {
@@ -412,6 +426,18 @@ class InternshipAssignmentService
     {
         return (string) $supervisorId !== (string) $student->supervisor_id
             || (string) $companyId !== (string) $student->company_id;
+    }
+
+    /**
+     * Whether the request keeps the student's current (non-null) supervisor
+     * at their current company: checkRules() lets that through untouched.
+     */
+    private function keepsCurrentSupervisor(Student $student, mixed $companyId, mixed $supervisorId): bool
+    {
+        return $student->supervisor_id !== null
+            && (is_int($supervisorId) || is_string($supervisorId))
+            && ($companyId === null || is_int($companyId) || is_string($companyId))
+            && ! $this->assignmentChanges($student, $companyId, $supervisorId);
     }
 
     /**

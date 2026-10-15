@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use App\Models\Student;
+use App\Models\User;
 use App\Services\InternshipAssignmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,10 +33,16 @@ class InternshipAssignmentController extends Controller
         $this->assignments->loadRosterFlags($students);
 
         // `status` on companies and roster supervisors lets the form keep
-        // inactive ones out of new picks (the save refuses them).
+        // inactive ones out of new picks (the save refuses them). Roster
+        // accounts no longer holding the Supervisor role are left out (a
+        // role change leaves the roster row behind; the save refuses them as
+        // a new pick); the page shows a student's current one from the
+        // student's own supervisor fields.
         $companies = Company::query()
             ->withCount('students')
-            ->with('supervisors:id,name,email,status')
+            ->with(['supervisors' => fn ($q) => $q
+                ->select('users.id', 'users.name', 'users.email', 'users.status')
+                ->where('users.role_id', User::ROLE_SUPERVISOR)])
             ->orderBy('company_name')
             ->get(['id', 'company_name', 'slots', 'status']);
 
