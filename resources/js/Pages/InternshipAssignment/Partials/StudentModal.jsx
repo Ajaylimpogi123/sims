@@ -318,9 +318,9 @@ export default function StudentModal({
                                         !errors.supervisor_id && (
                                             <p className="flex items-start gap-1.5 text-xs text-amber-700">
                                                 <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
-                                                Without a supervisor, no one
-                                                can approve this student's
-                                                attendance or reports.
+                                                Without a supervisor, no
+                                                supervisor will see, approve or
+                                                evaluate this student's work.
                                             </p>
                                         )}
                                     {hasOffRosterSupervisor &&
