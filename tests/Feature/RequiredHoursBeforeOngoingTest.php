@@ -21,7 +21,7 @@ class RequiredHoursBeforeOngoingTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const MISSING = "Set this student's required hours in Attendance Monitoring before marking the internship Ongoing.";
+    private const MISSING = 'Set the required hours before marking the internship Ongoing.';
 
     private const LOCKED = "Required hours can't be cleared while the internship is Ongoing.";
 

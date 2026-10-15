@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\Student;
+use App\Support\RequiredHours;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,11 +17,6 @@ use Illuminate\Validation\ValidationException;
  */
 trait ValidatesAttendanceMonitoring
 {
-    /** students.required_hours is an unsigned INT. */
-    public const MAX_REQUIRED_HOURS = 4294967295;
-
-    public const REQUIRED_HOURS_LOCKED_MESSAGE = 'Required hours can\'t be cleared while the internship is Ongoing.';
-
     /**
      * Earliest entry date. Together with "not after today" (app timezone)
      * this keeps typos like year 0999 / 9999 and future days out of the
@@ -61,23 +57,21 @@ trait ValidatesAttendanceMonitoring
     }
 
     /**
-     * Required hours: a whole number, or empty / 0 for "not set". Any
-     * spelling of zero ("0", "-0", "+0", ...) is normalised to null after
-     * validation, so 0 is never stored and always counts as "not set".
+     * Required hours: a whole number, or empty / any spelling of 0 for "not
+     * set" (stored null). The same rules as Internship Assignment
+     * (App\Support\RequiredHours).
      *
      * @return array{required_hours: ?int}
      */
     protected function validateRequiredHours(Request $request): array
     {
-        $request->merge(['required_hours' => $request->input('required_hours') ?: null]);
+        $request->merge(['required_hours' => RequiredHours::prepare($request->input('required_hours'))]);
 
         $validated = $request->validate([
-            'required_hours' => ['nullable', 'numeric', 'integer', 'min:0', 'max:'.self::MAX_REQUIRED_HOURS],
+            'required_hours' => RequiredHours::rules(),
         ]);
 
-        $hours = $validated['required_hours'] ?? null;
-
-        return ['required_hours' => $hours === null || (int) $hours === 0 ? null : (int) $hours];
+        return ['required_hours' => RequiredHours::normalize($validated['required_hours'] ?? null)];
     }
 
     /**
@@ -99,7 +93,7 @@ trait ValidatesAttendanceMonitoring
 
             if ($requiredHours === null && $current->internship_status === Student::SUBMITTING_STATUS) {
                 throw ValidationException::withMessages([
-                    'required_hours' => self::REQUIRED_HOURS_LOCKED_MESSAGE,
+                    'required_hours' => RequiredHours::LOCKED_MESSAGE,
                 ]);
             }
 

@@ -6,6 +6,7 @@ use App\Exceptions\AssignmentRuleException;
 use App\Models\Company;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\RequiredHours;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -19,10 +20,11 @@ use Illuminate\Validation\ValidationException;
  * Internship Assignment (Internship Coordinator, Administrator), shared by
  * the website and the mobile API: one save covering a student's profile
  * fields and their assignment (company, supervisor, internship status,
- * schedule), plus the account status toggle.
+ * schedule, required hours), plus the account status toggle.
  *
- * - Changing the internship status to ongoing needs required hours (an
- *   already-ongoing student re-saved unchanged is let through).
+ * - Ongoing needs required hours (set in this same save or already
+ *   stored; an already-ongoing student without any, from older rows, can
+ *   still be re-saved), and an ongoing student's hours can't be cleared.
  * - A company other than the student's current one needs a free slot.
  * - A supervisor must be on the chosen company's roster (company_supervisors)
  *   when the company or supervisor changes. The roster and
@@ -51,7 +53,9 @@ class InternshipAssignmentService
 
     public const REQUIRED_HOURS_MISSING = 'required_hours_missing';
 
-    public const REQUIRED_HOURS_MISSING_MESSAGE = 'Set this student\'s required hours in Attendance Monitoring before marking the internship Ongoing.';
+    public const REQUIRED_HOURS_MISSING_MESSAGE = 'Set the required hours before marking the internship Ongoing.';
+
+    public const REQUIRED_HOURS_LOCKED = 'required_hours_locked';
 
     /** `supervisor_issue` values, in precedence order (see supervisorIssue()). */
     public const ISSUE_NO_SUPERVISOR = 'no_supervisor';
@@ -218,6 +222,12 @@ class InternshipAssignmentService
                 $request->merge([$key => null]);
             }
         }
+
+        // Blank required hours = not set; an omitted key keeps the current
+        // value (older app builds don't send it).
+        if ($request->has('required_hours')) {
+            $request->merge(['required_hours' => RequiredHours::prepare($request->input('required_hours'))]);
+        }
     }
 
     /**
@@ -278,6 +288,8 @@ class InternshipAssignmentService
             'supervisor_id' => $supervisorRules,
             'internship_status' => ['required', 'in:'.implode(',', array_keys(self::STATUSES))],
             'internship_schedule' => ['nullable', 'string', 'max:255'],
+            // The same rules as Attendance Monitoring's required hours.
+            'required_hours' => ['sometimes', ...RequiredHours::rules()],
         ];
     }
 
@@ -313,7 +325,12 @@ class InternshipAssignmentService
                 $current = Student::query()->lockForUpdate()->find($student->id)
                     ?? throw (new ModelNotFoundException)->setModel(Student::class, [$student->id]);
 
-                $this->checkRules($current, $company, $supervisorId, $data['internship_status']);
+                // Omitted required hours keep the stored value.
+                $requiredHours = array_key_exists('required_hours', $data)
+                    ? RequiredHours::normalize($data['required_hours'])
+                    : RequiredHours::normalize($current->required_hours);
+
+                $this->checkRules($current, $company, $supervisorId, $data['internship_status'], $requiredHours);
 
                 // The "assignment" itself, as opposed to the student's own
                 // profile fields: only changes to these are worth notifying
@@ -340,6 +357,7 @@ class InternshipAssignmentService
                     'supervisor_id' => $supervisorId,
                     'internship_status' => $data['internship_status'],
                     'internship_schedule' => $data['internship_schedule'] ?? null,
+                    'required_hours' => $requiredHours,
                 ]);
 
                 return [$hasAssignmentChanges, $newSupervisor];
@@ -403,16 +421,21 @@ class InternshipAssignmentService
      *
      * @throws AssignmentRuleException
      */
-    private function checkRules(Student $current, ?Company $company, ?int $supervisorId, string $internshipStatus): void
+    private function checkRules(Student $current, ?Company $company, ?int $supervisorId, string $internshipStatus, ?int $requiredHours): void
     {
-        // Marking the internship ongoing opens attendance and report
-        // submissions, which need an hours target. An already-ongoing
-        // student re-saved unchanged keeps going (older rows may lack one;
-        // Attendance Monitoring then won't let it be cleared).
-        if ($internshipStatus === Student::SUBMITTING_STATUS
-            && $current->internship_status !== Student::SUBMITTING_STATUS
-            && ! ((int) $current->required_hours > 0)) {
-            throw AssignmentRuleException::refuse(self::REQUIRED_HOURS_MISSING, 'internship_status', self::REQUIRED_HOURS_MISSING_MESSAGE);
+        // Ongoing opens attendance and report submissions, which need an
+        // hours target: checked against the hours this same save leaves
+        // (so hours + Ongoing can be set at once). An already-ongoing
+        // student can't lose their hours; one that never had any (older
+        // rows) can still be re-saved unchanged.
+        if ($internshipStatus === Student::SUBMITTING_STATUS && $requiredHours === null) {
+            if ($current->internship_status !== Student::SUBMITTING_STATUS) {
+                throw AssignmentRuleException::refuse(self::REQUIRED_HOURS_MISSING, 'internship_status', self::REQUIRED_HOURS_MISSING_MESSAGE);
+            }
+
+            if (RequiredHours::normalize($current->required_hours) !== null) {
+                throw AssignmentRuleException::refuse(self::REQUIRED_HOURS_LOCKED, 'required_hours', RequiredHours::LOCKED_MESSAGE);
+            }
         }
 
         $companyChanged = (int) $company?->id !== (int) $current->company_id;
