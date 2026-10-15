@@ -4,7 +4,22 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const Select = SelectPrimitive.Root
+// Inside a <form>, Radix mirrors the value into a hidden native <select>.
+// When the value is set before its <SelectItem> has mounted (e.g. a form
+// that loads a company and a supervisor from that company's list at the same
+// time), the native select can't hold it and Radix reports "" — which forms
+// would save as "cleared". Radix never allows "" as an item value, so a ""
+// change never comes from the user and is dropped here.
+const Select = ({ onValueChange, ...props }) => (
+  <SelectPrimitive.Root
+    {...props}
+    onValueChange={
+      onValueChange &&
+      ((value) => {
+        if (value !== "") onValueChange(value)
+      })
+    } />
+)
 
 const SelectGroup = SelectPrimitive.Group
 
