@@ -20,6 +20,7 @@ import {
 import InputError from "@/Components/InputError";
 import useManageStudent from "../Hooks/useManageStudent";
 import { useMemo } from "react";
+import { AlertTriangle } from "lucide-react";
 
 const UNASSIGNED = "unassigned";
 
@@ -29,7 +30,12 @@ const STATUS_OPTIONS = [
     { value: "completed", label: "Completed" },
 ];
 
-export default function StudentModal({ student, companies, children }) {
+export default function StudentModal({
+    student,
+    companies,
+    needsSupervisorOnly = false,
+    children,
+}) {
     const {
         open,
         openModal,
@@ -39,7 +45,11 @@ export default function StudentModal({ student, companies, children }) {
         errors,
         processing,
         handleSubmit,
-    } = useManageStudent(student);
+    } = useManageStudent(student, { needsSupervisorOnly });
+
+    const hasOffRosterSupervisor =
+        student?.supervisor_id != null &&
+        student?.supervisor_on_roster === false;
 
     const isCurrentCompany = (company) =>
         student?.company_id != null &&
@@ -69,11 +79,25 @@ export default function StudentModal({ student, companies, children }) {
         const sameCompany =
             student?.company_id != null &&
             String(student.company_id) === companyId;
-        return (company?.supervisors || []).filter(
+        const roster = (company?.supervisors || []).filter(
             (s) =>
                 s.status === "active" ||
                 (sameCompany && isCurrentSupervisor(s)),
         );
+
+        // The current supervisor may have been removed from this company's
+        // roster since the assignment. Keep them listed (for the same
+        // company only) so the field shows who's assigned instead of a
+        // blank — the server lets an unchanged assignment be kept.
+        if (sameCompany && hasOffRosterSupervisor) {
+            roster.push({
+                id: student.supervisor_id,
+                name: student.supervisor_name,
+                offRoster: true,
+            });
+        }
+
+        return roster;
     };
 
     const selectedCompany = useMemo(
@@ -82,7 +106,12 @@ export default function StudentModal({ student, companies, children }) {
     );
     const rosterSupervisors = useMemo(
         () => rosterFor(data.company_id),
-        [companies, data.company_id, student?.supervisor_id],
+        [
+            companies,
+            data.company_id,
+            student?.supervisor_id,
+            student?.supervisor_on_roster,
+        ],
     );
 
     const handleCompanyChange = (value) => {
@@ -256,8 +285,10 @@ export default function StudentModal({ student, companies, children }) {
                                             <SelectItem value={UNASSIGNED}>
                                                 Unassigned
                                             </SelectItem>
-                                            {rosterSupervisors.length ===
-                                                0 && selectedCompany && (
+                                            {!rosterSupervisors.some(
+                                                (s) => !s.offRoster,
+                                            ) &&
+                                                selectedCompany && (
                                                 <div className="px-2 py-1.5 text-sm text-muted-foreground">
                                                     No active supervisors on
                                                     this company's roster
@@ -272,14 +303,41 @@ export default function StudentModal({ student, companies, children }) {
                                                         )}
                                                     >
                                                         {supervisor.name}
-                                                        {supervisor.status !==
-                                                            "active" &&
-                                                            " (inactive)"}
+                                                        {supervisor.offRoster
+                                                            ? " (not on roster)"
+                                                            : supervisor.status !==
+                                                                  "active" &&
+                                                              " (inactive)"}
                                                     </SelectItem>
                                                 ),
                                             )}
                                         </SelectContent>
                                     </Select>
+                                    {selectedCompany &&
+                                        !data.supervisor_id &&
+                                        !errors.supervisor_id && (
+                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                                                Without a supervisor, no one
+                                                can approve this student's
+                                                attendance or reports.
+                                            </p>
+                                        )}
+                                    {hasOffRosterSupervisor &&
+                                        data.company_id ===
+                                            String(student.company_id) &&
+                                        data.supervisor_id ===
+                                            String(student.supervisor_id) &&
+                                        !errors.supervisor_id && (
+                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                                                This supervisor is no longer on
+                                                this company's roster. Choose
+                                                one from the roster, or add
+                                                them back in Company
+                                                Management.
+                                            </p>
+                                        )}
                                     <InputError
                                         message={errors.supervisor_id}
                                     />

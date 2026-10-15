@@ -1,20 +1,24 @@
 import { useState, useEffect } from "react";
 import { useForm } from "@inertiajs/react";
 
-export default function useManageStudent(student) {
+export default function useManageStudent(
+    student,
+    { needsSupervisorOnly = false } = {},
+) {
     const [open, setOpen] = useState(false);
 
-    const { data, setData, patch, errors, processing, reset } = useForm({
-        name: "",
-        email: "",
-        student_number: "",
-        course: "",
-        section: "",
-        company_id: "",
-        supervisor_id: "",
-        internship_status: "not_started",
-        internship_schedule: "",
-    });
+    const { data, setData, patch, transform, errors, processing, reset } =
+        useForm({
+            name: "",
+            email: "",
+            student_number: "",
+            course: "",
+            section: "",
+            company_id: "",
+            supervisor_id: "",
+            internship_status: "not_started",
+            internship_schedule: "",
+        });
 
     useEffect(() => {
         if (!student || !open) return;
@@ -42,6 +46,14 @@ export default function useManageStudent(student) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
+
+        // Not a form field: tells the server to redirect back to the
+        // "Needs supervisor" filter (?needs_supervisor=1) after saving.
+        transform((formData) =>
+            needsSupervisorOnly
+                ? { ...formData, needs_supervisor: 1 }
+                : formData,
+        );
 
         patch(route("internship-assignment.update", student.id), {
             preserveScroll: true,

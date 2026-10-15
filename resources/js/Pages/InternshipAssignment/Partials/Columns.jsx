@@ -9,6 +9,7 @@ import {
 import { MoreHorizontal } from "lucide-react";
 import { router } from "@inertiajs/react";
 import StudentModal from "./StudentModal";
+import StatusBadge from "@/Components/StatusBadge";
 
 const STATUS_LABELS = {
     not_started: "Not Started",
@@ -22,15 +23,17 @@ const STATUS_STYLES = {
     completed: "bg-green-100 text-green-700",
 };
 
-const handleToggleStatus = (student) => {
+const handleToggleStatus = (student, needsSupervisorOnly) => {
     router.patch(
         route("internship-assignment.toggle-status", student.id),
-        {},
+        needsSupervisorOnly ? { needs_supervisor: 1 } : {},
         { preserveScroll: true },
     );
 };
 
-export function getColumns(companies) {
+// needsSupervisorOnly is sent with saves so the redirect keeps the
+// "Needs supervisor" filter (?needs_supervisor=1) on.
+export function getColumns(companies, { needsSupervisorOnly = false } = {}) {
     return [
         {
             accessorKey: "name",
@@ -48,8 +51,30 @@ export function getColumns(companies) {
         {
             accessorKey: "supervisor_name",
             header: "Supervisor",
-            cell: ({ row }) =>
-                row.getValue("supervisor_name") || "Unassigned",
+            cell: ({ row }) => {
+                const student = row.original;
+                const name = row.getValue("supervisor_name");
+
+                // needs_supervisor (server): placed at a company but either
+                // no supervisor, or one who's no longer on its roster.
+                if (student.needs_supervisor && student.supervisor_id == null) {
+                    return <StatusBadge status="no_supervisor" />;
+                }
+
+                if (
+                    student.needs_supervisor &&
+                    student.supervisor_on_roster === false
+                ) {
+                    return (
+                        <div className="flex flex-col items-start gap-1">
+                            <span>{name}</span>
+                            <StatusBadge status="not_on_roster" />
+                        </div>
+                    );
+                }
+
+                return name || "Unassigned";
+            },
         },
         {
             accessorKey: "internship_status",
@@ -103,12 +128,18 @@ export function getColumns(companies) {
                                 <StudentModal
                                     student={student}
                                     companies={companies}
+                                    needsSupervisorOnly={needsSupervisorOnly}
                                 >
                                     Edit
                                 </StudentModal>
                             </div>
                             <DropdownMenuItem
-                                onClick={() => handleToggleStatus(student)}
+                                onClick={() =>
+                                    handleToggleStatus(
+                                        student,
+                                        needsSupervisorOnly,
+                                    )
+                                }
                                 className="pl-2 pr-4 py-2 text-sm text-gray-800 hover:bg-gray-100 rounded-md cursor-pointer"
                             >
                                 {student.status === "active"

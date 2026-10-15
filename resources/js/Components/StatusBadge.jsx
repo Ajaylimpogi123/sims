@@ -11,6 +11,9 @@ const STATUS_CONFIG = {
     locked: { label: "Locked", className: "bg-purple-100 text-purple-700" },
     approved: { label: "Approved", className: "bg-green-100 text-green-700" },
     rejected: { label: "Rejected", className: "bg-red-100 text-red-700" },
+    // Internship Assignment: a placed student whose supervisor is missing.
+    no_supervisor: { label: "No supervisor", className: "bg-amber-100 text-amber-700" },
+    not_on_roster: { label: "Not on roster", className: "bg-amber-100 text-amber-700" },
 };
 
 /**

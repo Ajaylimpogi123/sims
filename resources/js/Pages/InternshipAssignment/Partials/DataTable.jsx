@@ -19,7 +19,12 @@ import {
 import { Input } from "@/Components/ui/input";
 import { Button } from "@/Components/ui/button";
 
-export function DataTable({ columns, data }) {
+export function DataTable({
+    columns,
+    data,
+    toolbar = null,
+    emptyMessage = "No results.",
+}) {
     const [sorting, setSorting] = useState([]);
     const [columnFilters, setColumnFilters] = useState([]);
 
@@ -40,14 +45,17 @@ export function DataTable({ columns, data }) {
 
     return (
         <div className="space-y-4">
-            <Input
-                placeholder="Filter by student name..."
-                value={table.getColumn("name")?.getFilterValue() || ""}
-                onChange={(e) =>
-                    table.getColumn("name")?.setFilterValue(e.target.value)
-                }
-                className="max-w-sm"
-            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                    placeholder="Filter by student name..."
+                    value={table.getColumn("name")?.getFilterValue() || ""}
+                    onChange={(e) =>
+                        table.getColumn("name")?.setFilterValue(e.target.value)
+                    }
+                    className="max-w-sm"
+                />
+                {toolbar}
+            </div>
 
             <div className="rounded-md border">
                 <Table>
@@ -89,7 +97,7 @@ export function DataTable({ columns, data }) {
                                     colSpan={columns.length}
                                     className="h-24 text-center"
                                 >
-                                    No results.
+                                    {emptyMessage}
                                 </TableCell>
                             </TableRow>
                         )}
