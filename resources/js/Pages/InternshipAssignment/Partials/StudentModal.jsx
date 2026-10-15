@@ -24,8 +24,11 @@ import { AlertTriangle } from "lucide-react";
 
 const UNASSIGNED = "unassigned";
 
+// Same wording as the server's 422s, which replace these hints when sent.
 const REQUIRED_HOURS_FOR_ONGOING_HINT =
-    "Set this student's required hours in Attendance Monitoring before marking the internship Ongoing.";
+    "Set the required hours before marking the internship Ongoing.";
+const REQUIRED_HOURS_LOCKED_HINT =
+    "Required hours can't be cleared while the internship is Ongoing.";
 
 const STATUS_OPTIONS = [
     { value: "not_started", label: "Not Started" },
@@ -71,13 +74,21 @@ export default function StudentModal({
         data.company_id === String(student.company_id) &&
         data.supervisor_id === String(student.supervisor_id);
 
-    // The server refuses moving a student INTO Ongoing without required
-    // hours, null or 0 (422 on internship_status); keeping an already-Ongoing status
-    // unchanged is allowed, so no hint then.
+    // Mirrors the server, which checks the hours submitted in the same save
+    // (empty / 0 = not set):
+    // - moving INTO Ongoing without hours → 422 on internship_status;
+    // - an Ongoing student whose saved hours are emptied → 422 on
+    //   required_hours. A legacy Ongoing row with no hours that stays
+    //   Ongoing and empty still saves, so no hint then.
+    const hoursEntered = Number(data.required_hours) > 0;
+    const wasOngoing = student?.internship_status === "ongoing";
     const needsRequiredHoursForOngoing =
+        data.internship_status === "ongoing" && !wasOngoing && !hoursEntered;
+    const clearingHoursWhileOngoing =
+        wasOngoing &&
         data.internship_status === "ongoing" &&
-        student?.internship_status !== "ongoing" &&
-        !(Number(student?.required_hours) > 0);
+        Number(student?.required_hours) > 0 &&
+        !hoursEntered;
 
     const isCurrentCompany = (company) =>
         student?.company_id != null &&
@@ -176,7 +187,8 @@ export default function StudentModal({
                             <DialogTitle>{student?.name}</DialogTitle>
                             <DialogDescription>
                                 Update the student's profile, company/
-                                supervisor assignment, and internship status
+                                supervisor assignment, required hours and
+                                internship status
                             </DialogDescription>
                         </DialogHeader>
 
@@ -392,6 +404,37 @@ export default function StudentModal({
                                         )}
                                     <InputError
                                         message={errors.supervisor_id}
+                                    />
+                                </div>
+
+                                <div className="grid gap-3">
+                                    <Label htmlFor="assignment-required-hours">
+                                        Required Hours
+                                    </Label>
+                                    <Input
+                                        id="assignment-required-hours"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        inputMode="numeric"
+                                        placeholder="e.g. 486"
+                                        value={data.required_hours}
+                                        onChange={(e) =>
+                                            setData(
+                                                "required_hours",
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                    {clearingHoursWhileOngoing &&
+                                        !errors.required_hours && (
+                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                                                {REQUIRED_HOURS_LOCKED_HINT}
+                                            </p>
+                                        )}
+                                    <InputError
+                                        message={errors.required_hours}
                                     />
                                 </div>
 

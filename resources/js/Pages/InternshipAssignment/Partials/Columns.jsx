@@ -1,4 +1,5 @@
 import RowActionsMenu from "@/Components/RowActionsMenu";
+import { RequiredHoursNotSet } from "@/Components/RequiredHoursNotSet";
 import { router } from "@inertiajs/react";
 import StudentModal from "./StudentModal";
 import StatusBadge from "@/Components/StatusBadge";
@@ -72,6 +73,15 @@ export function getColumns(companies, { needsSupervisorOnly = false } = {}) {
                         <StatusBadge status={badge} />
                     </div>
                 );
+            },
+        },
+        {
+            accessorKey: "required_hours",
+            header: "Required Hours",
+            cell: ({ row }) => {
+                const hours = Number(row.getValue("required_hours"));
+                // 0 counts as not set, as on the server.
+                return hours > 0 ? hours : <RequiredHoursNotSet />;
             },
         },
         {

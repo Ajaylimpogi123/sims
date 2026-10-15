@@ -19,6 +19,7 @@ export default function useManageStudent(
             supervisor_id: "",
             internship_status: "not_started",
             internship_schedule: "",
+            required_hours: "",
         });
 
     useEffect(() => {
@@ -36,6 +37,11 @@ export default function useManageStudent(
                 : "",
             internship_status: student.internship_status || "not_started",
             internship_schedule: student.internship_schedule || "",
+            // 0 means "not set" (as on the server), so it seeds as empty.
+            required_hours:
+                Number(student.required_hours) > 0
+                    ? String(student.required_hours)
+                    : "",
         });
         // Seed only when the dialog opens: a validation (422) response re-sends
         // the props as new objects and must not overwrite what was typed.
