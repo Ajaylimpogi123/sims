@@ -831,7 +831,8 @@ class MonitoringApiTest extends TestCase
     public function test_required_hours_follow_the_website_rules(mixed $value, ?int $stored): void
     {
         $supervisor = $this->user(3);
-        $student = $this->student($supervisor);
+        // Not ongoing: clearing (0 / empty / null) is allowed only then.
+        $student = $this->student($supervisor, ['internship_status' => 'not_started']);
 
         $this->api('PATCH', "/api/v1/monitoring/students/{$student->id}/required-hours", $supervisor, ['required_hours' => $value])
             ->assertOk()
@@ -871,8 +872,8 @@ class MonitoringApiTest extends TestCase
     public function test_api_and_website_writes_store_identical_rows(): void
     {
         $supervisor = $this->user(3);
-        $webStudent = $this->student($supervisor);
-        $apiStudent = $this->student($supervisor);
+        $webStudent = $this->student($supervisor, ['internship_status' => 'not_started']);
+        $apiStudent = $this->student($supervisor, ['internship_status' => 'not_started']);
 
         $comparable = fn (Student $student) => Attendance::where('student_id', $student->id)->get()
             ->map(fn (Attendance $a) => collect($a->getAttributes())->except(['id', 'student_id', 'created_at', 'updated_at'])->all())

@@ -126,7 +126,7 @@ class MonitoringController extends Controller
     {
         $this->authorizeManage($request, $student);
 
-        $student->update($this->validateRequiredHours($request));
+        $this->saveRequiredHours($request, $student);
 
         return response()->json([
             'message' => 'Required hours updated.',

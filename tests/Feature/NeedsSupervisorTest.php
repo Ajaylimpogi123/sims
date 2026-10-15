@@ -12,8 +12,9 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /**
- * A student placed at a company with no supervisor, or one no longer on
- * that company's roster, "needs a supervisor": flagged on Internship
+ * A student placed at a company with no supervisor, one no longer on
+ * that company's roster, one no longer a Supervisor, or an inactive one,
+ * "needs a supervisor": flagged on Internship
  * Assignment (website + API), filterable, and counted as a Coordinator /
  * Admin dashboard action item.
  */
@@ -41,7 +42,7 @@ class NeedsSupervisorTest extends TestCase
      * no_supervisor: company, no supervisor (flagged)
      * off_roster: company, supervisor dropped from its roster (flagged)
      * on_roster: company, roster supervisor (not flagged)
-     * inactive_supervisor: company, inactive roster supervisor (not flagged)
+     * inactive_supervisor: company, inactive roster supervisor (flagged)
      * demoted: company, roster "supervisor" whose account became a
      *   Coordinator in User Management (flagged)
      */
@@ -74,7 +75,12 @@ class NeedsSupervisorTest extends TestCase
 
     private function flagged(): array
     {
-        return [$this->students['no_supervisor']->id, $this->students['off_roster']->id, $this->students['demoted']->id];
+        return [
+            $this->students['no_supervisor']->id,
+            $this->students['off_roster']->id,
+            $this->students['demoted']->id,
+            $this->students['inactive_supervisor']->id,
+        ];
     }
 
     private function api(string $method, string $uri, User $user, array $data = []): TestResponse
@@ -143,18 +149,19 @@ class NeedsSupervisorTest extends TestCase
         $students = collect($response->viewData('page')['props']['students'])->keyBy('id');
 
         $expected = [
-            'no_company' => [null, false],
-            'no_supervisor' => [null, true],
-            'off_roster' => [false, true],
-            'on_roster' => [true, false],
-            'inactive_supervisor' => [true, false],
-            'demoted' => [true, true],
+            'no_company' => [null, false, null],
+            'no_supervisor' => [null, true, 'no_supervisor'],
+            'off_roster' => [false, true, 'not_on_roster'],
+            'on_roster' => [true, false, null],
+            'inactive_supervisor' => [true, true, 'inactive'],
+            'demoted' => [true, true, 'not_a_supervisor'],
         ];
 
-        foreach ($expected as $name => [$onRoster, $needs]) {
+        foreach ($expected as $name => [$onRoster, $needs, $issue]) {
             $row = $students[$this->students[$name]->id];
             $this->assertSame($onRoster, $row['supervisor_on_roster'], "{$name}: supervisor_on_roster");
             $this->assertSame($needs, $row['needs_supervisor'], "{$name}: needs_supervisor");
+            $this->assertSame($issue, $row['supervisor_issue'], "{$name}: supervisor_issue");
             // Existing keys are untouched.
             $this->assertArrayHasKey('supervisor_id', $row);
             $this->assertArrayHasKey('company_id', $row);
@@ -232,8 +239,8 @@ class NeedsSupervisorTest extends TestCase
 
             $this->assertSame([
                 'key' => 'students_without_supervisor',
-                'label' => '3 student(s) need a supervisor',
-                'count' => 3,
+                'label' => '4 student(s) need a supervisor',
+                'count' => 4,
                 'href' => route('internship-assignment.index', ['needs_supervisor' => 1]),
             ], $items['students_without_supervisor'], "role {$roleId}");
 
@@ -289,7 +296,7 @@ class NeedsSupervisorTest extends TestCase
         foreach (['1', 'true'] as $value) {
             $response = $this->api('GET', "/api/v1/assignments?needs_supervisor={$value}", $admin)->assertOk();
             $this->assertEqualsCanonicalizing($this->flagged(), collect($response->json('data'))->pluck('id')->all());
-            $response->assertJsonPath('meta.total', 3);
+            $response->assertJsonPath('meta.total', 4);
         }
 
         foreach (['0', 'false', ''] as $value) {
@@ -335,8 +342,8 @@ class NeedsSupervisorTest extends TestCase
 
             $this->assertSame([
                 'key' => 'students_without_supervisor',
-                'label' => '3 student(s) need a supervisor',
-                'count' => 3,
+                'label' => '4 student(s) need a supervisor',
+                'count' => 4,
                 'target' => ['screen' => 'students', 'params' => ['needs_supervisor' => 1]],
             ], $item);
             $this->assertStringContainsString('"params":{"needs_supervisor":1}', $response->getContent());

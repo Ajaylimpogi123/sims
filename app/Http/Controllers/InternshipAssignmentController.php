@@ -25,11 +25,12 @@ class InternshipAssignmentController extends Controller
     public function index(Request $request): Response
     {
         $students = Student::query()
-            ->with(['user:id,name,email,status', 'company:id,company_name', 'supervisor:id,name'])
+            ->with(['user:id,name,email,status', 'company:id,company_name', 'supervisor:id,name,status'])
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Adds supervisor_on_roster and needs_supervisor to each student.
+        // Adds supervisor_on_roster, needs_supervisor and supervisor_issue to
+        // each student.
         $this->assignments->loadRosterFlags($students);
 
         // `status` on companies and roster supervisors lets the form keep

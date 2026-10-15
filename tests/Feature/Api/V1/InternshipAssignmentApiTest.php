@@ -162,6 +162,7 @@ class InternshipAssignmentApiTest extends TestCase
             'company_id' => $company->id,
             'supervisor_id' => $supervisor->id,
             'internship_status' => 'ongoing',
+            'required_hours' => 486,
             'internship_schedule' => 'Mon-Fri',
             'student_number' => '2024-0001',
         ], ['name' => 'Juan Dela Cruz', 'email' => 'juan@example.com']);
@@ -190,7 +191,9 @@ class InternshipAssignmentApiTest extends TestCase
             'supervisor' => ['id' => $supervisor->id, 'name' => 'Maria Santos', 'email' => $supervisor->email, 'status' => 'active'],
             'supervisor_on_roster' => true,
             'needs_supervisor' => false,
+            'supervisor_issue' => null,
             'internship_status' => 'ongoing',
+            'required_hours' => 486,
             'internship_schedule' => 'Mon-Fri',
             'created_at' => $student->fresh()->created_at->toIso8601String(),
             'updated_at' => $student->fresh()->updated_at->toIso8601String(),

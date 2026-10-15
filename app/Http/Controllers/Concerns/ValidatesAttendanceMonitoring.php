@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\Student;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Attendance Monitoring input rules, shared by the website's
@@ -15,6 +18,8 @@ trait ValidatesAttendanceMonitoring
 {
     /** students.required_hours is an unsigned INT. */
     public const MAX_REQUIRED_HOURS = 4294967295;
+
+    public const REQUIRED_HOURS_LOCKED_MESSAGE = 'Required hours can\'t be cleared while the internship is Ongoing.';
 
     /**
      * Earliest entry date. Together with "not after today" (app timezone)
@@ -67,5 +72,35 @@ trait ValidatesAttendanceMonitoring
         return $request->validate([
             'required_hours' => ['nullable', 'numeric', 'integer', 'min:0', 'max:'.self::MAX_REQUIRED_HOURS],
         ]);
+    }
+
+    /**
+     * Validate and save the student's required hours. While the internship
+     * is ongoing the target can't be cleared (marking a student Ongoing
+     * needs one; see InternshipAssignmentService). The status is read under
+     * the student's row lock, the same row an assignment save locks, so a
+     * concurrent status change can't slip in between.
+     *
+     * @throws ValidationException
+     * @throws ModelNotFoundException the student was deleted meanwhile
+     */
+    protected function saveRequiredHours(Request $request, Student $student): Student
+    {
+        $requiredHours = $this->validateRequiredHours($request)['required_hours'];
+
+        DB::transaction(function () use ($student, $requiredHours) {
+            $current = Student::query()->lockForUpdate()->findOrFail($student->id);
+
+            if ($requiredHours === null && $current->internship_status === Student::SUBMITTING_STATUS) {
+                throw ValidationException::withMessages([
+                    'required_hours' => self::REQUIRED_HOURS_LOCKED_MESSAGE,
+                ]);
+            }
+
+            $current->update(['required_hours' => $requiredHours]);
+            $student->setRawAttributes($current->getAttributes(), true);
+        });
+
+        return $student;
     }
 }

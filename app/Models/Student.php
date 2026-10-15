@@ -107,11 +107,10 @@ class Student extends Model
      * Students placed at a company who have no working supervisor: none
      * assigned, one whose account no longer holds the Supervisor role (a
      * role change in User Management leaves supervisor_id and the roster
-     * row behind), or one who is no longer on that company's roster
-     * (company_supervisors). An inactive Supervisor still counts as one.
-     * The same rows as the `needs_supervisor` flag
-     * InternshipAssignmentService::loadRosterFlags() sets; the dashboard's
-     * "need a supervisor" action item counts these.
+     * row behind), one whose account is inactive, or one who is no longer
+     * on that company's roster (company_supervisors). The same rows as the
+     * `needs_supervisor` flag InternshipAssignmentService::loadRosterFlags()
+     * sets; the dashboard's "need a supervisor" action item counts these.
      */
     public function scopeNeedsSupervisor(Builder $query): Builder
     {
@@ -119,7 +118,9 @@ class Student extends Model
             ->whereNotNull($this->qualifyColumn('company_id'))
             ->where(fn (Builder $q) => $q
                 ->whereNull($this->qualifyColumn('supervisor_id'))
-                ->orWhereDoesntHave('supervisor', fn (Builder $user) => $user->where('role_id', User::ROLE_SUPERVISOR))
+                ->orWhereDoesntHave('supervisor', fn (Builder $user) => $user
+                    ->where('role_id', User::ROLE_SUPERVISOR)
+                    ->where('status', 'active'))
                 ->orWhereNotExists(fn ($roster) => $roster
                     ->selectRaw('1')
                     ->from('company_supervisors')

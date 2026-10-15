@@ -38,7 +38,7 @@ class AttendanceMonitoringController extends Controller
     {
         $this->authorize('manageAttendance', $student);
 
-        $student->update($this->validateRequiredHours($request));
+        $this->saveRequiredHours($request, $student);
 
         return redirect()->route('attendance-monitoring.index')
             ->with('success', 'Required hours updated.');

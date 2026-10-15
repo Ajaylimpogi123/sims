@@ -40,7 +40,11 @@ class AssignmentStudentResource extends JsonResource
             ] : null,
             'supervisor_on_roster' => $this->supervisor_on_roster,
             'needs_supervisor' => (bool) $this->needs_supervisor,
+            // null | no_supervisor | not_on_roster | not_a_supervisor | inactive
+            'supervisor_issue' => $this->supervisor_issue,
             'internship_status' => $this->internship_status,
+            // null = not set; needed before the status can become ongoing.
+            'required_hours' => $this->required_hours === null ? null : (int) $this->required_hours,
             'internship_schedule' => $this->internship_schedule,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
