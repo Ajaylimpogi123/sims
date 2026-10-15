@@ -825,7 +825,8 @@ class MonitoringApiTest extends TestCase
             'plus zero' => ['+0', null],
             'empty' => ['', null],
             'null' => [null, null],
-            'column max' => [4294967295, 4294967295],
+            'max' => [2000, 2000],
+            'one' => [1, 1],
         ];
     }
 
@@ -852,6 +853,8 @@ class MonitoringApiTest extends TestCase
             'text' => ['abc'],
             'bool' => [true],
             'array' => [[100]],
+            'over the max' => [2001],
+            'over the max string' => ['2001'],
             'over the column' => [4294967296],
             'huge' => ['99999999999999999999'],
         ];
@@ -905,7 +908,7 @@ class MonitoringApiTest extends TestCase
             ->assertSessionHasErrors('date');
         $this->web('POST', "/attendance-monitoring/{$webStudent->id}/attendances", $supervisor, ['date' => '0999-12-31', 'time_in' => '08:00', 'time_out' => '09:00'])
             ->assertSessionHasErrors('date');
-        $this->web('PATCH', "/attendance-monitoring/{$webStudent->id}/required-hours", $supervisor, ['required_hours' => '4294967296'])
+        $this->web('PATCH', "/attendance-monitoring/{$webStudent->id}/required-hours", $supervisor, ['required_hours' => '2001'])
             ->assertSessionHasErrors('required_hours');
 
         $this->assertSame(0, Notification::count());

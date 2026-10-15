@@ -14,14 +14,20 @@ namespace App\Support;
  */
 final class RequiredHours
 {
-    /** students.required_hours is an unsigned INT. */
-    public const MAX = 4294967295;
+    /**
+     * A sensible cap (lead decision, 2026-10-15): a set value is 1–2000.
+     * Well under the unsigned INT column.
+     */
+    public const MAX = 2000;
 
     public const LOCKED_MESSAGE = 'Required hours can\'t be cleared while the internship is Ongoing.';
 
     /**
      * Validation rules for the (already blank-normalised, see prepare())
-     * value. Arrays, booleans, fractions, negatives and text are refused.
+     * value. Arrays, booleans, fractions, negatives, text and anything
+     * over MAX are refused. `min:0` (not 1) so "-0" / "+0" validate and
+     * normalize() turns them into "not set" like 0; a set value is
+     * therefore always 1–MAX.
      *
      * @return array<int, string>
      */

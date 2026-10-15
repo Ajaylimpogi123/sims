@@ -143,7 +143,8 @@ class AssignmentRequiredHoursTest extends TestCase
             foreach ([
                 'number' => [300, 300],
                 'numeric string' => ['250', 250],
-                'column max' => [4294967295, 4294967295],
+                'max' => [2000, 2000],
+                'one' => [1, 1],
                 'zero' => [0, null],
                 'zero string' => ['0', null],
                 'minus zero' => ['-0', null],
@@ -179,6 +180,7 @@ class AssignmentRequiredHoursTest extends TestCase
                 'text' => 'abc',
                 'bool' => true,
                 'array' => [100],
+                'over the max' => 2001,
                 'over the column' => 4294967296,
                 'huge' => '99999999999999999999',
             ] as $label => $value) {
@@ -202,6 +204,25 @@ class AssignmentRequiredHoursTest extends TestCase
 
         $this->assertSame(486, $student->fresh()->required_hours);
         $this->assertNotSame('CHANGED', $student->fresh()->course);
+    }
+
+    public function test_over_the_max_gets_the_max_message_on_both_paths(): void
+    {
+        $student = Student::factory()->create(['internship_status' => 'not_started', 'required_hours' => 486]);
+        $message = 'The required hours field must not be greater than 2000.';
+
+        $this->save('web', $student, $this->payload($student, ['required_hours' => '2001']))
+            ->assertSessionHasErrors(['required_hours' => $message]);
+        $this->save('api', $student, $this->payload($student, ['required_hours' => 2001]))
+            ->assertStatus(422)->assertJsonPath('errors.required_hours.0', $message);
+
+        $admin = $this->user(User::ROLE_ADMIN);
+        $this->defaultHeaders = [];
+        $this->actingAs($admin)
+            ->patch("/attendance-monitoring/{$student->id}/required-hours", ['required_hours' => '2001'])
+            ->assertSessionHasErrors(['required_hours' => $message]);
+
+        $this->assertSame(486, $student->fresh()->required_hours);
     }
 
     #[DataProvider('channels')]
