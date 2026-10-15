@@ -61,7 +61,9 @@ trait ValidatesAttendanceMonitoring
     }
 
     /**
-     * Required hours: a whole number, or empty / 0 for "not set".
+     * Required hours: a whole number, or empty / 0 for "not set". Any
+     * spelling of zero ("0", "-0", "+0", ...) is normalised to null after
+     * validation, so 0 is never stored and always counts as "not set".
      *
      * @return array{required_hours: ?int}
      */
@@ -69,9 +71,13 @@ trait ValidatesAttendanceMonitoring
     {
         $request->merge(['required_hours' => $request->input('required_hours') ?: null]);
 
-        return $request->validate([
+        $validated = $request->validate([
             'required_hours' => ['nullable', 'numeric', 'integer', 'min:0', 'max:'.self::MAX_REQUIRED_HOURS],
         ]);
+
+        $hours = $validated['required_hours'] ?? null;
+
+        return ['required_hours' => $hours === null || (int) $hours === 0 ? null : (int) $hours];
     }
 
     /**

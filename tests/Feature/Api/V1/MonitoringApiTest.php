@@ -821,6 +821,8 @@ class MonitoringApiTest extends TestCase
             'numeric string' => ['250', 250],
             'zero means not set' => [0, null],
             'zero string' => ['0', null],
+            'minus zero' => ['-0', null],
+            'plus zero' => ['+0', null],
             'empty' => ['', null],
             'null' => [null, null],
             'column max' => [4294967295, 4294967295],

@@ -194,7 +194,7 @@ class RequiredHoursBeforeOngoingTest extends TestCase
         $cases = [];
 
         foreach (['web', 'api'] as $channel) {
-            foreach (['null' => null, 'empty' => '', 'zero' => 0, 'zero string' => '0'] as $label => $value) {
+            foreach (['null' => null, 'empty' => '', 'zero' => 0, 'zero string' => '0', 'minus zero' => '-0', 'plus zero' => '+0'] as $label => $value) {
                 $cases["{$channel} {$label}"] = [$channel, $value];
             }
         }
