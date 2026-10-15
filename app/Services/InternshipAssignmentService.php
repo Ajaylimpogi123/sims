@@ -133,8 +133,9 @@ class InternshipAssignmentService
     /**
      * Sets `supervisor_on_roster` on each student: whether their supervisor
      * is on their company's roster (null without a supervisor), and
-     * `needs_supervisor`: placed at a company with no supervisor or one off
-     * that roster (the same rows as Student::needsSupervisor()).
+     * `needs_supervisor`: placed at a company with no supervisor, one whose
+     * account is no longer a Supervisor, or one off that roster (the same
+     * rows as Student::needsSupervisor()).
      *
      * @param  iterable<int, Student>  $students
      */
@@ -147,13 +148,22 @@ class InternshipAssignmentService
             ->get(['company_id', 'user_id'])
             ->mapWithKeys(fn ($row) => [$row->company_id.':'.$row->user_id => true]);
 
+        // Accounts that still hold the Supervisor role (callers may have
+        // loaded `supervisor` without role_id).
+        $supervisorIds = User::query()
+            ->whereIn('id', $students->pluck('supervisor_id')->filter()->unique()->values())
+            ->where('role_id', User::ROLE_SUPERVISOR)
+            ->pluck('id')
+            ->flip();
+
         foreach ($students as $student) {
             $onRoster = $student->supervisor_id === null
                 ? null
                 : isset($pairs[$student->company_id.':'.$student->supervisor_id]);
 
             $student->setAttribute('supervisor_on_roster', $onRoster);
-            $student->setAttribute('needs_supervisor', $student->company_id !== null && $onRoster !== true);
+            $student->setAttribute('needs_supervisor', $student->company_id !== null
+                && ($onRoster !== true || ! isset($supervisorIds[$student->supervisor_id])));
         }
     }
 
