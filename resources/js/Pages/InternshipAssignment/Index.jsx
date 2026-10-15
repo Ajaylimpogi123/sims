@@ -32,7 +32,6 @@ export default function Index({ students, companies, filters }) {
                 company_name: student.company?.company_name,
                 supervisor_id: student.supervisor_id,
                 supervisor_name: student.supervisor?.name,
-                supervisor_on_roster: student.supervisor_on_roster ?? null,
                 needs_supervisor: Boolean(student.needs_supervisor),
                 supervisor_issue: student.supervisor_issue ?? null,
                 internship_status: student.internship_status,
@@ -108,7 +107,7 @@ export default function Index({ students, companies, filters }) {
                         </h1>
                         <p className="mt-2 text-sm text-white">
                             View and manage every student's profile,
-                            company/supervisor assignment, and internship
+                            company assignment, and internship
                             status in one place
                         </p>
                     </div>
@@ -121,7 +120,7 @@ export default function Index({ students, companies, filters }) {
                                 toolbar={needsSupervisorToggle}
                                 emptyMessage={
                                     needsSupervisorOnly
-                                        ? "Every placed student has a supervisor on their company's roster."
+                                        ? "Every placed student's company has an active supervisor."
                                         : "No results."
                                 }
                             />

@@ -19,7 +19,6 @@ const STATUS_STYLES = {
 // supervisor_issue -> StatusBadge status key.
 const ISSUE_BADGES = {
     no_supervisor: "no_supervisor",
-    not_on_roster: "not_on_roster",
     not_a_supervisor: "not_a_supervisor",
     inactive: "supervisor_inactive",
 };
@@ -58,7 +57,8 @@ export function getColumns(companies, { needsSupervisorOnly = false } = {}) {
 
                 // supervisor_issue (server) is non-null exactly when
                 // needs_supervisor is true, picked by precedence: no
-                // supervisor > not on roster > not a supervisor > inactive.
+                // supervisor > not a supervisor > inactive (the company's
+                // supervisor, set in Company Management).
                 const badge = ISSUE_BADGES[student.supervisor_issue];
 
                 if (!badge) return name || "Unassigned";

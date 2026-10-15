@@ -12,9 +12,14 @@ import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
 import InputError from "@/Components/InputError";
 import useEditCompany from "../Hooks/useEditCompany";
+import CompanySupervisorSelect, {
+    NO_SUPERVISOR_STUDENTS_MESSAGE,
+    reassignmentMessage,
+} from "./CompanySupervisorSelect";
 
 export default function EditModal({
     company,
+    supervisorOptions = [],
     children,
     open: controlledOpen,
     onOpenChange,
@@ -30,13 +35,39 @@ export default function EditModal({
         handleSubmit,
     } = useEditCompany(company, { open: controlledOpen, onOpenChange });
 
+    // Saving a different supervisor moves every student at the company.
+    const currentSupervisorId =
+        company?.supervisor_id != null ? String(company.supervisor_id) : "";
+    const studentsCount = Number(company?.students_count) || 0;
+    const pickedName = (
+        supervisorOptions.find((s) => String(s.id) === data.supervisor_id) ??
+        (company?.supervisor &&
+        String(company.supervisor.id) === data.supervisor_id
+            ? company.supervisor
+            : null)
+    )?.name;
+    const confirmMessage =
+        data.supervisor_id !== currentSupervisorId && studentsCount > 0
+            ? pickedName
+                ? reassignmentMessage(studentsCount, pickedName)
+                : NO_SUPERVISOR_STUDENTS_MESSAGE(studentsCount)
+            : null;
+
     return (
         <>
             {children && <div onClick={openModal}>{children}</div>}
 
             <Dialog open={open} onOpenChange={closeModal}>
                 <DialogContent className="sm:max-w-[425px]">
-                    <form onSubmit={handleSubmit}>
+                    <form
+                        onSubmit={(e) =>
+                            handleSubmit(e, {
+                                confirmMessage: confirmMessage
+                                    ? `${confirmMessage} Continue?`
+                                    : null,
+                            })
+                        }
+                    >
                         <DialogHeader>
                             <DialogTitle>Edit Company</DialogTitle>
                             <DialogDescription>
@@ -67,19 +98,15 @@ export default function EditModal({
                                 <InputError message={errors.address} />
                             </div>
 
-                            <div className="grid gap-3">
-                                <Label>Contact Person</Label>
-                                <Input
-                                    value={data.contact_person}
-                                    onChange={(e) =>
-                                        setData(
-                                            "contact_person",
-                                            e.target.value,
-                                        )
-                                    }
-                                />
-                                <InputError message={errors.contact_person} />
-                            </div>
+                            <CompanySupervisorSelect
+                                value={data.supervisor_id}
+                                onChange={(value) =>
+                                    setData("supervisor_id", value)
+                                }
+                                error={errors.supervisor_id}
+                                supervisorOptions={supervisorOptions}
+                                company={company}
+                            />
 
                             <div className="grid gap-3">
                                 <Label>Contact Number</Label>

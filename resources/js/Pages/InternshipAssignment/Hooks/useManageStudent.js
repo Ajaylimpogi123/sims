@@ -16,7 +16,6 @@ export default function useManageStudent(
             course: "",
             section: "",
             company_id: "",
-            supervisor_id: "",
             internship_status: "not_started",
             internship_schedule: "",
             required_hours: "",
@@ -32,9 +31,6 @@ export default function useManageStudent(
             course: student.course || "",
             section: student.section || "",
             company_id: student.company_id ? String(student.company_id) : "",
-            supervisor_id: student.supervisor_id
-                ? String(student.supervisor_id)
-                : "",
             internship_status: student.internship_status || "not_started",
             internship_schedule: student.internship_schedule || "",
             // 0 means "not set" (as on the server), so it seeds as empty.

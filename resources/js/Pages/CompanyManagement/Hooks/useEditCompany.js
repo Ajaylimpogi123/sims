@@ -11,7 +11,7 @@ export default function useEditCompany(
     const { data, setData, patch, errors, processing, reset, clearErrors } = useForm({
         company_name: "",
         address: "",
-        contact_person: "",
+        supervisor_id: "",
         contact_number: "",
         email: "",
         industry: "",
@@ -24,7 +24,10 @@ export default function useEditCompany(
         setData({
             company_name: company.company_name || "",
             address: company.address || "",
-            contact_person: company.contact_person || "",
+            supervisor_id:
+                company.supervisor_id != null
+                    ? String(company.supervisor_id)
+                    : "",
             contact_number: company.contact_number || "",
             email: company.email || "",
             industry: company.industry || "",
@@ -41,8 +44,11 @@ export default function useEditCompany(
         clearErrors();
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = (e, { confirmMessage } = {}) => {
         e.preventDefault();
+
+        // Changing the company's supervisor moves all its students too.
+        if (confirmMessage && !window.confirm(confirmMessage)) return;
 
         patch(route("company-management.update", company.id), {
             preserveScroll: true,

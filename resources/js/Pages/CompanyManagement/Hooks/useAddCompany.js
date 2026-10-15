@@ -7,7 +7,7 @@ export default function useAddCompany() {
     const { data, setData, post, errors, processing, reset } = useForm({
         company_name: "",
         address: "",
-        contact_person: "",
+        supervisor_id: "",
         contact_number: "",
         email: "",
         industry: "",

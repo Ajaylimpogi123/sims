@@ -12,8 +12,9 @@ import { Input } from "@/Components/ui/input";
 import { Label } from "@/Components/ui/label";
 import InputError from "@/Components/InputError";
 import useAddCompany from "../Hooks/useAddCompany";
+import CompanySupervisorSelect from "./CompanySupervisorSelect";
 
-export default function AddModal({ children }) {
+export default function AddModal({ supervisorOptions = [], children }) {
     const {
         open,
         openModal,
@@ -60,19 +61,14 @@ export default function AddModal({ children }) {
                                 <InputError message={errors.address} />
                             </div>
 
-                            <div className="grid gap-3">
-                                <Label>Contact Person</Label>
-                                <Input
-                                    value={data.contact_person}
-                                    onChange={(e) =>
-                                        setData(
-                                            "contact_person",
-                                            e.target.value,
-                                        )
-                                    }
-                                />
-                                <InputError message={errors.contact_person} />
-                            </div>
+                            <CompanySupervisorSelect
+                                value={data.supervisor_id}
+                                onChange={(value) =>
+                                    setData("supervisor_id", value)
+                                }
+                                error={errors.supervisor_id}
+                                supervisorOptions={supervisorOptions}
+                            />
 
                             <div className="grid gap-3">
                                 <Label>Contact Number</Label>

@@ -2,7 +2,14 @@ import RowActionsMenu from "@/Components/RowActionsMenu";
 import { router } from "@inertiajs/react";
 import Swal from "sweetalert2";
 import EditModal from "./EditModal";
-import SupervisorRosterModal from "./SupervisorRosterModal";
+import StatusBadge from "@/Components/StatusBadge";
+
+// supervisor_issue (server) -> StatusBadge status key. no_supervisor is
+// shown whenever the company has no supervisor.
+const SUPERVISOR_ISSUE_BADGES = {
+    not_a_supervisor: "not_a_supervisor",
+    inactive: "supervisor_inactive",
+};
 
 const handleDelete = (company) => {
     if (confirm(`Are you sure you want to delete "${company.company_name}"?`)) {
@@ -33,15 +40,32 @@ const handleToggleStatus = (company) => {
     );
 };
 
-export function getColumns(availableSupervisors) {
+export function getColumns(supervisorOptions) {
     return [
     {
         accessorKey: "company_name",
         header: "Company Name",
     },
     {
-        accessorKey: "contact_person",
-        header: "Contact Person",
+        id: "supervisor",
+        accessorFn: (company) => company.supervisor?.name ?? "",
+        header: "Company Supervisor",
+        cell: ({ row }) => {
+            const company = row.original;
+            const badge = SUPERVISOR_ISSUE_BADGES[company.supervisor_issue];
+
+            if (!company.supervisor) {
+                return <StatusBadge status="no_supervisor" />;
+            }
+            if (!badge) return company.supervisor.name;
+
+            return (
+                <div className="flex flex-col items-start gap-1">
+                    <span>{company.supervisor.name}</span>
+                    <StatusBadge status={badge} />
+                </div>
+            );
+        },
     },
     {
         accessorKey: "contact_number",
@@ -87,7 +111,6 @@ export function getColumns(availableSupervisors) {
                 <RowActionsMenu
                     actions={[
                         { label: "Edit", dialog: "edit" },
-                        { label: "Manage Supervisors", dialog: "roster" },
                         {
                             label:
                                 company.status === "active"
@@ -103,19 +126,12 @@ export function getColumns(availableSupervisors) {
                         },
                     ]}
                     renderDialogs={({ isOpen, onOpenChange }) => (
-                        <>
-                            <EditModal
-                                company={company}
-                                open={isOpen("edit")}
-                                onOpenChange={onOpenChange}
-                            />
-                            <SupervisorRosterModal
-                                company={company}
-                                availableSupervisors={availableSupervisors}
-                                open={isOpen("roster")}
-                                onOpenChange={onOpenChange}
-                            />
-                        </>
+                        <EditModal
+                            company={company}
+                            supervisorOptions={supervisorOptions}
+                            open={isOpen("edit")}
+                            onOpenChange={onOpenChange}
+                        />
                     )}
                 />
             );

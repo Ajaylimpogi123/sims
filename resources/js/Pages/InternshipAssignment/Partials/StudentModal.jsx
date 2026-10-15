@@ -30,6 +30,20 @@ const REQUIRED_HOURS_FOR_ONGOING_HINT =
 const REQUIRED_HOURS_LOCKED_HINT =
     "Required hours can't be cleared while the internship is Ongoing.";
 
+// Read-only "Supervisor: <name>" line under Company.
+const SUPERVISOR_SUFFIX = {
+    inactive: " (inactive)",
+    not_a_supervisor: " (not a supervisor)",
+};
+const SUPERVISOR_HINTS = {
+    no_supervisor:
+        "This company has no supervisor yet — set one in Company Management.",
+    inactive:
+        "This company's supervisor account is inactive. Set an active supervisor in Company Management.",
+    not_a_supervisor:
+        "This company's supervisor account is no longer a Supervisor. Set a new one in Company Management.",
+};
+
 const STATUS_OPTIONS = [
     { value: "not_started", label: "Not Started" },
     { value: "ongoing", label: "Ongoing" },
@@ -59,21 +73,6 @@ export default function StudentModal({
         onOpenChange,
     });
 
-    // supervisor_issue (server) picks one reason by precedence: no supervisor
-    // > not on roster > not a supervisor (a role change in User Management
-    // leaves the assignment and roster row behind) > account inactive.
-    const hasOffRosterSupervisor =
-        student?.supervisor_issue === "not_on_roster";
-    const hasNonSupervisorAccount =
-        student?.supervisor_issue === "not_a_supervisor";
-    // Still on the roster as a Supervisor, so the roster below already
-    // keeps them listed as "<name> (inactive)" for the same company.
-    const hasInactiveSupervisor = student?.supervisor_issue === "inactive";
-    const keepsCurrentSupervisor =
-        student?.supervisor_id != null &&
-        data.company_id === String(student.company_id) &&
-        data.supervisor_id === String(student.supervisor_id);
-
     // Mirrors the server, which checks the hours submitted in the same save
     // (empty / 0 = not set):
     // - moving INTO Ongoing without hours → 422 on internship_status;
@@ -93,9 +92,6 @@ export default function StudentModal({
     const isCurrentCompany = (company) =>
         student?.company_id != null &&
         String(company.id) === String(student.company_id);
-    const isCurrentSupervisor = (supervisor) =>
-        student?.supervisor_id != null &&
-        String(supervisor.id) === String(student.supervisor_id);
 
     // Only active companies can take a NEW assignment; the student's current
     // company stays listed (even if inactive) so the existing placement can
@@ -108,73 +104,29 @@ export default function StudentModal({
         [companies, student?.company_id],
     );
 
-    // The supervisor dropdown is dependent on the selected company — only
-    // active supervisors on that company's roster (Company Management) are
-    // selectable, plus the student's current supervisor if they're still on
-    // that roster (even if inactive) — but an inactive supervisor can't follow
-    // the student to a different company.
-    const rosterFor = (companyId) => {
-        const company = companies.find((c) => String(c.id) === companyId);
-        const sameCompany =
-            student?.company_id != null &&
-            String(student.company_id) === companyId;
-        const roster = (company?.supervisors || []).filter(
-            (s) =>
-                // A current supervisor who's no longer a Supervisor is never
-                // a normal choice (re-added below, flagged, same company).
-                !(hasNonSupervisorAccount && isCurrentSupervisor(s)) &&
-                (s.status === "active" ||
-                    (sameCompany && isCurrentSupervisor(s))),
-        );
-
-        // The current supervisor may have been removed from this company's
-        // roster, or lost the Supervisor role, since the assignment. Keep
-        // them listed (for the same company only), flagged, so the field
-        // shows who's assigned instead of a blank.
-        if (sameCompany && (hasOffRosterSupervisor || hasNonSupervisorAccount)) {
-            roster.push({
-                id: student.supervisor_id,
-                name: student.supervisor_name,
-                flag: hasOffRosterSupervisor
-                    ? "not on roster"
-                    : "not a supervisor",
-            });
-        }
-
-        return roster;
-    };
-
     const selectedCompany = useMemo(
         () => companies.find((c) => String(c.id) === data.company_id),
         [companies, data.company_id],
     );
-    const rosterSupervisors = useMemo(
-        () => rosterFor(data.company_id),
-        [
-            companies,
-            data.company_id,
-            student?.supervisor_id,
-            student?.supervisor_on_roster,
-            student?.supervisor_issue,
-        ],
-    );
 
-    const handleCompanyChange = (value) => {
-        const newCompanyId = value === UNASSIGNED ? "" : value;
-        const supervisorStillValid = rosterFor(newCompanyId).some(
-            (supervisor) => String(supervisor.id) === data.supervisor_id,
-        );
+    // The student's supervisor is always the company's supervisor (set in
+    // Company Management); the server assigns it on save. Shown read-only.
+    const companySupervisor = selectedCompany?.supervisor ?? null;
+    const keepsCurrentCompany =
+        selectedCompany != null && isCurrentCompany(selectedCompany);
+    // supervisor_issue (server) only describes the student's saved company;
+    // for another company only the account status is known here.
+    const supervisorIssue = !companySupervisor
+        ? "no_supervisor"
+        : keepsCurrentCompany &&
+            student?.supervisor_issue === "not_a_supervisor"
+          ? "not_a_supervisor"
+          : companySupervisor.status !== "active"
+            ? "inactive"
+            : null;
 
-        setData({
-            ...data,
-            company_id: newCompanyId,
-            // Changing the company can invalidate the previously-selected
-            // supervisor (they may not be on the new company's roster) —
-            // only auto-clear when the user actually changes the company
-            // themselves, not on the modal's initial data load.
-            supervisor_id: supervisorStillValid ? data.supervisor_id : "",
-        });
-    };
+    const handleCompanyChange = (value) =>
+        setData("company_id", value === UNASSIGNED ? "" : value);
 
     return (
         <>
@@ -186,8 +138,8 @@ export default function StudentModal({
                         <DialogHeader>
                             <DialogTitle>{student?.name}</DialogTitle>
                             <DialogDescription>
-                                Update the student's profile, company/
-                                supervisor assignment, required hours and
+                                Update the student's profile, company
+                                assignment, required hours and
                                 internship status
                             </DialogDescription>
                         </DialogHeader>
@@ -300,111 +252,22 @@ export default function StudentModal({
                                         </SelectContent>
                                     </Select>
                                     <InputError message={errors.company_id} />
-                                </div>
-
-                                <div className="grid gap-3">
-                                    <Label>Supervisor</Label>
-                                    <Select
-                                        value={
-                                            data.supervisor_id || UNASSIGNED
-                                        }
-                                        onValueChange={(value) =>
-                                            setData(
-                                                "supervisor_id",
-                                                value === UNASSIGNED
-                                                    ? ""
-                                                    : value,
-                                            )
-                                        }
-                                        disabled={!selectedCompany}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue
-                                                placeholder={
-                                                    selectedCompany
-                                                        ? "Select a supervisor"
-                                                        : "Assign a company first"
-                                                }
-                                            />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value={UNASSIGNED}>
-                                                Unassigned
-                                            </SelectItem>
-                                            {!rosterSupervisors.some(
-                                                (s) => !s.flag && s.status === "active",
-                                            ) &&
-                                                selectedCompany && (
-                                                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                                                    No active supervisors on
-                                                    this company's roster
-                                                </div>
-                                            )}
-                                            {rosterSupervisors.map(
-                                                (supervisor) => (
-                                                    <SelectItem
-                                                        key={supervisor.id}
-                                                        value={String(
-                                                            supervisor.id,
-                                                        )}
-                                                    >
-                                                        {supervisor.name}
-                                                        {supervisor.flag
-                                                            ? ` (${supervisor.flag})`
-                                                            : supervisor.status !==
-                                                                  "active" &&
-                                                              " (inactive)"}
-                                                    </SelectItem>
-                                                ),
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                    {selectedCompany &&
-                                        !data.supervisor_id &&
-                                        !errors.supervisor_id && (
-                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
-                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
-                                                Without a supervisor, no
-                                                supervisor will see, approve or
-                                                evaluate this student's work.
-                                            </p>
-                                        )}
-                                    {hasOffRosterSupervisor &&
-                                        keepsCurrentSupervisor &&
-                                        !errors.supervisor_id && (
-                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
-                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
-                                                This supervisor is no longer on
-                                                this company's roster. Choose
-                                                one from the roster, or add
-                                                them back in Company
-                                                Management.
-                                            </p>
-                                        )}
-                                    {hasNonSupervisorAccount &&
-                                        keepsCurrentSupervisor &&
-                                        !errors.supervisor_id && (
-                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
-                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
-                                                This account is no longer a
-                                                Supervisor. Choose a supervisor
-                                                from the company's roster.
-                                            </p>
-                                        )}
-                                    {hasInactiveSupervisor &&
-                                        keepsCurrentSupervisor &&
-                                        !errors.supervisor_id && (
-                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
-                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
-                                                This supervisor's account is
-                                                inactive. Choose an active
-                                                supervisor from the company's
-                                                roster.
-                                            </p>
-                                        )}
-                                    <InputError
-                                        message={errors.supervisor_id}
-                                    />
+                                    {selectedCompany && companySupervisor && (
+                                        <p className="text-sm text-muted-foreground">
+                                            Supervisor:{" "}
+                                            <span className="font-medium text-foreground">
+                                                {companySupervisor.name}
+                                            </span>
+                                            {SUPERVISOR_SUFFIX[supervisorIssue] ??
+                                                ""}
+                                        </p>
+                                    )}
+                                    {selectedCompany && supervisorIssue && (
+                                        <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                                            <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                                            {SUPERVISOR_HINTS[supervisorIssue]}
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div className="grid gap-3">
