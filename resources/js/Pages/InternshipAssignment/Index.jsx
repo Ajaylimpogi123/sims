@@ -31,8 +31,10 @@ export default function Index({ students, companies, filters }) {
                 supervisor_name: student.supervisor?.name,
                 supervisor_on_roster: student.supervisor_on_roster ?? null,
                 needs_supervisor: Boolean(student.needs_supervisor),
+                supervisor_issue: student.supervisor_issue ?? null,
                 internship_status: student.internship_status,
                 internship_schedule: student.internship_schedule,
+                required_hours: student.required_hours ?? null,
             })),
         [students],
     );

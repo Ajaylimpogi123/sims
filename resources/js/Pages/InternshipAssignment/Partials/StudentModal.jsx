@@ -24,6 +24,9 @@ import { AlertTriangle } from "lucide-react";
 
 const UNASSIGNED = "unassigned";
 
+const REQUIRED_HOURS_FOR_ONGOING_HINT =
+    "Set this student's required hours in Attendance Monitoring before marking the internship Ongoing.";
+
 const STATUS_OPTIONS = [
     { value: "not_started", label: "Not Started" },
     { value: "ongoing", label: "Ongoing" },
@@ -47,16 +50,28 @@ export default function StudentModal({
         handleSubmit,
     } = useManageStudent(student, { needsSupervisorOnly });
 
+    // supervisor_issue (server) picks one reason by precedence: no supervisor
+    // > not on roster > not a supervisor (a role change in User Management
+    // leaves the assignment and roster row behind) > account inactive.
     const hasOffRosterSupervisor =
-        student?.supervisor_id != null &&
-        student?.supervisor_on_roster === false;
-    // Flagged, has a supervisor, and on the roster: the only remaining
-    // reason is that the account no longer holds the Supervisor role (a role
-    // change in User Management leaves the assignment and roster row behind).
+        student?.supervisor_issue === "not_on_roster";
     const hasNonSupervisorAccount =
-        Boolean(student?.needs_supervisor) &&
+        student?.supervisor_issue === "not_a_supervisor";
+    // Still on the roster as a Supervisor, so the roster below already
+    // keeps them listed as "<name> (inactive)" for the same company.
+    const hasInactiveSupervisor = student?.supervisor_issue === "inactive";
+    const keepsCurrentSupervisor =
         student?.supervisor_id != null &&
-        student?.supervisor_on_roster !== false;
+        data.company_id === String(student.company_id) &&
+        data.supervisor_id === String(student.supervisor_id);
+
+    // The server refuses moving a student INTO Ongoing without required
+    // hours, null or 0 (422 on internship_status); keeping an already-Ongoing status
+    // unchanged is allowed, so no hint then.
+    const needsRequiredHoursForOngoing =
+        data.internship_status === "ongoing" &&
+        student?.internship_status !== "ongoing" &&
+        !(Number(student?.required_hours) > 0);
 
     const isCurrentCompany = (company) =>
         student?.company_id != null &&
@@ -123,7 +138,7 @@ export default function StudentModal({
             data.company_id,
             student?.supervisor_id,
             student?.supervisor_on_roster,
-            student?.needs_supervisor,
+            student?.supervisor_issue,
         ],
     );
 
@@ -299,7 +314,7 @@ export default function StudentModal({
                                                 Unassigned
                                             </SelectItem>
                                             {!rosterSupervisors.some(
-                                                (s) => !s.flag,
+                                                (s) => !s.flag && s.status === "active",
                                             ) &&
                                                 selectedCompany && (
                                                 <div className="px-2 py-1.5 text-sm text-muted-foreground">
@@ -337,10 +352,7 @@ export default function StudentModal({
                                             </p>
                                         )}
                                     {hasOffRosterSupervisor &&
-                                        data.company_id ===
-                                            String(student.company_id) &&
-                                        data.supervisor_id ===
-                                            String(student.supervisor_id) &&
+                                        keepsCurrentSupervisor &&
                                         !errors.supervisor_id && (
                                             <p className="flex items-start gap-1.5 text-xs text-amber-700">
                                                 <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
@@ -352,17 +364,24 @@ export default function StudentModal({
                                             </p>
                                         )}
                                     {hasNonSupervisorAccount &&
-                                        !hasOffRosterSupervisor &&
-                                        data.company_id ===
-                                            String(student.company_id) &&
-                                        data.supervisor_id ===
-                                            String(student.supervisor_id) &&
+                                        keepsCurrentSupervisor &&
                                         !errors.supervisor_id && (
                                             <p className="flex items-start gap-1.5 text-xs text-amber-700">
                                                 <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
                                                 This account is no longer a
                                                 Supervisor. Choose a supervisor
                                                 from the company's roster.
+                                            </p>
+                                        )}
+                                    {hasInactiveSupervisor &&
+                                        keepsCurrentSupervisor &&
+                                        !errors.supervisor_id && (
+                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                                                This supervisor's account is
+                                                inactive. Choose an active
+                                                supervisor from the company's
+                                                roster.
                                             </p>
                                         )}
                                     <InputError
@@ -395,6 +414,13 @@ export default function StudentModal({
                                             ))}
                                         </SelectContent>
                                     </Select>
+                                    {needsRequiredHoursForOngoing &&
+                                        !errors.internship_status && (
+                                            <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                                                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                                                {REQUIRED_HOURS_FOR_ONGOING_HINT}
+                                            </p>
+                                        )}
                                     <InputError
                                         message={errors.internship_status}
                                     />

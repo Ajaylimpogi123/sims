@@ -15,6 +15,7 @@ const STATUS_CONFIG = {
     no_supervisor: { label: "No supervisor", className: "bg-amber-100 text-amber-700" },
     not_on_roster: { label: "Not on roster", className: "bg-amber-100 text-amber-700" },
     not_a_supervisor: { label: "Not a supervisor", className: "bg-amber-100 text-amber-700" },
+    supervisor_inactive: { label: "Supervisor inactive", className: "bg-amber-100 text-amber-700" },
 };
 
 /**

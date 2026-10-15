@@ -23,7 +23,15 @@ const STATUS_STYLES = {
     completed: "bg-green-100 text-green-700",
 };
 
-const handleToggleStatus = (student, needsSupervisorOnly) => {
+// supervisor_issue -> StatusBadge status key.
+const ISSUE_BADGES = {
+    no_supervisor: "no_supervisor",
+    not_on_roster: "not_on_roster",
+    not_a_supervisor: "not_a_supervisor",
+    inactive: "supervisor_inactive",
+};
+
+const handleToggleStatus =(student, needsSupervisorOnly) => {
     router.patch(
         route("internship-assignment.toggle-status", student.id),
         needsSupervisorOnly ? { needs_supervisor: 1 } : {},
@@ -55,37 +63,23 @@ export function getColumns(companies, { needsSupervisorOnly = false } = {}) {
                 const student = row.original;
                 const name = row.getValue("supervisor_name");
 
-                // needs_supervisor (server): placed at a company with no
-                // supervisor, one off its roster, or one whose account is no
-                // longer a Supervisor.
-                if (student.needs_supervisor && student.supervisor_id == null) {
-                    return <StatusBadge status="no_supervisor" />;
+                // supervisor_issue (server) is non-null exactly when
+                // needs_supervisor is true, picked by precedence: no
+                // supervisor > not on roster > not a supervisor > inactive.
+                const badge = ISSUE_BADGES[student.supervisor_issue];
+
+                if (!badge) return name || "Unassigned";
+
+                if (student.supervisor_issue === "no_supervisor") {
+                    return <StatusBadge status={badge} />;
                 }
 
-                if (
-                    student.needs_supervisor &&
-                    student.supervisor_on_roster === false
-                ) {
-                    return (
-                        <div className="flex flex-col items-start gap-1">
-                            <span>{name}</span>
-                            <StatusBadge status="not_on_roster" />
-                        </div>
-                    );
-                }
-
-                // Flagged with a supervisor who's on the roster: the account
-                // no longer holds the Supervisor role.
-                if (student.needs_supervisor) {
-                    return (
-                        <div className="flex flex-col items-start gap-1">
-                            <span>{name}</span>
-                            <StatusBadge status="not_a_supervisor" />
-                        </div>
-                    );
-                }
-
-                return name || "Unassigned";
+                return (
+                    <div className="flex flex-col items-start gap-1">
+                        <span>{name}</span>
+                        <StatusBadge status={badge} />
+                    </div>
+                );
             },
         },
         {
