@@ -37,7 +37,8 @@ class Term extends Model
         'is_current',
     ];
 
-    protected $appends = ['label'];
+    // Serialized with every term (e.g. students[].term in Inertia props).
+    protected $appends = ['label', 'is_past'];
 
     protected function casts(): array
     {
@@ -71,6 +72,14 @@ class Term extends Model
     public static function labelFor(int $schoolYearStart, string $semester): string
     {
         return 'SY '.$schoolYearStart.'-'.($schoolYearStart + 1).' · '.(self::SEMESTERS[$semester] ?? $semester);
+    }
+
+    /**
+     * `is_past` when serialized: see isPast().
+     */
+    public function getIsPastAttribute(): bool
+    {
+        return $this->isPast();
     }
 
     public function getSemesterLabelAttribute(): string
@@ -112,6 +121,43 @@ class Term extends Model
     }
 
     /**
+     * Chronological position: school year, then 1st, 2nd, Summer.
+     */
+    public function rank(): int
+    {
+        return (int) $this->school_year_start * 10 + (int) array_search($this->semester, array_keys(self::SEMESTERS), true);
+    }
+
+    /**
+     * A past (archived) term: one that comes before the current term. Past
+     * terms are read-only for everyone but the Administrator; the current
+     * term and later ("upcoming") ones are not. Never past when no term is
+     * current.
+     */
+    public function isPast(): bool
+    {
+        $current = static::current();
+
+        return $current !== null && (int) $this->id !== (int) $current->id && $this->rank() < $current->rank();
+    }
+
+    /**
+     * Ids of the terms that aren't past: the current one and upcoming ones
+     * (every term when none is current).
+     *
+     * @return list<int>
+     */
+    public static function openIds(): array
+    {
+        return static::query()->get()
+            ->reject(fn (self $term) => $term->isPast())
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
      * Newest first: school year descending, then summer, 2nd, 1st semester.
      */
     public function scopeNewestFirst(Builder $query): Builder
@@ -123,9 +169,9 @@ class Term extends Model
     }
 
     /**
-     * {id, label, is_current}: the minimal shape the UIs show.
+     * {id, label, is_current, is_past}: the minimal shape the UIs show.
      *
-     * @return array{id: int, label: string, is_current: bool}
+     * @return array{id: int, label: string, is_current: bool, is_past: bool}
      */
     public function summary(): array
     {
@@ -133,6 +179,7 @@ class Term extends Model
             'id' => $this->id,
             'label' => $this->label,
             'is_current' => $this->isCurrent(),
+            'is_past' => $this->isPast(),
         ];
     }
 }

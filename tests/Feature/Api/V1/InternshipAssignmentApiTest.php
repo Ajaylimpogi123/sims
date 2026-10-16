@@ -5,6 +5,7 @@ namespace Tests\Feature\Api\V1;
 use App\Models\Company;
 use App\Models\Notification;
 use App\Models\Student;
+use App\Models\Term;
 use App\Models\User;
 use App\Services\InternshipAssignmentService;
 use Database\Seeders\RoleSeeder;
@@ -195,6 +196,8 @@ class InternshipAssignmentApiTest extends TestCase
             'internship_schedule' => 'Mon-Fri',
             'created_at' => $student->fresh()->created_at->toIso8601String(),
             'updated_at' => $student->fresh()->updated_at->toIso8601String(),
+            'term_id' => Term::currentId(),
+            'term' => Term::current()->summary(),
             'can_edit' => true,
             'can_toggle_status' => true,
         ], $row);
@@ -273,11 +276,13 @@ class InternshipAssignmentApiTest extends TestCase
                         'id' => $acme->id, 'company_name' => 'Acme', 'status' => 'active',
                         'slots' => 2, 'students_count' => 1, 'slots_available' => 1,
                         'supervisor' => ['id' => $maria->id, 'name' => 'Maria', 'email' => $maria->email, 'status' => 'inactive'],
+                        'supervisor_issue' => 'inactive',
                     ],
                     [
                         'id' => $zeta->id, 'company_name' => 'Zeta', 'status' => 'inactive',
                         'slots' => 1, 'students_count' => 1, 'slots_available' => 0,
                         'supervisor' => null,
+                        'supervisor_issue' => 'no_supervisor',
                     ],
                 ],
                 'internship_statuses' => [

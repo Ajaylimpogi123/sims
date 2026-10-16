@@ -127,7 +127,9 @@ export default function StudentModal({
 
     // Only a Not Started student (as saved) can move to another term; the
     // server enforces the same rule (error on term_id).
-    const { terms } = useTerm();
+    // Non-admins can't move a student INTO a past term (server: 422 on
+    // term_id); upcoming terms are open.
+    const { terms, isAdmin } = useTerm();
     const canChangeTerm = student?.internship_status === "not_started";
     const termOptions = useMemo(() => {
         if (
@@ -256,7 +258,9 @@ export default function StudentModal({
                                 <div className="grid gap-3">
                                     <Label>Term</Label>
                                     <Select
-                                        value={data.term_id || undefined}
+                                        // "" (before seeding) keeps the Select
+                                        // controlled and shows the placeholder.
+                                        value={data.term_id ?? ""}
                                         onValueChange={(value) =>
                                             setData("term_id", value)
                                         }
@@ -270,10 +274,24 @@ export default function StudentModal({
                                                 <SelectItem
                                                     key={term.id}
                                                     value={String(term.id)}
+                                                    disabled={
+                                                        !isAdmin &&
+                                                        Boolean(term.is_past) &&
+                                                        String(term.id) !==
+                                                            String(
+                                                                student?.term_id,
+                                                            )
+                                                    }
                                                 >
                                                     {term.label}
-                                                    {term.is_current &&
-                                                        " (current)"}
+                                                    {term.is_current
+                                                        ? " (current)"
+                                                        : term.is_past
+                                                          ? " (archived)"
+                                                          : term.is_past ===
+                                                              false
+                                                            ? " (upcoming)"
+                                                            : ""}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>

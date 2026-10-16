@@ -358,7 +358,7 @@ class DashboardAnalyticsService
 
     public function coordinatorKpis(): array
     {
-                $progress = $this->averageCompletionProgress();
+        $progress = $this->averageCompletionProgress();
 
         return [
             'totalStudents' => ['value' => $this->termStudents()->count(), 'trend' => $this->monthlyCreationTrend($this->termStudents())],

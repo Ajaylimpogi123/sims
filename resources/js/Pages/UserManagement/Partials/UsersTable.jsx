@@ -19,6 +19,7 @@ import EditModal from "./EditModal";
 export default function UsersTable({ users, roles, filters }) {
     const { auth } = usePage().props;
     const currentUserId = auth?.user?.id;
+    const isAdmin = auth?.user?.role_id === 4;
 
     const { patch } = useForm();
 
@@ -212,6 +213,12 @@ export default function UsersTable({ users, roles, filters }) {
                                     const isActive = user.status !== "inactive";
                                     const isCurrentUser =
                                         user.id === currentUserId;
+                                    // Students of a past term are read-only
+                                    // except for Admins (server refuses with
+                                    // an error on `term`).
+                                    const lockedByTerm =
+                                        !isAdmin &&
+                                        Boolean(user.student?.term?.is_past);
 
                                     return (
                                         <TableRow key={user.id}>
@@ -229,6 +236,15 @@ export default function UsersTable({ users, roles, filters }) {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex items-center justify-end gap-2">
+                                                    {lockedByTerm ? (
+                                                        <span
+                                                            className="text-xs text-muted-foreground"
+                                                            title={`${user.student.term.label} is archived. Only an Administrator can change this account.`}
+                                                        >
+                                                            Archived term
+                                                        </span>
+                                                    ) : (
+                                                    <>
                                                     <EditModal
                                                         user={user}
                                                         roles={roles}
@@ -271,6 +287,8 @@ export default function UsersTable({ users, roles, filters }) {
                                                                 </>
                                                             )}
                                                         </Button>
+                                                    )}
+                                                    </>
                                                     )}
                                                 </div>
                                             </TableCell>

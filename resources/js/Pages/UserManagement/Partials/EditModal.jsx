@@ -55,6 +55,14 @@ export default function EditModal({ user, roles, children }) {
                         </DialogHeader>
 
                         <div className="grid max-h-[65vh] gap-4 overflow-y-auto py-4 pr-1">
+                            {errors.term && (
+                                <p
+                                    role="alert"
+                                    className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                                >
+                                    {errors.term}
+                                </p>
+                            )}
                             <div>
                                 <InputLabel htmlFor="edit_name" value="Name" />
                                 <TextInput

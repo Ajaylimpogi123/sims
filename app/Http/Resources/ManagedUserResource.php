@@ -29,8 +29,9 @@ class ManagedUserResource extends JsonResource
             'status' => $this->status === 'inactive' ? 'inactive' : 'active',
             'created_at' => $this->created_at?->toIso8601String(),
             'is_self' => (int) $this->id === (int) $actor->id,
-            'can_edit' => $users->canEdit($actor, $this->resource),
-            'can_toggle_status' => $users->canToggleStatus($actor, $this->resource),
+            // A past-term Student account is read-only but for the Administrator.
+            'can_edit' => $users->canEdit($actor, $this->resource) && $users->termWritable($actor, $this->resource),
+            'can_toggle_status' => $users->canToggleStatus($actor, $this->resource) && $users->termWritable($actor, $this->resource),
             'assignable_roles' => $users->assignableRoles($actor, $this->resource)
                 ->map(fn (Role $role) => ['id' => (int) $role->id, 'role_name' => $role->role_name])
                 ->values()

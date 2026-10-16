@@ -36,6 +36,9 @@ class Student extends Model
     /** Refusal for a student whose term is no longer the current one. */
     public const TERM_ENDED_MESSAGE = 'Your internship term has ended.';
 
+    /** Refusal for a student enrolled in an upcoming (not yet current) term. */
+    public const TERM_NOT_STARTED_MESSAGE = 'Your internship term hasn\'t started yet.';
+
     /**
      * Whether the student may submit attendance and reports right now:
      * an Ongoing internship in the current term.
@@ -52,10 +55,21 @@ class Student extends Model
     public function submissionRefusal(string $notOngoingMessage): ?string
     {
         return match (true) {
-            ! $this->inCurrentTerm() => self::TERM_ENDED_MESSAGE,
+            ! $this->inCurrentTerm() => $this->inPastTerm() || Term::currentId() === null
+                ? self::TERM_ENDED_MESSAGE
+                : self::TERM_NOT_STARTED_MESSAGE,
             $this->internship_status !== self::SUBMITTING_STATUS => $notOngoingMessage,
             default => null,
         };
+    }
+
+    /**
+     * Whether this enrollment belongs to a past (archived) term, one before
+     * the current term (read-only but for the Administrator).
+     */
+    public function inPastTerm(): bool
+    {
+        return (bool) $this->term?->isPast();
     }
 
     /**
@@ -143,6 +157,14 @@ class Student extends Model
     public function scopeInTerm(Builder $query, ?int $termId): Builder
     {
         return $termId === null ? $query : $query->where($this->qualifyColumn('term_id'), $termId);
+    }
+
+    /**
+     * Enrollments in the current or an upcoming term (not a past one).
+     */
+    public function scopeInOpenTerm(Builder $query): Builder
+    {
+        return $query->whereIn($this->qualifyColumn('term_id'), Term::openIds());
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Role;
 use App\Models\User;
 use App\Rules\NotBoolean;
+use App\Support\TermGuard;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Database\Eloquent\Builder;
@@ -57,7 +58,7 @@ class UserManagementService
         $search = is_string($filters['search'] ?? null) ? trim($filters['search']) : '';
 
         return User::query()
-            ->with('role:id,role_name')
+            ->with(['role:id,role_name', 'student.term'])
             ->tap(fn (Builder $query) => $this->scopeVisible($query, $viewer))
             ->when(is_scalar($roleId) && (string) $roleId !== '', fn (Builder $query) => $query->where('role_id', $roleId))
             ->when(in_array($status, ['active', 'inactive'], true), fn (Builder $query) => $query->where('status', $status))
@@ -93,6 +94,28 @@ class UserManagementService
     public function canToggleStatus(User $actor, User $target): bool
     {
         return (int) $actor->id !== (int) $target->id && $this->canEdit($actor, $target);
+    }
+
+    /**
+     * A Student account whose enrollment is in a past term is read-only
+     * for everyone but the Administrator, here as in Internship Assignment
+     * (TermGuard). Other accounts are unaffected.
+     */
+    public function termWritable(User $actor, User $target): bool
+    {
+        $student = $target->student;
+
+        return $student === null || TermGuard::isWritable($student, $actor);
+    }
+
+    /**
+     * @throws \App\Exceptions\TermArchivedException
+     */
+    private function ensureTermWritable(User $actor, User $target): void
+    {
+        if ($target->student !== null) {
+            TermGuard::ensureWritable($target->student, $actor);
+        }
     }
 
     /**
@@ -220,6 +243,8 @@ class UserManagementService
                     throw new AuthorizationException('You cannot manage an Administrator account.');
                 }
 
+                $this->ensureTermWritable($actor, $current);
+
                 Validator::make(
                     ['role_id' => $data['role_id']],
                     ['role_id' => $this->roleRule($actor, $current)],
@@ -280,6 +305,8 @@ class UserManagementService
             if (! $this->canEdit($actor, $current)) {
                 throw new AuthorizationException('You cannot manage an Administrator account.');
             }
+
+            $this->ensureTermWritable($actor, $current);
 
             if (! $active && $this->isLastActiveAdministrator($current)) {
                 throw ValidationException::withMessages(['status' => self::LAST_ADMIN_MESSAGE]);

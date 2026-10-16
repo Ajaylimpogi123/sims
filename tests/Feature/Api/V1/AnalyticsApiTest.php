@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Models\Term;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -43,7 +44,7 @@ class AnalyticsApiTest extends TestCase
         );
 
         return [
-            'filters' => $web['filters'],
+            'filters' => $web['filters'] + ['term_id' => Term::currentId()],
             'status_breakdown' => $series($web['internship']['statusBreakdown'], 'status', 'total'),
             'students_by_company' => $series($web['internship']['studentsByCompany'], 'company', 'total'),
             'completion_progress' => $series($web['internship']['completionProgressBuckets'], 'bucket', 'total'),
@@ -155,6 +156,7 @@ class AnalyticsApiTest extends TestCase
             ])
             ->assertJsonPath('filters', [
                 'date_from' => null, 'date_to' => null, 'company_id' => null, 'supervisor_id' => null, 'student_id' => null,
+                'term_id' => Term::currentId(),
             ]);
 
         $evaluations = collect($response->json('evaluation.completion'))->keyBy('key');

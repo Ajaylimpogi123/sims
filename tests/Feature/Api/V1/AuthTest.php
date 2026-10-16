@@ -4,7 +4,9 @@ namespace Tests\Feature\Api\V1;
 
 use App\Models\Company;
 use App\Models\Student;
+use App\Models\Term;
 use App\Models\User;
+use App\Services\TermService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
@@ -289,9 +291,11 @@ class AuthTest extends TestCase
                 'required_hours' => 486,
                 'company' => ['id' => $company->id, 'name' => 'Acme Corp'],
                 'supervisor' => ['id' => $supervisor->id, 'name' => 'Supervisor Santos'],
+                'term' => Term::current()->summary(),
             ],
             'supervisor' => null,
             'staff' => null,
+            'current_term' => TermService::present(Term::current()),
         ]);
     }
 
@@ -345,6 +349,7 @@ class AuthTest extends TestCase
                 'student' => null,
                 'supervisor' => ['students_count' => 2],
                 'staff' => null,
+                'current_term' => TermService::present(Term::current()),
             ]);
     }
 
@@ -492,6 +497,7 @@ class AuthTest extends TestCase
                     'can_lock_evaluations' => false,
                     'can_manage_criteria' => false,
                 ],
+                'current_term' => TermService::present(Term::current()),
             ]);
     }
 
@@ -523,6 +529,7 @@ class AuthTest extends TestCase
                     'can_lock_evaluations' => true,
                     'can_manage_criteria' => true,
                 ],
+                'current_term' => TermService::present(Term::current()),
             ]);
     }
 

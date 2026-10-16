@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Auth;
 
 /**
  * Past terms are read-only (owner decision, 2026-10-16): a record whose
- * student is enrolled in a non-current term may only be changed by an
- * Administrator. Called at the top of every staff write path
+ * student is enrolled in a past term (one before the current term, see
+ * Term::isPast(); the current and upcoming terms are open) may only be
+ * changed by an Administrator. Called at the top of every staff write path
  * (assignment, attendance review / monitoring entries, required hours,
  * report review, evaluations); students' own submissions are closed by
  * Student::canSubmitWork() instead.
@@ -30,7 +31,7 @@ final class TermGuard
             return true;
         }
 
-        return $student->inCurrentTerm();
+        return ! $student->inPastTerm();
     }
 
     /**
@@ -55,8 +56,8 @@ final class TermGuard
             return true;
         }
 
-        $currentId = Term::currentId();
+        $term = $termId === null ? null : Term::query()->find($termId);
 
-        return $termId === null || $currentId === null || $termId === $currentId;
+        return $term === null || ! $term->isPast();
     }
 }

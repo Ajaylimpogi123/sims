@@ -46,7 +46,7 @@ export default function StudentSummary({
                             {selectedTerm.label}
                         </span>
                     </span>
-                    {selectedTerm.is_current === false && (
+                    {selectedTerm.is_past && (
                         <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
                             Ended
                         </span>

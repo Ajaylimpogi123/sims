@@ -5,10 +5,10 @@ const STUDENT_ROLE_ID = 1;
 
 /**
  * The school term the user is viewing, from the shared Inertia props:
- *   terms        [{ id, label, is_current }] (newest first)
+ *   terms        [{ id, label, is_current, is_past }] (newest first)
  *   currentTerm  { id, label } | null
- *   selectedTerm { id, label, is_current } | null (students: their own term)
- *   termArchived bool (selected term isn't the current one)
+ *   selectedTerm { id, label, is_current, is_past } | null (students: own term)
+ *   termArchived bool (selected term is a PAST term; upcoming terms are open)
  *   termReadOnly bool (termArchived && the user isn't an Administrator)
  *
  * `canWrite` mirrors the server's TermGuard: archived terms are read-only
@@ -43,6 +43,7 @@ export default function useTerm() {
         selectedTerm: selectedTerm ?? null,
         termArchived: archived,
         isStudent: roleId === STUDENT_ROLE_ID,
+        isAdmin: roleId === ADMIN_ROLE_ID,
         canWrite:
             termReadOnly != null
                 ? !termReadOnly

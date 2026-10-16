@@ -205,6 +205,8 @@ class TermService
             'starts_on' => $term->starts_on?->format('Y-m-d'),
             'ends_on' => $term->ends_on?->format('Y-m-d'),
             'is_current' => $term->isCurrent(),
+            // Before the current term: read-only but for the Administrator.
+            'is_past' => $term->isPast(),
         ];
 
         if ($viewer?->hasRole(User::ROLE_COORDINATOR, User::ROLE_ADMIN)) {

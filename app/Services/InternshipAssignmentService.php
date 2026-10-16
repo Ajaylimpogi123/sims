@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\AssignmentRuleException;
 use App\Models\Company;
 use App\Models\Student;
+use App\Models\Term;
 use App\Models\User;
 use App\Support\RequiredHours;
 use App\Support\TermContext;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -52,6 +54,8 @@ class InternshipAssignmentService
     public const REQUIRED_HOURS_LOCKED = 'required_hours_locked';
 
     public const TERM_MOVE_MESSAGE = 'Only students who haven\'t started can move to another term.';
+
+    public const TERM_PAST_MESSAGE = 'Only an Administrator can move a student into a past term.';
 
     /** `supervisor_issue` values, in precedence order (see supervisorIssue()). */
     public const ISSUE_NO_SUPERVISOR = CompanyManagementService::ISSUE_NO_SUPERVISOR;
@@ -254,9 +258,17 @@ class InternshipAssignmentService
 
                 $termId = array_key_exists('term_id', $data) ? (int) $data['term_id'] : (int) $current->term_id;
 
-                if ($termId !== (int) $current->term_id
-                    && ($current->internship_status !== 'not_started' || $data['internship_status'] !== 'not_started')) {
-                    throw ValidationException::withMessages(['term_id' => self::TERM_MOVE_MESSAGE]);
+                if ($termId !== (int) $current->term_id) {
+                    if ($current->internship_status !== 'not_started' || $data['internship_status'] !== 'not_started') {
+                        throw ValidationException::withMessages(['term_id' => self::TERM_MOVE_MESSAGE]);
+                    }
+
+                    // Only the Administrator writes into a past term.
+                    $target = Term::query()->find($termId);
+
+                    if ($target?->isPast() && ! Auth::user()?->hasRole(User::ROLE_ADMIN)) {
+                        throw ValidationException::withMessages(['term_id' => self::TERM_PAST_MESSAGE]);
+                    }
                 }
 
                 $supervisorId = $company?->supervisor_id === null ? null : (int) $company->supervisor_id;

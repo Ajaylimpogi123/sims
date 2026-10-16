@@ -66,7 +66,11 @@ function OpenBook({ className, color, style }) {
     );
 }
 
-export default function Register() {
+const REGISTRATION_CLOSED = "Registration is closed: no active internship term.";
+
+// registrationOpen (server) is false when no term is current; the POST is
+// refused then anyway (validation error on `term`).
+export default function Register({ registrationOpen = true }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         name: "",
         email: "",
@@ -77,8 +81,11 @@ export default function Register() {
         password_confirmation: "",
     });
 
+    const closed = registrationOpen === false;
+
     const submit = (e) => {
         e.preventDefault();
+        if (closed) return;
         post(route("register"), {
             onFinish: () => reset("password", "password_confirmation"),
         });
@@ -196,7 +203,20 @@ export default function Register() {
                         Create your account to get started
                     </p>
 
+                    {(closed || errors.term) && (
+                        <div
+                            role="alert"
+                            className="mb-5 rounded-xl border border-[#F5B301]/30 bg-[#F5B301]/10 px-4 py-3 text-sm text-[#FFD666]"
+                        >
+                            {errors.term || REGISTRATION_CLOSED}
+                        </div>
+                    )}
+
                     <form onSubmit={submit} noValidate className="space-y-4">
+                        <fieldset
+                            disabled={closed}
+                            className="space-y-4 disabled:opacity-60"
+                        >
                         <div className="space-y-1.5">
                             <Label
                                 htmlFor="name"
@@ -410,9 +430,11 @@ export default function Register() {
                             )}
                         </div>
 
+                        </fieldset>
+
                         <Button
                             type="submit"
-                            disabled={processing}
+                            disabled={processing || closed}
                             className="bcc-cta w-full h-11 rounded-xl text-white font-medium border-0 mt-2"
                         >
                             {processing ? (

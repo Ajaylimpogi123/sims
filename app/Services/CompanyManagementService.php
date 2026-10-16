@@ -346,11 +346,11 @@ class CompanyManagementService
     {
         $supervisorId = $company->supervisor_id === null ? null : (int) $company->supervisor_id;
 
-        // Current-term students only: past terms keep the supervisor they
-        // had (they are read-only).
+        // Current and upcoming terms only: past terms keep the supervisor
+        // they had (they are read-only).
         $moved = Student::query()
             ->where('company_id', $company->id)
-            ->inCurrentTerm()
+            ->inOpenTerm()
             ->where(fn (Builder $q) => $supervisorId === null
                 ? $q->whereNotNull('supervisor_id')
                 : $q->whereNull('supervisor_id')->orWhere('supervisor_id', '!=', $supervisorId))

@@ -59,9 +59,10 @@ class HandleInertiaRequests extends Middleware
                 : 0,
             // Terms (owner feature, 2026-10-16): every term for the header
             // switcher (newest first), the current one, the one the lists
-            // show (a Student's own term) and whether that one is archived
-            // (termReadOnly: archived and not an Administrator, so edit
-            // actions are hidden).
+            // show (a Student's own term) and whether that one is archived,
+            // i.e. before the current term (termReadOnly: archived and not an
+            // Administrator, so edit actions are hidden). Upcoming terms are
+            // open.
             'terms' => fn () => $request->user()
                 ? Term::query()->newestFirst()->get()->map(fn (Term $term) => $term->summary())->values()
                 : [],
@@ -71,10 +72,9 @@ class HandleInertiaRequests extends Middleware
             'selectedTerm' => fn () => ($selected = $this->selectedTerm($request))
                 ? $selected->summary()
                 : null,
-            'termArchived' => fn () => $this->selectedTerm($request) !== null
-                && ! $this->selectedTerm($request)->isCurrent(),
+            'termArchived' => fn () => (bool) $this->selectedTerm($request)?->isPast(),
             'termReadOnly' => fn () => $this->selectedTerm($request) !== null
-                && ! $this->selectedTerm($request)->isCurrent()
+                && $this->selectedTerm($request)->isPast()
                 && ! $request->user()?->hasRole(User::ROLE_ADMIN),
             'unreadNotificationsCount' => fn () => $request->user()
                 ? $request->user()->notifications()->unread()->count()

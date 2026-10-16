@@ -9,15 +9,38 @@ import {
 import useTerm from "@/hooks/useTerm";
 import { cn } from "@/lib/utils";
 
-function CurrentBadge({ className = "" }) {
+const BADGE_STYLES = {
+    current: "bg-primary/10 text-primary-strong",
+    upcoming: "bg-sky-100 text-sky-700",
+    archived: "bg-gray-100 text-gray-600",
+};
+const BADGE_LABELS = {
+    current: "Current",
+    upcoming: "Upcoming",
+    archived: "Archived",
+};
+
+// Past = archived (read-only for non-Admins); neither current nor past =
+// upcoming (fully open).
+function termKind(term) {
+    if (term.is_current) return "current";
+    if (term.is_past) return "archived";
+    if (term.is_past === false) return "upcoming";
+    return null;
+}
+
+function TermBadge({ term }) {
+    const kind = termKind(term);
+    if (!kind) return null;
+
     return (
         <span
             className={cn(
-                "inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-primary-strong",
-                className,
+                "inline-flex shrink-0 items-center rounded-full px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide",
+                BADGE_STYLES[kind],
             )}
         >
-            Current
+            {BADGE_LABELS[kind]}
         </span>
     );
 }
@@ -65,7 +88,7 @@ export function TermSwitcher() {
                     <SelectItem key={term.id} value={String(term.id)}>
                         <span className="flex items-center gap-2">
                             <span className="truncate">{term.label}</span>
-                            {term.is_current && <CurrentBadge />}
+                            <TermBadge term={term} />
                         </span>
                     </SelectItem>
                 ))}

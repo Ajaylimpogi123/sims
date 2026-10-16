@@ -10,8 +10,14 @@ import useTerm from "@/hooks/useTerm";
  */
 export function ArchivedTermBanner() {
     const { errors } = usePage().props;
-    const { termArchived, selectedTerm, currentTerm, isStudent, selectTerm } =
-        useTerm();
+    const {
+        termArchived,
+        selectedTerm,
+        currentTerm,
+        isStudent,
+        isAdmin,
+        selectTerm,
+    } = useTerm();
     const termError = errors?.term;
 
     if (!termArchived && !termError) return null;
@@ -35,7 +41,10 @@ export function ArchivedTermBanner() {
                             <span>
                                 You're viewing an archived term
                                 {selectedTerm ? ` (${selectedTerm.label})` : ""}
-                                . It's read-only.
+                                .{" "}
+                                {isAdmin
+                                    ? "As an Administrator, you can still make changes."
+                                    : "It's read-only."}
                             </span>
                         )}
                     </p>

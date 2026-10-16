@@ -49,13 +49,11 @@ final class TermContext
     }
 
     /**
-     * Whether the request is viewing a term other than the current one.
+     * Whether the request is viewing a past (archived) term.
      */
     public static function archived(?Request $request = null): bool
     {
-        $term = self::term($request);
-
-        return $term !== null && ! $term->isCurrent();
+        return (bool) self::term($request)?->isPast();
     }
 
     private static function resolve(Request $request): ?Term

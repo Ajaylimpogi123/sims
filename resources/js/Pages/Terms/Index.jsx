@@ -19,12 +19,25 @@ import { schoolYearLabel } from "./Partials/TermFormFields";
 const DESTRUCTIVE_ITEM_CLASS =
     "pl-2 pr-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md cursor-pointer";
 
-function TermStatusBadge({ isCurrent }) {
-    return isCurrent ? (
-        <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-            Current
-        </span>
-    ) : (
+function TermStatusBadge({ isCurrent, isPast }) {
+    if (isCurrent) {
+        return (
+            <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                Current
+            </span>
+        );
+    }
+
+    // Terms after the current one stay fully open.
+    if (isPast === false) {
+        return (
+            <span className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
+                Upcoming
+            </span>
+        );
+    }
+
+    return (
         <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
             Archived
         </span>
@@ -152,6 +165,9 @@ export default function Index({ termList = [], semesters }) {
                                                         <TermStatusBadge
                                                             isCurrent={
                                                                 term.is_current
+                                                            }
+                                                            isPast={
+                                                                term.is_past
                                                             }
                                                         />
                                                     </TableCell>

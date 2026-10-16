@@ -5,6 +5,7 @@ namespace Tests\Feature\Api\V1;
 use App\Models\Attendance;
 use App\Models\InternshipReport;
 use App\Models\Student;
+use App\Models\Term;
 use App\Models\User;
 use App\Support\AppScreen;
 use Database\Seeders\RoleSeeder;
@@ -68,7 +69,7 @@ class DashboardApiTest extends TestCase
         $response = $this->getApi('/api/v1/dashboard', $this->fixtureUser($fixture, $roleId))->assertOk();
 
         $this->assertSame(
-            ['role_id', 'student', 'kpis', 'supervised_students', 'action_items', 'recent_activity'],
+            ['role_id', 'student', 'kpis', 'supervised_students', 'action_items', 'recent_activity', 'term'],
             array_keys($response->json()),
         );
         $response->assertJsonPath('role_id', $roleId);
@@ -91,6 +92,7 @@ class DashboardApiTest extends TestCase
                     'internship' => [
                         'status' => 'ongoing',
                         'can_submit' => true,
+                        'term' => Term::current()->summary(),
                         'company' => ['id' => $fixture['companyX']->id, 'name' => 'Xylo Corp'],
                         'supervisor' => ['id' => $fixture['supervisorA']->id, 'name' => $fixture['supervisorA']->name],
                     ],
@@ -121,6 +123,7 @@ class DashboardApiTest extends TestCase
                 'supervised_students' => null,
                 'action_items' => [],
                 'recent_activity' => [],
+                'term' => Term::current()->summary(),
             ]);
     }
 
@@ -187,6 +190,7 @@ class DashboardApiTest extends TestCase
                 'supervised_students' => null,
                 'action_items' => [],
                 'recent_activity' => [],
+                'term' => Term::current()->summary(),
             ]);
     }
 
