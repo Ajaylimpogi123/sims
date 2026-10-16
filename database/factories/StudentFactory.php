@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Company;
 use App\Models\Term;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -41,6 +42,20 @@ class StudentFactory extends Factory
     public function inTerm(Term|int $term): static
     {
         return $this->state(['term_id' => $term instanceof Term ? $term->id : $term]);
+    }
+
+    /**
+     * Placed at a new company whose Company Supervisor is an active
+     * Supervisor account (what Ongoing needs).
+     */
+    public function placed(): static
+    {
+        return $this->state(function () {
+            $supervisor = User::factory()->create(['role_id' => User::ROLE_SUPERVISOR, 'status' => 'active']);
+            $company = Company::factory()->create(['slots' => 10, 'supervisor_id' => $supervisor->id]);
+
+            return ['company_id' => $company->id, 'supervisor_id' => $supervisor->id];
+        });
     }
 
     public function notStarted(): static

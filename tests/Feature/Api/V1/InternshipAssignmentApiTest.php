@@ -402,7 +402,7 @@ class InternshipAssignmentApiTest extends TestCase
     {
         $company = Company::factory()->create(['slots' => 5]);
         $supervisor = $this->supervisorAt($company);
-        $student = $this->student(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
+        $student = $this->student(['company_id' => $company->id, 'supervisor_id' => $supervisor->id, 'internship_status' => 'not_started']);
 
         $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => null]))
             ->assertOk()
@@ -470,13 +470,54 @@ class InternshipAssignmentApiTest extends TestCase
     {
         $company = Company::factory()->create(['slots' => 5]);
         $inactive = $this->supervisorAt($company, ['status' => 'inactive']);
-        $student = $this->student();
+        $student = $this->student(['internship_status' => 'not_started']);
 
         $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => $company->id]))
             ->assertOk()
             ->assertJsonPath('student.supervisor.id', $inactive->id)
             ->assertJsonPath('student.needs_supervisor', true)
             ->assertJsonPath('student.supervisor_issue', 'inactive');
+    }
+
+    public function test_ongoing_needs_a_working_supervisor(): void
+    {
+        $coordinator = $this->user(User::ROLE_COORDINATOR);
+        $unsupervised = Company::factory()->create(['company_name' => 'Acme Corp', 'slots' => 5]);
+        $inactiveAt = Company::factory()->create(['company_name' => 'Beta Inc', 'slots' => 5]);
+        $this->supervisorAt($inactiveAt, ['status' => 'inactive']);
+        $demotedAt = Company::factory()->create(['company_name' => 'Gamma Co', 'slots' => 5]);
+        $this->supervisorAt($demotedAt)->update(['role_id' => User::ROLE_COORDINATOR]);
+        $working = Company::factory()->create(['slots' => 5]);
+        $supervisor = $this->supervisorAt($working);
+
+        $student = $this->student(['internship_status' => 'not_started', 'required_hours' => 300]);
+        $ongoing = fn (array $overrides) => $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator,
+            $this->payload($student, ['internship_status' => 'ongoing'] + $overrides));
+
+        foreach ([
+            [null, 'Assign a company with a supervisor before marking the internship Ongoing.'],
+            [$unsupervised->id, 'Acme Corp has no supervisor yet. Set an active supervisor in Company Management before marking the internship Ongoing.'],
+            [$inactiveAt->id, "Beta Inc's supervisor account is inactive. Set an active supervisor in Company Management before marking the internship Ongoing."],
+            [$demotedAt->id, "Gamma Co's supervisor account is no longer a Supervisor. Set an active supervisor in Company Management before marking the internship Ongoing."],
+        ] as [$companyId, $message]) {
+            $this->assertRefused($ongoing(['company_id' => $companyId]), 'supervisor_missing', 'internship_status', $message);
+            $this->assertSame('not_started', $student->fresh()->internship_status);
+        }
+
+        $ongoing(['company_id' => $working->id])
+            ->assertOk()
+            ->assertJsonPath('student.internship_status', 'ongoing')
+            ->assertJsonPath('student.supervisor.id', $supervisor->id);
+
+        // An ongoing student can't be moved to an unsupervised company or lose theirs.
+        $this->assertRefused($ongoing(['company_id' => $unsupervised->id]), 'supervisor_missing', 'internship_status');
+        $this->assertRefused($ongoing(['company_id' => null]), 'supervisor_missing', 'internship_status');
+        $this->assertSame($working->id, $student->fresh()->company_id);
+
+        // One whose supervisor went missing later can still be re-saved unchanged.
+        $working->update(['supervisor_id' => null]);
+        $student->update(['supervisor_id' => null]);
+        $ongoing(['section' => 'Z'])->assertOk()->assertJsonPath('student.section', 'Z');
     }
 
     public function test_company_deleted_meanwhile_is_a_validation_error(): void

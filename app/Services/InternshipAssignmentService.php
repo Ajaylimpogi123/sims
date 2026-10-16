@@ -53,6 +53,9 @@ class InternshipAssignmentService
 
     public const REQUIRED_HOURS_LOCKED = 'required_hours_locked';
 
+    /** Ongoing needs a working supervisor (the company's). */
+    public const SUPERVISOR_MISSING = 'supervisor_missing';
+
     public const TERM_MOVE_MESSAGE = 'Only students who haven\'t started can move to another term.';
 
     public const TERM_PAST_MESSAGE = 'Only an Administrator can move a student into a past term.';
@@ -389,6 +392,29 @@ class InternshipAssignmentService
             }
         }
 
+        // Company problems (inactive, full) come first: they are on the
+        // company the coordinator just picked.
+        $this->checkCompany($current, $company, $termId);
+
+        // An ongoing student needs a working supervisor (their company's):
+        // checked when the student becomes Ongoing or an ongoing student
+        // moves company. An unchanged re-save of an ongoing student whose
+        // supervisor went missing later stays allowed (flagged instead).
+        $becomesOngoing = $current->internship_status !== Student::SUBMITTING_STATUS;
+        $movesCompany = (string) $current->company_id !== (string) $company?->id;
+
+        if ($internshipStatus === Student::SUBMITTING_STATUS && ($becomesOngoing || $movesCompany)) {
+            $this->ensureWorkingSupervisor($company);
+        }
+    }
+
+    /**
+     * A new company must be active and have a free slot in the target term.
+     *
+     * @throws AssignmentRuleException
+     */
+    private function checkCompany(Student $current, ?Company $company, int $termId): void
+    {
         if ($company === null) {
             return;
         }
@@ -416,6 +442,36 @@ class InternshipAssignmentService
         if ($assignedCount >= $company->slots) {
             throw AssignmentRuleException::refuse(self::COMPANY_FULL, 'company_id',
                 "{$company->company_name} has no available slots ({$assignedCount}/{$company->slots} filled).");
+        }
+    }
+
+    /**
+     * Refuses Ongoing unless the (locked) target company has an active
+     * Supervisor account as its Company Supervisor.
+     *
+     * @throws AssignmentRuleException
+     */
+    private function ensureWorkingSupervisor(?Company $company): void
+    {
+        if ($company === null) {
+            throw AssignmentRuleException::refuse(self::SUPERVISOR_MISSING, 'internship_status',
+                'Assign a company with a supervisor before marking the internship Ongoing.');
+        }
+
+        $supervisor = $company->supervisor_id === null ? null : User::query()->find($company->supervisor_id);
+
+        $problem = match (CompanyManagementService::supervisorIssue($supervisor, $company->supervisor_id)) {
+            self::ISSUE_NO_SUPERVISOR => 'has no supervisor yet',
+            self::ISSUE_NOT_A_SUPERVISOR => '\'s supervisor account is no longer a Supervisor',
+            self::ISSUE_INACTIVE => '\'s supervisor account is inactive',
+            default => null,
+        };
+
+        if ($problem !== null) {
+            $separator = str_starts_with($problem, '\'') ? '' : ' ';
+
+            throw AssignmentRuleException::refuse(self::SUPERVISOR_MISSING, 'internship_status',
+                "{$company->company_name}{$separator}{$problem}. Set an active supervisor in Company Management before marking the internship Ongoing.");
         }
     }
 

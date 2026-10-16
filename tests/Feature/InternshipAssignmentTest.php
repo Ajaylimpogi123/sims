@@ -43,7 +43,8 @@ class InternshipAssignmentTest extends TestCase
     public function test_coordinator_can_assign_student_to_company_with_available_slots(): void
     {
         $coordinator = User::factory()->create(['role_id' => 2]);
-        $company = Company::factory()->create(['slots' => 2]);
+        $supervisor = User::factory()->create(['role_id' => 3]);
+        $company = Company::factory()->create(['slots' => 2, 'supervisor_id' => $supervisor->id]);
         $student = Student::factory()->create();
 
         $response = $this->actingAs($coordinator)->patch(
@@ -215,7 +216,7 @@ class InternshipAssignmentTest extends TestCase
         $newCompany = Company::factory()->create(['slots' => 5, 'supervisor_id' => $newSupervisor->id]);
         $unsupervised = Company::factory()->create(['slots' => 5]);
 
-        $student = Student::factory()->create([
+        $student = Student::factory()->notStarted()->create([
             'company_id' => $oldCompany->id,
             'supervisor_id' => $oldSupervisor->id,
         ]);
@@ -248,7 +249,7 @@ class InternshipAssignmentTest extends TestCase
         $supervisor = User::factory()->create(['role_id' => 3]);
         $company = Company::factory()->create(['slots' => 5, 'supervisor_id' => $supervisor->id]);
 
-        $student = Student::factory()->create([
+        $student = Student::factory()->notStarted()->create([
             'company_id' => $company->id,
             'supervisor_id' => $supervisor->id,
         ]);
@@ -313,7 +314,7 @@ class InternshipAssignmentTest extends TestCase
     {
         $coordinator = User::factory()->create(['role_id' => 2]);
         $studentUser = User::factory()->create(['role_id' => 1]);
-        $student = Student::factory()->create([
+        $student = Student::factory()->placed()->create([
             'user_id' => $studentUser->id,
             'internship_status' => 'not_started',
         ]);
@@ -386,7 +387,7 @@ class InternshipAssignmentTest extends TestCase
     {
         $coordinator = User::factory()->create(['role_id' => 2]);
         $company = Company::factory()->create(['slots' => 5]);
-        $student = Student::factory()->create(['company_id' => $company->id]);
+        $student = Student::factory()->notStarted()->create(['company_id' => $company->id]);
 
         foreach ([true, []] as $bad) {
             $this->actingAs($coordinator)

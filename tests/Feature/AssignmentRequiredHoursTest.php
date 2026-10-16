@@ -243,7 +243,7 @@ class AssignmentRequiredHoursTest extends TestCase
     #[DataProvider('channels')]
     public function test_hours_and_ongoing_can_be_set_in_one_save(string $channel): void
     {
-        $student = Student::factory()->create(['internship_status' => 'not_started', 'required_hours' => null]);
+        $student = Student::factory()->placed()->create(['internship_status' => 'not_started', 'required_hours' => null]);
 
         $this->assertSaved($channel, $this->save($channel, $student, $this->payload($student, [
             'internship_status' => 'ongoing',
@@ -299,7 +299,7 @@ class AssignmentRequiredHoursTest extends TestCase
     #[DataProvider('channels')]
     public function test_omitted_hours_fall_back_to_the_stored_value_for_ongoing(string $channel): void
     {
-        $student = Student::factory()->create(['internship_status' => 'not_started', 'required_hours' => 300]);
+        $student = Student::factory()->placed()->create(['internship_status' => 'not_started', 'required_hours' => 300]);
         $payload = $this->payload($student, ['internship_status' => 'ongoing']);
         unset($payload['required_hours']);
 

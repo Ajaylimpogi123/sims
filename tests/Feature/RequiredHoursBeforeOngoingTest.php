@@ -134,7 +134,7 @@ class RequiredHoursBeforeOngoingTest extends TestCase
     #[DataProvider('channels')]
     public function test_marking_ongoing_with_required_hours_is_allowed(string $channel): void
     {
-        $student = Student::factory()->create(['internship_status' => 'not_started', 'required_hours' => 300]);
+        $student = Student::factory()->placed()->create(['internship_status' => 'not_started', 'required_hours' => 300]);
 
         $response = $this->save($channel, $student, ['internship_status' => 'ongoing']);
 
