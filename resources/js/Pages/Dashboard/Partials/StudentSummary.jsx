@@ -7,11 +7,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/Components/ui/table";
-import { Clock, FileText, Building2 } from "lucide-react";
+import { Clock, FileText, Building2, CalendarRange } from "lucide-react";
 import { formatLongDate, formatTime } from "@/lib/dates";
 import StatCard from "./StatCard";
 import HoursProgressBar from "./HoursProgressBar";
 import SubmissionClosedNotice from "@/Components/SubmissionClosedNotice";
+import useTerm from "@/hooks/useTerm";
 
 const STATUS_LABELS = {
     not_started: "Not Started",
@@ -31,8 +32,28 @@ export default function StudentSummary({
     pendingReportsCount,
     recentReports,
 }) {
+    // Students' selectedTerm is always their own student row's term.
+    const { selectedTerm } = useTerm();
+
     return (
         <div className="space-y-6">
+            {selectedTerm && (
+                <p className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-sm text-gray-700 shadow-sm">
+                    <CalendarRange className="h-4 w-4 shrink-0 text-primary" />
+                    <span className="truncate">
+                        Term:{" "}
+                        <span className="font-medium text-gray-900">
+                            {selectedTerm.label}
+                        </span>
+                    </span>
+                    {selectedTerm.is_current === false && (
+                        <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                            Ended
+                        </span>
+                    )}
+                </p>
+            )}
+
             {student.can_submit === false && (
                 <SubmissionClosedNotice
                     internshipStatus={student.internship_status}

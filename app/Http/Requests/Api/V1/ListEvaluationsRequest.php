@@ -21,6 +21,9 @@ class ListEvaluationsRequest extends ListFeedbackRequest
     public function rules(): array
     {
         return [
+            // The term to list (App\Support\TermContext); the current one
+            // when omitted. Ignored for Students (always their own term).
+            'term_id' => ['bail', 'sometimes', 'nullable', 'integer', 'min:1', 'exists:terms,id'],
             ...parent::rules(),
             'status' => ['sometimes', 'nullable', 'string', 'in:'.implode(',', self::STATUSES)],
             'student_id' => ['sometimes', 'nullable', new NotBoolean, 'integer', 'min:1'],

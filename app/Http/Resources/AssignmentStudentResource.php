@@ -2,12 +2,13 @@
 
 namespace App\Http\Resources;
 
+use App\Support\TermGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * An Internship Assignment row (a student record). Expects user, company
- * and supervisor loaded and InternshipAssignmentService::loadRosterFlags()
+ * An Internship Assignment row (a student record). Expects user, company,
+ * supervisor and term loaded and InternshipAssignmentService::loadSupervisorFlags()
  * to have run.
  *
  * @mixin \App\Models\Student
@@ -38,9 +39,8 @@ class AssignmentStudentResource extends JsonResource
                 'email' => $this->supervisor->email,
                 'status' => $status($this->supervisor),
             ] : null,
-            'supervisor_on_roster' => $this->supervisor_on_roster,
             'needs_supervisor' => (bool) $this->needs_supervisor,
-            // null | no_supervisor | not_on_roster | not_a_supervisor | inactive
+            // null | no_supervisor | not_a_supervisor | inactive
             'supervisor_issue' => $this->supervisor_issue,
             'internship_status' => $this->internship_status,
             // null = not set; needed before the status can become ongoing.
@@ -48,8 +48,11 @@ class AssignmentStudentResource extends JsonResource
             'internship_schedule' => $this->internship_schedule,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
-            'can_edit' => true,
-            'can_toggle_status' => true,
+            'term_id' => (int) $this->term_id,
+            'term' => $this->term?->summary(),
+            // Past terms are read-only but for the Administrator.
+            'can_edit' => $writable = TermGuard::isWritable($this->resource, $request->user()),
+            'can_toggle_status' => $writable,
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Term;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -21,6 +22,8 @@ class StudentFactory extends Factory
     {
         return [
             'user_id' => User::factory()->state(['role_id' => 1]),
+            // The current term (one is created when none exists).
+            'term_id' => fn () => Term::currentId() ?? Term::factory()->current()->create()->id,
             'student_number' => fake()->unique()->numerify('####-#####'),
             'course' => fake()->randomElement(['BSIT', 'BSCS', 'BSCE', 'BSA']),
             'section' => fake()->randomElement(['A', 'B', 'C']),
@@ -30,6 +33,14 @@ class StudentFactory extends Factory
             'internship_status' => 'ongoing',
             'required_hours' => 486,
         ];
+    }
+
+    /**
+     * Enrolls the student in the given term.
+     */
+    public function inTerm(Term|int $term): static
+    {
+        return $this->state(['term_id' => $term instanceof Term ? $term->id : $term]);
     }
 
     public function notStarted(): static

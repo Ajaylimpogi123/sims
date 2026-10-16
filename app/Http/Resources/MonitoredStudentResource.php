@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\TermGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Gate;
@@ -23,7 +24,9 @@ class MonitoredStudentResource extends JsonResource
     {
         $rendered = round((float) $this->total_rendered_hours, 2);
         $required = $this->required_hours !== null ? (int) $this->required_hours : null;
-        $canManage = Gate::forUser($request->user())->allows('manageAttendance', $this->resource);
+        // Past terms are read-only but for the Administrator.
+        $canManage = Gate::forUser($request->user())->allows('manageAttendance', $this->resource)
+            && TermGuard::isWritable($this->resource, $request->user());
 
         return [
             'id' => $this->id,

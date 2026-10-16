@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\Attendance;
 use App\Services\AttendanceService;
+use App\Support\TermGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Gate;
@@ -27,7 +28,9 @@ class ApprovalResource extends JsonResource
     {
         $student = $this->student;
         $company = $student?->company;
-        $canReview = Gate::forUser($request->user())->allows('review', $this->resource);
+        // Past terms are read-only but for the Administrator.
+        $canReview = Gate::forUser($request->user())->allows('review', $this->resource)
+            && ($student === null || TermGuard::isWritable($student, $request->user()));
 
         return [
             ...(new AttendanceResource($this->resource))->toArray($request),

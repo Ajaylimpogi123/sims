@@ -8,7 +8,6 @@ use App\Http\Requests\Api\V1\ListAssignmentsRequest;
 use App\Http\Resources\AssignmentStudentResource;
 use App\Models\Company;
 use App\Models\Student;
-use App\Models\User;
 use App\Services\InternshipAssignmentService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
@@ -18,8 +17,10 @@ use Illuminate\Http\Request;
  * Internship Assignment (Coordinator, Administrator by the route's
  * role:2,4): the website's InternshipAssignmentController through
  * InternshipAssignmentService, same rules and messages. {student} is the
- * student record id. A rule refusal (slots, roster, inactive company /
- * supervisor) is a 422 with `code` and the field error. Activate /
+ * student record id. The student's supervisor follows the company's
+ * Company Supervisor (a sent supervisor_id is ignored). A rule refusal
+ * (slots, inactive company, required hours) is a 422 with `code` and the
+ * field error. Activate /
  * deactivate are explicit (idempotent) where the website toggles.
  */
 class AssignmentController extends Controller
@@ -31,7 +32,7 @@ class AssignmentController extends Controller
         $page = $this->assignments->query($request->filters())
             ->paginate($request->perPage(), ['*'], 'page', $request->page());
 
-        $this->assignments->loadRosterFlags($page->getCollection());
+        $this->assignments->loadSupervisorFlags($page->getCollection());
 
         return response()->json([
             'data' => AssignmentStudentResource::collection($page->items())->resolve($request),
@@ -57,12 +58,14 @@ class AssignmentController extends Controller
                 'slots' => (int) $company->slots,
                 'students_count' => (int) $company->students_count,
                 'slots_available' => max(0, (int) $company->slots - (int) $company->students_count),
-                'supervisors' => $company->supervisors->map(fn (User $supervisor) => [
-                    'id' => $supervisor->id,
-                    'name' => $supervisor->name,
-                    'email' => $supervisor->email,
-                    'status' => $status($supervisor),
-                ])->values()->all(),
+                'supervisor' => $company->supervisor ? [
+                    'id' => $company->supervisor->id,
+                    'name' => $company->supervisor->name,
+                    'email' => $company->supervisor->email,
+                    'status' => $status($company->supervisor),
+                ] : null,
+                // null | no_supervisor | not_a_supervisor | inactive
+                'supervisor_issue' => $company->supervisor_issue,
             ])->values()->all(),
             'internship_statuses' => collect(InternshipAssignmentService::STATUSES)
                 ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
@@ -82,7 +85,7 @@ class AssignmentController extends Controller
 
         $this->assignments->prepare($request);
 
-        $validated = $request->validate($this->assignments->rules($model, $request, rosterCheck: false));
+        $validated = $request->validate($this->assignments->rules($model));
 
         try {
             $this->assignments->update($model, $validated);
@@ -140,12 +143,12 @@ class AssignmentController extends Controller
     private function present(Request $request, Student $student): array
     {
         $fresh = Student::query()
-            ->with(['user:id,name,email,status', 'company:id,company_name,status', 'supervisor:id,name,email,status'])
+            ->with(['user:id,name,email,status', 'company:id,company_name,status', 'supervisor:id,name,email,status', 'term'])
             ->find($student->id);
 
         abort_if($fresh === null, 404);
 
-        $this->assignments->loadRosterFlags([$fresh]);
+        $this->assignments->loadSupervisorFlags([$fresh]);
 
         return (new AssignmentStudentResource($fresh))->resolve($request);
     }

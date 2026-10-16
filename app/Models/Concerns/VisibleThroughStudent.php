@@ -27,4 +27,16 @@ trait VisibleThroughStudent
             default => $query->whereRaw('1 = 0'),
         };
     }
+
+    /**
+     * Records whose student is enrolled in the given term (records inherit
+     * the term through their student); a null term leaves the query
+     * unscoped.
+     */
+    public function scopeInTerm(Builder $query, ?int $termId): Builder
+    {
+        return $termId === null
+            ? $query
+            : $query->whereHas('student', fn (Builder $student) => $student->where('term_id', $termId));
+    }
 }

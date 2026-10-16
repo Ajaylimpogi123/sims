@@ -1,48 +1,78 @@
-import { MailIcon, PlusCircleIcon } from "lucide-react";
-import { Link } from "@inertiajs/react";
-import { Button } from "@/Components/ui/button";
+import { Link, usePage } from "@inertiajs/react";
 import {
     SidebarGroup,
     SidebarGroupContent,
+    SidebarGroupLabel,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/Components/ui/sidebar";
+import { cn } from "@/lib/utils";
+
+/** Path of an absolute route() URL or a relative one, without the query. */
+const pathOf = (url) => {
+    try {
+        return new URL(url, window.location.origin).pathname.replace(/\/+$/, "") || "/";
+    } catch {
+        return url;
+    }
+};
+
+/**
+ * The current page is the item's page or one under it. Admins land on
+ * /admin-dashboard (same page), which counts as Dashboard.
+ */
+const isActive = (current, itemUrl) => {
+    const path = pathOf(itemUrl);
+    if (path === "/dashboard" && current === "/admin-dashboard") return true;
+    return current === path || current.startsWith(`${path}/`);
+};
 
 export function NavMain({ items }) {
+    const current = pathOf(usePage().url);
+
     return (
         <SidebarGroup>
-            <SidebarGroupContent className="flex flex-col gap-2">
-                {/* <SidebarMenu>
-                    <SidebarMenuItem className="flex items-center gap-2">
-                        <SidebarMenuButton
-                            tooltip="Quick Create"
-                            className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
-                        >
-                            <PlusCircleIcon />
-                            <span>Quick Create</span>
-                        </SidebarMenuButton>
-                        <Button
-                            size="icon"
-                            className="h-9 w-9 shrink-0 group-data-[collapsible=icon]:opacity-0"
-                            variant="outline"
-                        >
-                            <MailIcon />
-                            <span className="sr-only">Inbox</span>
-                        </Button>
-                    </SidebarMenuItem>
-                </SidebarMenu> */}
-                <SidebarMenu>
-                    {items.map((item) => (
-                        <SidebarMenuItem key={item.title}>
-                            <Link href={item.url}>
-                                <SidebarMenuButton tooltip={item.title}>
-                                    {item.icon && <item.icon />}
-                                    <span>{item.title}</span>
+            <SidebarGroupLabel className="px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+                Menu
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+                <SidebarMenu className="gap-1">
+                    {items.map((item) => {
+                        const active = isActive(current, item.url);
+
+                        return (
+                            <SidebarMenuItem key={item.url}>
+                                <SidebarMenuButton
+                                    asChild
+                                    isActive={active}
+                                    tooltip={item.title}
+                                    className={cn(
+                                        "relative h-10 gap-3 rounded-lg px-3 font-medium text-sidebar-foreground/75 transition-colors",
+                                        "hover:bg-primary/[0.06] hover:text-primary-strong",
+                                        "data-[active=true]:bg-primary/10 data-[active=true]:font-semibold data-[active=true]:text-primary-strong",
+                                        "before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-r-full before:bg-primary before:opacity-0 before:transition-opacity data-[active=true]:before:opacity-100",
+                                        "[&>svg]:text-sidebar-foreground/50 [&:hover>svg]:text-primary [&[data-active=true]>svg]:text-primary",
+                                    )}
+                                >
+                                    <Link
+                                        href={item.url}
+                                        aria-current={active ? "page" : undefined}
+                                    >
+                                        {item.icon && <item.icon />}
+                                        <span className="flex-1 truncate">
+                                            {item.title}
+                                        </span>
+                                        {item.badge > 0 && (
+                                            <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white">
+                                                {item.badge > 99 ? "99+" : item.badge}
+                                            </span>
+                                        )}
+                                    </Link>
                                 </SidebarMenuButton>
-                            </Link>
-                        </SidebarMenuItem>
-                    ))}
+                            </SidebarMenuItem>
+                        );
+                    })}
                 </SidebarMenu>
             </SidebarGroupContent>
         </SidebarGroup>

@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\MonitoringController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ReportAttachmentController;
 use App\Http\Controllers\Api\V1\ReportReviewController;
+use App\Http\Controllers\Api\V1\TermController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Middleware\ThrottleFailedAuth;
 use App\Http\Middleware\ThrottleLogin;
@@ -53,6 +54,25 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])
             ->whereNumber('notification')
             ->name('notifications.read');
+
+        // Terms: the list is every role's (term picker, labels); changes
+        // are Coordinator and Administrator only, like the website's /terms.
+        Route::get('terms', [TermController::class, 'index'])->name('terms.index');
+
+        Route::middleware('role:2,4')->group(function () {
+            $id = '[1-9][0-9]{0,17}';
+
+            Route::post('terms', [TermController::class, 'store'])->name('terms.store');
+            Route::patch('terms/{term}', [TermController::class, 'update'])
+                ->where('term', $id)
+                ->name('terms.update');
+            Route::delete('terms/{term}', [TermController::class, 'destroy'])
+                ->where('term', $id)
+                ->name('terms.destroy');
+            Route::post('terms/{term}/current', [TermController::class, 'setCurrent'])
+                ->where('term', $id)
+                ->name('terms.current');
+        });
 
         // Dashboard: every role, own role's summary (Supervisor scoped to
         // their own students inside DashboardAnalyticsService).
@@ -241,12 +261,13 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             }
         });
 
-        // Company Management and supervisor roster: Coordinator and
+        // Company Management (with the Company Supervisor): Coordinator and
         // Administrator, like the website's /company-management (role:2,4).
         // Rules live in CompanyManagementService.
         Route::middleware('role:2,4')->group(function () {
             $id = '[1-9][0-9]{0,17}';
 
+            Route::get('companies/supervisor-options', [CompanyController::class, 'supervisorOptions'])->name('companies.supervisor-options');
             Route::get('companies', [CompanyController::class, 'index'])->name('companies.index');
             Route::post('companies', [CompanyController::class, 'store'])->name('companies.store');
             Route::get('companies/{company}', [CompanyController::class, 'show'])
@@ -265,15 +286,6 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                     ->name("companies.{$action}");
             }
 
-            Route::get('companies/{company}/supervisors/available', [CompanyController::class, 'availableSupervisors'])
-                ->where('company', $id)
-                ->name('companies.supervisors.available');
-            Route::post('companies/{company}/supervisors', [CompanyController::class, 'attachSupervisor'])
-                ->where('company', $id)
-                ->name('companies.supervisors.attach');
-            Route::delete('companies/{company}/supervisors/{user}', [CompanyController::class, 'detachSupervisor'])
-                ->where(['company' => $id, 'user' => $id])
-                ->name('companies.supervisors.detach');
         });
 
         // Internship Assignment: Coordinator and Administrator, like the

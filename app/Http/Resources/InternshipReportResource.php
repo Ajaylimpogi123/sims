@@ -42,7 +42,8 @@ class InternshipReportResource extends JsonResource
             // Editing also needs an ongoing internship (deleting a pending
             // report doesn't); only the owning student can pass the policy.
             'can_edit' => (bool) $user?->can('update', $this->resource) && (bool) $user->student?->canSubmitWork(),
-            'can_delete' => (bool) $user?->can('delete', $this->resource),
+            // A past term's reports are read-only.
+            'can_delete' => (bool) $user?->can('delete', $this->resource) && (bool) $this->student?->inCurrentTerm(),
         ];
     }
 

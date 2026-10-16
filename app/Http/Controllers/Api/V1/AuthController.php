@@ -7,7 +7,9 @@ use App\Http\Middleware\EnsureMobileAppAccess;
 use App\Http\Requests\Api\V1\LoginRequest;
 use App\Http\Resources\StudentProfileResource;
 use App\Http\Resources\UserResource;
+use App\Models\Term;
 use App\Models\User;
+use App\Services\TermService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -90,13 +92,14 @@ class AuthController extends Controller
         $staff = $user->staffPermissions();
 
         if ((int) $user->role_id === 1) {
-            $profile = $user->student()->with(['company', 'supervisor'])->first();
+            $profile = $user->student()->with(['company', 'supervisor', 'term'])->first();
             $student = $profile ? new StudentProfileResource($profile) : null;
         }
 
         if ((int) $user->role_id === 3) {
             $supervisor = [
-                'students_count' => $user->supervisedStudents()->count(),
+                // Current-term students only.
+                'students_count' => $user->supervisedStudents()->inCurrentTerm()->count(),
             ];
         }
 
@@ -105,6 +108,8 @@ class AuthController extends Controller
             'student' => $student,
             'supervisor' => $supervisor,
             'staff' => $staff,
+            // Every role: the current term (null when none is set).
+            'current_term' => ($current = Term::current()) ? TermService::present($current) : null,
         ]);
     }
 }

@@ -46,6 +46,14 @@ export default function RequiredHoursModal({
                         </DialogHeader>
 
                         <div className="grid gap-4">
+                            {errors.term && (
+                                <p
+                                    role="alert"
+                                    className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                                >
+                                    {errors.term}
+                                </p>
+                            )}
                             <div className="grid gap-3">
                                 <Label>Required Hours</Label>
                                 <Input

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\TermGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Gate;
@@ -22,6 +23,7 @@ class MonitoringAttendanceResource extends JsonResource
     public function toArray(Request $request): array
     {
         $gate = Gate::forUser($request->user());
+        $writable = $this->student === null || TermGuard::isWritable($this->student, $request->user());
         $studentUserId = $this->student?->user_id;
 
         return [
@@ -29,8 +31,9 @@ class MonitoringAttendanceResource extends JsonResource
             // The website shows "Self" when the student's own account
             // recorded the row (a self-service leg), otherwise "Staff".
             'recorded_by' => $studentUserId !== null && (int) $this->recorded_by === (int) $studentUserId ? 'self' : 'staff',
-            'can_edit' => $gate->allows('update', $this->resource),
-            'can_delete' => $gate->allows('delete', $this->resource),
+            // Past terms are read-only but for the Administrator.
+            'can_edit' => $gate->allows('update', $this->resource) && $writable,
+            'can_delete' => $gate->allows('delete', $this->resource) && $writable,
         ];
     }
 }

@@ -12,6 +12,8 @@ use App\Models\Student;
 use App\Models\User;
 use App\Policies\EvaluationPolicy;
 use App\Services\EvaluationService;
+use App\Support\TermContext;
+use App\Support\TermGuard;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
@@ -56,6 +58,7 @@ class EvaluationController extends Controller
         $page = Evaluation::query()
             ->with(self::RELATIONS)
             ->visibleTo($user)
+            ->inTerm(TermContext::id($request))
             ->when($request->status(), fn (Builder $query, string $status) => $query->where('status', $status))
             ->when($request->studentId(), fn (Builder $query, int $id) => $query->where('student_id', $id))
             ->when($search !== null, fn (Builder $query) => $query->whereHas('student', function (Builder $student) use ($search) {
@@ -75,7 +78,9 @@ class EvaluationController extends Controller
                 'next_cursor' => $page->nextCursor()?->encode(),
                 'has_more' => $page->hasMorePages(),
             ],
-            'can_create' => $user->hasRole(User::ROLE_SUPERVISOR, User::ROLE_ADMIN),
+            // Past terms are read-only but for the Administrator.
+            'can_create' => $user->hasRole(User::ROLE_SUPERVISOR, User::ROLE_ADMIN)
+                && TermGuard::termWritable(TermContext::id($request), $user),
         ]);
     }
 
@@ -122,6 +127,7 @@ class EvaluationController extends Controller
         $students = Student::query()
             ->with(['user:id,name', 'company:id,company_name'])
             ->visibleTo($request->user())
+            ->inTerm(TermContext::id($request))
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->get()

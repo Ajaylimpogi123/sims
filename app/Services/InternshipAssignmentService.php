@@ -7,6 +7,8 @@ use App\Models\Company;
 use App\Models\Student;
 use App\Models\User;
 use App\Support\RequiredHours;
+use App\Support\TermContext;
+use App\Support\TermGuard;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -19,19 +21,17 @@ use Illuminate\Validation\ValidationException;
 /**
  * Internship Assignment (Internship Coordinator, Administrator), shared by
  * the website and the mobile API: one save covering a student's profile
- * fields and their assignment (company, supervisor, internship status,
- * schedule, required hours), plus the account status toggle.
+ * fields and their assignment (company, internship status, schedule,
+ * required hours), plus the account status toggle.
  *
+ * - The student's supervisor is always their company's Company Supervisor
+ *   (companies.supervisor_id; none without a company). It isn't picked
+ *   here: a `supervisor_id` sent by older clients is ignored.
  * - Ongoing needs required hours (set in this same save or already
  *   stored; an already-ongoing student without any, from older rows, can
  *   still be re-saved), and an ongoing student's hours can't be cleared.
- * - A company other than the student's current one needs a free slot.
- * - A supervisor must be on the chosen company's roster (company_supervisors)
- *   when the company or supervisor changes. The roster and
- *   students.supervisor_id can drift apart; an unchanged, drifted
- *   assignment doesn't block editing the other fields.
- * - New assignments to an inactive company or an inactive supervisor are
- *   refused; students already there keep them.
+ * - A company other than the student's current one needs a free slot and
+ *   must be active (students already there keep it).
  * - All of the above are checked under a lock on the target company (the
  *   same row CompanyManagementService locks for edits and deletes).
  * - Changing company, supervisor or internship status notifies the student
@@ -45,32 +45,20 @@ class InternshipAssignmentService
 
     public const COMPANY_INACTIVE = 'company_inactive';
 
-    public const SUPERVISOR_NEEDS_COMPANY = 'supervisor_needs_company';
-
-    public const SUPERVISOR_NOT_ON_ROSTER = 'supervisor_not_on_roster';
-
-    public const SUPERVISOR_INACTIVE = 'supervisor_inactive';
-
     public const REQUIRED_HOURS_MISSING = 'required_hours_missing';
 
     public const REQUIRED_HOURS_MISSING_MESSAGE = 'Set the required hours before marking the internship Ongoing.';
 
     public const REQUIRED_HOURS_LOCKED = 'required_hours_locked';
 
+    public const TERM_MOVE_MESSAGE = 'Only students who haven\'t started can move to another term.';
+
     /** `supervisor_issue` values, in precedence order (see supervisorIssue()). */
-    public const ISSUE_NO_SUPERVISOR = 'no_supervisor';
+    public const ISSUE_NO_SUPERVISOR = CompanyManagementService::ISSUE_NO_SUPERVISOR;
 
-    public const ISSUE_NOT_ON_ROSTER = 'not_on_roster';
+    public const ISSUE_NOT_A_SUPERVISOR = CompanyManagementService::ISSUE_NOT_A_SUPERVISOR;
 
-    public const ISSUE_NOT_A_SUPERVISOR = 'not_a_supervisor';
-
-    public const ISSUE_INACTIVE = 'inactive';
-
-    public const NEEDS_COMPANY_MESSAGE = 'Assign a company before assigning a supervisor.';
-
-    public const NOT_ON_ROSTER_MESSAGE = 'This supervisor is not on the selected company\'s roster.';
-
-    public const SUPERVISOR_INACTIVE_MESSAGE = 'This supervisor\'s account is inactive. Activate it in User Management before assigning students to them.';
+    public const ISSUE_INACTIVE = CompanyManagementService::ISSUE_INACTIVE;
 
     /** internship_status values with the website's labels. */
     public const STATUSES = [
@@ -101,7 +89,9 @@ class InternshipAssignmentService
                 'user:id,name,email,status',
                 'company:id,company_name,status',
                 'supervisor:id,name,email,status',
+                'term',
             ])
+            ->inTerm(TermContext::id())
             ->when($search !== '', function (Builder $query) use ($search) {
                 $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search).'%';
 
@@ -133,44 +123,39 @@ class InternshipAssignmentService
 
     /**
      * Every company for the assignment form, by name: slots,
-     * students_count, status and the roster (by name, with status). Only
-     * roster accounts that still hold the Supervisor role are offered: a
-     * role change in User Management leaves the roster row behind, and
-     * rules() refuses them as a new pick.
+     * students_count (current-term students: slots are per term), status,
+     * its Company Supervisor (whom a student placed there gets) and
+     * `supervisor_issue` (null | no_supervisor | not_a_supervisor |
+     * inactive, see CompanyManagementService::supervisorIssue()).
      */
     public function companyOptions(): Collection
     {
-        return Company::query()
-            ->withCount('students')
-            ->with(['supervisors' => fn ($q) => $q
-                ->select('users.id', 'users.name', 'users.email', 'users.status')
-                ->where('users.role_id', User::ROLE_SUPERVISOR)
-                ->orderBy('users.name')
-                ->orderBy('users.id'),
-            ])
+        $companies = Company::query()
+            ->select(['id', 'company_name', 'slots', 'status', 'supervisor_id'])
+            ->withCount(['students' => fn (Builder $q) => $q->inCurrentTerm()])
+            ->with('supervisor:id,name,email,status,role_id')
             ->orderBy('company_name')
             ->orderBy('id')
-            ->get(['id', 'company_name', 'slots', 'status']);
+            ->get();
+
+        foreach ($companies as $company) {
+            $company->setAttribute('supervisor_issue', CompanyManagementService::supervisorIssue($company->supervisor, $company->supervisor_id));
+        }
+
+        return $companies;
     }
 
     /**
-     * Sets `supervisor_on_roster` on each student: whether their supervisor
-     * is on their company's roster (null without a supervisor);
-     * `needs_supervisor`: placed at a company with no supervisor, one off
-     * that roster, one whose account is no longer a Supervisor, or one whose
-     * account is inactive (the same rows as Student::needsSupervisor()); and
-     * `supervisor_issue`: which of those it is (null when not flagged).
+     * Sets `needs_supervisor` on each student: placed at a company with no
+     * supervisor, one whose account is no longer a Supervisor, or one whose
+     * account is inactive (the same rows as Student::needsSupervisor()),
+     * and `supervisor_issue`: which of those it is (null when not flagged).
      *
      * @param  iterable<int, Student>  $students
      */
-    public function loadRosterFlags(iterable $students): void
+    public function loadSupervisorFlags(iterable $students): void
     {
         $students = Collection::make($students);
-
-        $pairs = DB::table('company_supervisors')
-            ->whereIn('company_id', $students->pluck('company_id')->filter()->unique()->values())
-            ->get(['company_id', 'user_id'])
-            ->mapWithKeys(fn ($row) => [$row->company_id.':'.$row->user_id => true]);
 
         // Role and status read fresh (callers may have loaded `supervisor`
         // without them).
@@ -180,47 +165,24 @@ class InternshipAssignmentService
             ->keyBy('id');
 
         foreach ($students as $student) {
-            $onRoster = $student->supervisor_id === null
+            $issue = $student->company_id === null
                 ? null
-                : isset($pairs[$student->company_id.':'.$student->supervisor_id]);
+                : CompanyManagementService::supervisorIssue($supervisors->get($student->supervisor_id), $student->supervisor_id);
 
-            $issue = self::supervisorIssue($student, $onRoster, $supervisors->get($student->supervisor_id));
-
-            $student->setAttribute('supervisor_on_roster', $onRoster);
             $student->setAttribute('needs_supervisor', $issue !== null);
             $student->setAttribute('supervisor_issue', $issue);
         }
     }
 
     /**
-     * Why a placed student needs a supervisor (null = they don't, or have
-     * no company), first match wins: no_supervisor, not_on_roster,
-     * not_a_supervisor (the account lost the Supervisor role), inactive
-     * (the account is deactivated). Mirrors Student::needsSupervisor().
-     */
-    private static function supervisorIssue(Student $student, ?bool $onRoster, ?User $supervisor): ?string
-    {
-        return match (true) {
-            $student->company_id === null => null,
-            $student->supervisor_id === null => self::ISSUE_NO_SUPERVISOR,
-            $onRoster !== true => self::ISSUE_NOT_ON_ROSTER,
-            $supervisor === null || (int) $supervisor->role_id !== User::ROLE_SUPERVISOR => self::ISSUE_NOT_A_SUPERVISOR,
-            $supervisor->status !== 'active' => self::ISSUE_INACTIVE,
-            default => null,
-        };
-    }
-
-    /**
-     * A blank company / supervisor ("" or null; the website sends "")
-     * means "none". Anything else is validated as an id, so `true`, `0`
-     * or an array is a 422 rather than being read as an id or as "none".
+     * A blank company ("" or null; the website sends "") means "none".
+     * Anything else is validated as an id, so `true`, `0` or an array is a
+     * 422 rather than being read as an id or as "none".
      */
     public function prepare(Request $request): void
     {
-        foreach (['company_id', 'supervisor_id'] as $key) {
-            if ($request->input($key) === '') {
-                $request->merge([$key => null]);
-            }
+        if ($request->input('company_id') === '') {
+            $request->merge(['company_id' => null]);
         }
 
         // Blank required hours = not set; an omitted key keeps the current
@@ -231,53 +193,13 @@ class InternshipAssignmentService
     }
 
     /**
-     * The edit form's rules. With $rosterCheck the roster is also checked
-     * while validating (the website, so it shows next to the other field
-     * errors); update() re-checks it under the lock either way.
+     * The edit form's rules. There is no supervisor field: the student's
+     * supervisor follows the company.
      *
      * @return array<string, array<int, mixed>>
      */
-    public function rules(Student $student, Request $request, bool $rosterCheck = true): array
+    public function rules(Student $student): array
     {
-        // The company this student will end up with once this request is
-        // applied: supervisor_id is validated against *this*, not the
-        // student's current company, so changing both at once works.
-        $resultingCompanyId = $request->input('company_id');
-
-        // A new supervisor (or the current one taken along to a new company)
-        // must hold the Supervisor role. The unchanged current one may be
-        // kept even if a role change in User Management demoted them since,
-        // like an inactive or off-roster one; needs_supervisor flags it.
-        $existing = Rule::exists('users', 'id');
-
-        if (! $this->keepsCurrentSupervisor($student, $resultingCompanyId, $request->input('supervisor_id'))) {
-            $existing->where('role_id', User::ROLE_SUPERVISOR);
-        }
-
-        $supervisorRules = ['bail', 'nullable', self::idRule(), 'integer', 'min:1', $existing];
-
-        if ($rosterCheck) {
-            $supervisorRules[] = function (string $attribute, mixed $value, \Closure $fail) use ($resultingCompanyId, $student) {
-                if (! $value || ($resultingCompanyId !== null && ! is_scalar($resultingCompanyId))) {
-                    return;
-                }
-
-                if (! $this->assignmentChanges($student, $resultingCompanyId, $value)) {
-                    return;
-                }
-
-                if (! $resultingCompanyId) {
-                    $fail(self::NEEDS_COMPANY_MESSAGE);
-
-                    return;
-                }
-
-                if (! $this->onRoster($resultingCompanyId, $value)) {
-                    $fail(self::NOT_ON_ROSTER_MESSAGE);
-                }
-            };
-        }
-
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['bail', 'required', 'string', 'lowercase', 'email', 'max:255', Rule::unique('users', 'email')->ignore($student->user_id)],
@@ -285,9 +207,11 @@ class InternshipAssignmentService
             'course' => ['required', 'string', 'max:255'],
             'section' => ['required', 'string', 'max:255'],
             'company_id' => ['bail', 'nullable', self::idRule(), 'integer', 'min:1', 'exists:companies,id'],
-            'supervisor_id' => $supervisorRules,
             'internship_status' => ['required', 'in:'.implode(',', array_keys(self::STATUSES))],
             'internship_schedule' => ['nullable', 'string', 'max:255'],
+            // Moving to another term: only a Not Started student (checked
+            // in update()). Omitted keeps the current term.
+            'term_id' => ['bail', 'sometimes', 'required', self::idRule(), 'integer', 'min:1', 'exists:terms,id'],
             // The same rules as Attendance Monitoring's required hours.
             'required_hours' => ['sometimes', ...RequiredHours::rules()],
         ];
@@ -295,25 +219,25 @@ class InternshipAssignmentService
 
     /**
      * Applies a validated edit under locks (target company, then the
-     * student) and notifies on assignment changes.
+     * student) and notifies on assignment changes. The student gets the
+     * company's supervisor (none without a company).
      *
      * @param  array  $data  validated rules() data
      *
-     * @throws AssignmentRuleException a slot / roster / inactive rule refused it
-     * @throws ValidationException the company or supervisor vanished meanwhile
+     * @throws AssignmentRuleException a slot / inactive / required hours rule refused it
+     * @throws ValidationException the company vanished meanwhile
      * @throws ModelNotFoundException the student was deleted meanwhile
      */
     public function update(Student $student, array $data): Student
     {
         $companyId = $data['company_id'] ? (int) $data['company_id'] : null;
-        $supervisorId = $data['supervisor_id'] ? (int) $data['supervisor_id'] : null;
 
         try {
-            [$notify, $newSupervisor] = DB::transaction(function () use ($student, $data, $companyId, $supervisorId) {
+            [$notify, $newSupervisor] = DB::transaction(function () use ($student, $data, $companyId) {
                 // Lock the target company first, so this save is serialised
                 // with other assignments to it (slot count), with its status
-                // changes and with a company delete
-                // (CompanyManagementService::delete locks the same row first).
+                // and supervisor changes and with a company delete
+                // (CompanyManagementService locks the same row first).
                 $company = $companyId !== null ? Company::query()->lockForUpdate()->find($companyId) : null;
 
                 if ($companyId !== null && $company === null) {
@@ -325,12 +249,24 @@ class InternshipAssignmentService
                 $current = Student::query()->lockForUpdate()->find($student->id)
                     ?? throw (new ModelNotFoundException)->setModel(Student::class, [$student->id]);
 
+                // Past terms are read-only but for the Administrator.
+                TermGuard::ensureWritable($current);
+
+                $termId = array_key_exists('term_id', $data) ? (int) $data['term_id'] : (int) $current->term_id;
+
+                if ($termId !== (int) $current->term_id
+                    && ($current->internship_status !== 'not_started' || $data['internship_status'] !== 'not_started')) {
+                    throw ValidationException::withMessages(['term_id' => self::TERM_MOVE_MESSAGE]);
+                }
+
+                $supervisorId = $company?->supervisor_id === null ? null : (int) $company->supervisor_id;
+
                 // Omitted required hours keep the stored value.
                 $requiredHours = array_key_exists('required_hours', $data)
                     ? RequiredHours::normalize($data['required_hours'])
                     : RequiredHours::normalize($current->required_hours);
 
-                $this->checkRules($current, $company, $supervisorId, $data['internship_status'], $requiredHours);
+                $this->checkRules($current, $company, $data['internship_status'], $requiredHours, $termId);
 
                 // The "assignment" itself, as opposed to the student's own
                 // profile fields: only changes to these are worth notifying
@@ -358,6 +294,7 @@ class InternshipAssignmentService
                     'internship_status' => $data['internship_status'],
                     'internship_schedule' => $data['internship_schedule'] ?? null,
                     'required_hours' => $requiredHours,
+                    'term_id' => $termId,
                 ]);
 
                 return [$hasAssignmentChanges, $newSupervisor];
@@ -395,6 +332,8 @@ class InternshipAssignmentService
      */
     public function setStatus(Student $student, ?bool $active = null): Student
     {
+        TermGuard::ensureWritable($student);
+
         DB::transaction(function () use ($student, $active) {
             $user = User::query()->lockForUpdate()->find($student->user_id)
                 ?? throw (new ModelNotFoundException)->setModel(User::class, [$student->user_id]);
@@ -416,12 +355,12 @@ class InternshipAssignmentService
     }
 
     /**
-     * The required-hours-before-ongoing, slot, roster and inactive rules,
+     * The required-hours-before-ongoing, inactive company and slot rules,
      * against the locked student and company.
      *
      * @throws AssignmentRuleException
      */
-    private function checkRules(Student $current, ?Company $company, ?int $supervisorId, string $internshipStatus, ?int $requiredHours): void
+    private function checkRules(Student $current, ?Company $company, string $internshipStatus, ?int $requiredHours, int $termId): void
     {
         // Ongoing opens attendance and report submissions, which need an
         // hours target: checked against the hours this same save leaves
@@ -438,74 +377,34 @@ class InternshipAssignmentService
             }
         }
 
-        $companyChanged = (int) $company?->id !== (int) $current->company_id;
-        $supervisorChanged = $supervisorId !== ($current->supervisor_id === null ? null : (int) $current->supervisor_id);
+        if ($company === null) {
+            return;
+        }
 
-        if ($company !== null && ($companyChanged || ($supervisorChanged && $supervisorId !== null)) && $company->status === 'inactive') {
+        $sameCompany = (int) $company->id === (int) $current->company_id;
+
+        // Staying at the same company in the same term takes no new slot.
+        if ($sameCompany && $termId === (int) $current->term_id) {
+            return;
+        }
+
+        if (! $sameCompany && $company->status === 'inactive') {
             throw AssignmentRuleException::refuse(self::COMPANY_INACTIVE, 'company_id',
                 "{$company->company_name} is inactive. Activate it in Company Management before assigning students to it.");
         }
 
-        if ($company !== null && $companyChanged) {
-            $assignedCount = Student::query()->where('company_id', $company->id)->lockForUpdate()->count();
-
-            if ($assignedCount >= $company->slots) {
-                throw AssignmentRuleException::refuse(self::COMPANY_FULL, 'company_id',
-                    "{$company->company_name} has no available slots ({$assignedCount}/{$company->slots} filled).");
-            }
-        }
-
-        if ($supervisorId === null || (! $companyChanged && ! $supervisorChanged)) {
-            return;
-        }
-
-        if ($company === null) {
-            throw AssignmentRuleException::refuse(self::SUPERVISOR_NEEDS_COMPANY, 'supervisor_id', self::NEEDS_COMPANY_MESSAGE);
-        }
-
-        $supervisor = User::query()
-            ->whereKey($supervisorId)
-            ->where('role_id', User::ROLE_SUPERVISOR)
+        // Slots are per term: only the target term's students count.
+        $assignedCount = Student::query()
+            ->where('company_id', $company->id)
+            ->where('term_id', $termId)
+            ->whereKeyNot($current->id)
             ->lockForUpdate()
-            ->first();
+            ->count();
 
-        if ($supervisor === null) {
-            throw ValidationException::withMessages([
-                'supervisor_id' => __('validation.exists', ['attribute' => 'supervisor id']),
-            ]);
+        if ($assignedCount >= $company->slots) {
+            throw AssignmentRuleException::refuse(self::COMPANY_FULL, 'company_id',
+                "{$company->company_name} has no available slots ({$assignedCount}/{$company->slots} filled).");
         }
-
-        if (! $this->onRoster($company->id, $supervisor->id, true)) {
-            throw AssignmentRuleException::refuse(self::SUPERVISOR_NOT_ON_ROSTER, 'supervisor_id', self::NOT_ON_ROSTER_MESSAGE);
-        }
-
-        // A new supervisor, or the current one taken along to a new company,
-        // is a new assignment: an inactive supervisor can't take it.
-        if ($supervisor->status === 'inactive') {
-            throw AssignmentRuleException::refuse(self::SUPERVISOR_INACTIVE, 'supervisor_id', self::SUPERVISOR_INACTIVE_MESSAGE);
-        }
-    }
-
-    /**
-     * Whether the request changes the student's company or supervisor (the
-     * roster is only re-checked then).
-     */
-    private function assignmentChanges(Student $student, mixed $companyId, mixed $supervisorId): bool
-    {
-        return (string) $supervisorId !== (string) $student->supervisor_id
-            || (string) $companyId !== (string) $student->company_id;
-    }
-
-    /**
-     * Whether the request keeps the student's current (non-null) supervisor
-     * at their current company: checkRules() lets that through untouched.
-     */
-    private function keepsCurrentSupervisor(Student $student, mixed $companyId, mixed $supervisorId): bool
-    {
-        return $student->supervisor_id !== null
-            && (is_int($supervisorId) || is_string($supervisorId))
-            && ($companyId === null || is_int($companyId) || is_string($companyId))
-            && ! $this->assignmentChanges($student, $companyId, $supervisorId);
     }
 
     /**
@@ -519,14 +418,5 @@ class InternshipAssignmentService
                 $fail(__('validation.integer', ['attribute' => str_replace('_', ' ', $attribute)]));
             }
         };
-    }
-
-    private function onRoster(mixed $companyId, mixed $supervisorId, bool $lock = false): bool
-    {
-        return DB::table('company_supervisors')
-            ->where('company_id', $companyId)
-            ->where('user_id', $supervisorId)
-            ->when($lock, fn ($q) => $q->lockForUpdate())
-            ->exists();
     }
 }

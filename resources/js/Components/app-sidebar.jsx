@@ -22,6 +22,7 @@ import {
     ClipboardCheck,
     Star,
     SlidersHorizontal,
+    CalendarRange,
 } from "lucide-react";
 
 import { NavDocuments } from "@/Components/nav-documents";
@@ -45,9 +46,8 @@ export function AppSidebar({ ...props }) {
     const { auth, app, flash, pendingApprovalsCount } = usePage().props;
 
     const pendingApprovalsItem = {
-        title: pendingApprovalsCount
-            ? `Pending Approvals (${pendingApprovalsCount})`
-            : "Pending Approvals",
+        title: "Pending Approvals",
+        badge: pendingApprovalsCount,
         url: route("attendance-approvals.index"),
         icon: ClipboardCheck,
     };
@@ -76,10 +76,16 @@ export function AppSidebar({ ...props }) {
         icon: SlidersHorizontal,
     };
 
+    const termsItem = {
+        title: "Terms",
+        url: route("terms.index"),
+        icon: CalendarRange,
+    };
+
     const userData = {
         name: auth?.user?.name || "Guest",
         email: auth?.user?.email || "guest@example.com",
-        avatar: auth?.user?.avatar || "/images/logo/bcc-logo.jpg",
+        avatar: auth?.user?.avatar || undefined,
     };
 
     const roleId = auth?.user?.role_id;
@@ -125,6 +131,7 @@ export function AppSidebar({ ...props }) {
                   progressMonitoringItem,
                   supervisorEvaluationsItem,
                   evaluationCriteriaItem,
+                  termsItem,
               ]
             : roleId === 2
               ? [
@@ -156,6 +163,7 @@ export function AppSidebar({ ...props }) {
                     reportReviewsItem,
                     progressMonitoringItem,
                     supervisorEvaluationsItem,
+                    termsItem,
                 ]
               : roleId === 1
                 ? [

@@ -15,7 +15,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
- * Module 14: Company Management and the supervisor roster through
+ * Module 14: Company Management with the Company Supervisor through
  * /api/v1 (Coordinator, Administrator), sharing CompanyManagementService
  * with the website.
  */
@@ -62,7 +62,6 @@ class CompanyManagementApiTest extends TestCase
         return $overrides + [
             'company_name' => 'Acme Corp',
             'address' => 'Lacson St, Bacolod',
-            'contact_person' => 'Ana Cruz',
             'contact_number' => '0917-000-0000',
             'email' => 'hr@acme.test',
             'industry' => 'IT',
@@ -89,13 +88,11 @@ class CompanyManagementApiTest extends TestCase
             ['GET', '/api/v1/companies'],
             ['GET', "/api/v1/companies/{$company->id}"],
             ['POST', '/api/v1/companies', $this->form()],
-            ['PATCH', "/api/v1/companies/{$company->id}", $this->form()],
+            ['PATCH', "/api/v1/companies/{$company->id}", $this->form(['supervisor_id' => $supervisor->id])],
             ['POST', "/api/v1/companies/{$company->id}/activate"],
             ['POST', "/api/v1/companies/{$company->id}/deactivate"],
             ['DELETE', "/api/v1/companies/{$company->id}"],
-            ['GET', "/api/v1/companies/{$company->id}/supervisors/available"],
-            ['POST', "/api/v1/companies/{$company->id}/supervisors", ['user_id' => $supervisor->id]],
-            ['DELETE', "/api/v1/companies/{$company->id}/supervisors/{$supervisor->id}"],
+            ['GET', '/api/v1/companies/supervisor-options'],
         ];
 
         foreach ([User::ROLE_STUDENT, User::ROLE_SUPERVISOR] as $roleId) {
@@ -110,9 +107,8 @@ class CompanyManagementApiTest extends TestCase
             $this->api($call[0], $call[1], null, $call[2] ?? [])->assertUnauthorized();
         }
 
-        $this->assertDatabaseHas('companies', ['id' => $company->id, 'status' => 'active']);
+        $this->assertDatabaseHas('companies', ['id' => $company->id, 'status' => 'active', 'supervisor_id' => null]);
         $this->assertSame(1, Company::count());
-        $this->assertSame(0, DB::table('company_supervisors')->count());
 
         foreach ([User::ROLE_COORDINATOR, User::ROLE_ADMIN] as $roleId) {
             $this->api('GET', '/api/v1/companies', $this->user($roleId))->assertOk();
@@ -122,16 +118,12 @@ class CompanyManagementApiTest extends TestCase
     public function test_unknown_ids_are_404(): void
     {
         $admin = $this->user(User::ROLE_ADMIN);
-        $company = Company::factory()->create();
 
         foreach ([
             ['GET', '/api/v1/companies/999999'],
             ['PATCH', '/api/v1/companies/999999', $this->form()],
             ['POST', '/api/v1/companies/999999/activate'],
             ['DELETE', '/api/v1/companies/999999'],
-            ['GET', '/api/v1/companies/999999/supervisors/available'],
-            ['POST', '/api/v1/companies/999999/supervisors', ['user_id' => 1]],
-            ['DELETE', "/api/v1/companies/{$company->id}/supervisors/999999"],
             ['GET', '/api/v1/companies/abc'],
             ['GET', '/api/v1/companies/0'],
         ] as $call) {
@@ -141,17 +133,16 @@ class CompanyManagementApiTest extends TestCase
 
     // ---- list / detail --------------------------------------------------
 
-    public function test_list_shape_counts_and_roster(): void
+    public function test_list_shape_counts_and_supervisor(): void
     {
         $coordinator = $this->user(User::ROLE_COORDINATOR);
-        $company = Company::factory()->create(['company_name' => 'Acme', 'slots' => 3]);
         $alice = $this->user(User::ROLE_SUPERVISOR, ['name' => 'Alice']);
         $bob = $this->user(User::ROLE_SUPERVISOR, ['name' => 'Bob', 'status' => 'inactive']);
-        $company->supervisors()->attach([$bob->id, $alice->id]);
+        $company = Company::factory()->create(['company_name' => 'Acme', 'slots' => 3, 'supervisor_id' => $alice->id]);
         $this->assign($company, 2, $alice);
 
-        $other = Company::factory()->create(['company_name' => 'Zeta']);
-        $this->assign($other, 1, $alice);
+        $other = Company::factory()->create(['company_name' => 'Zeta', 'supervisor_id' => $bob->id]);
+        $this->assign($other, 1, $bob);
 
         $response = $this->api('GET', '/api/v1/companies', $coordinator)
             ->assertOk()
@@ -162,19 +153,22 @@ class CompanyManagementApiTest extends TestCase
 
         $row = $response->json('data.0');
         $this->assertSame([
-            'id', 'company_name', 'address', 'contact_person', 'contact_number', 'email', 'industry',
-            'slots', 'students_count', 'slots_available', 'status', 'supervisors', 'supervisors_count',
-            'created_at', 'updated_at', 'can_edit', 'can_toggle_status', 'can_manage_roster',
+            'id', 'company_name', 'address', 'contact_number', 'email', 'industry',
+            'slots', 'students_count', 'slots_available', 'status', 'supervisor_id', 'supervisor',
+            'supervisor_issue', 'created_at', 'updated_at', 'can_edit', 'can_toggle_status',
             'can_delete', 'delete_blocked_reason',
         ], array_keys($row));
         $this->assertSame(3, $row['slots']);
         $this->assertSame(2, $row['students_count']);
         $this->assertSame(1, $row['slots_available']);
-        $this->assertSame(2, $row['supervisors_count']);
-        $this->assertSame([
-            ['id' => $alice->id, 'name' => 'Alice', 'email' => $alice->email, 'status' => 'active', 'students_count' => 2],
-            ['id' => $bob->id, 'name' => 'Bob', 'email' => $bob->email, 'status' => 'inactive', 'students_count' => 0],
-        ], $row['supervisors']);
+        $this->assertSame($alice->id, $row['supervisor_id']);
+        $this->assertSame(
+            ['id' => $alice->id, 'name' => 'Alice', 'email' => $alice->email, 'status' => 'active', 'role_id' => User::ROLE_SUPERVISOR],
+            $row['supervisor'],
+        );
+        $this->assertNull($row['supervisor_issue']);
+        $response->assertJsonPath('data.1.supervisor.status', 'inactive')
+            ->assertJsonPath('data.1.supervisor_issue', 'inactive');
         $this->assertFalse($row['can_delete']);
         $this->assertSame('company_has_students', $row['delete_blocked_reason']);
 
@@ -218,8 +212,7 @@ class CompanyManagementApiTest extends TestCase
         $supervisor = $this->user(User::ROLE_SUPERVISOR);
 
         foreach (range(1, 5) as $i) {
-            $company = Company::factory()->create(['company_name' => "Company {$i}"]);
-            $company->supervisors()->attach($supervisor->id);
+            $company = Company::factory()->create(['company_name' => "Company {$i}", 'supervisor_id' => $supervisor->id]);
             $this->assign($company, 1, $supervisor);
         }
 
@@ -280,7 +273,8 @@ class CompanyManagementApiTest extends TestCase
             ->assertJsonPath('company.status', 'active')
             ->assertJsonPath('company.students_count', 0)
             ->assertJsonPath('company.can_delete', true)
-            ->assertJsonPath('company.supervisors', []);
+            ->assertJsonPath('company.supervisor', null)
+            ->assertJsonPath('company.supervisor_issue', 'no_supervisor');
 
         $this->assertNotSame(999, $response->json('company.id'));
         $this->assertDatabaseHas('companies', ['company_name' => 'Acme Corp', 'status' => 'active', 'slots' => 5]);
@@ -421,19 +415,17 @@ class CompanyManagementApiTest extends TestCase
 
     // ---- delete ---------------------------------------------------------
 
-    public function test_a_company_without_students_or_evaluations_is_deleted_with_its_roster(): void
+    public function test_a_company_without_students_or_evaluations_is_deleted_but_not_its_supervisor(): void
     {
         $admin = $this->user(User::ROLE_ADMIN);
-        $company = Company::factory()->create();
         $supervisor = $this->user(User::ROLE_SUPERVISOR);
-        $company->supervisors()->attach($supervisor->id);
+        $company = Company::factory()->create(['supervisor_id' => $supervisor->id]);
 
         $this->api('DELETE', "/api/v1/companies/{$company->id}", $admin)
             ->assertOk()
             ->assertExactJson(['message' => 'Company deleted successfully.']);
 
         $this->assertModelMissing($company);
-        $this->assertSame(0, DB::table('company_supervisors')->count());
         $this->assertModelExists($supervisor);
 
         $this->api('DELETE', "/api/v1/companies/{$company->id}", $admin)->assertNotFound();
@@ -481,55 +473,87 @@ class CompanyManagementApiTest extends TestCase
         $this->assertSame($company->id, (int) $evaluation->fresh()->company_id);
     }
 
-    // ---- roster ---------------------------------------------------------
+    // ---- company supervisor ---------------------------------------------
 
-    public function test_available_supervisors_are_role_3_accounts_not_on_the_roster(): void
+    public function test_supervisor_options_are_active_supervisor_accounts_by_name(): void
     {
         $coordinator = $this->user(User::ROLE_COORDINATOR);
-        $company = Company::factory()->create();
-        $onRoster = $this->user(User::ROLE_SUPERVISOR, ['name' => 'Carl']);
-        $inactive = $this->user(User::ROLE_SUPERVISOR, ['name' => 'Bea', 'status' => 'inactive']);
-        $free = $this->user(User::ROLE_SUPERVISOR, ['name' => 'Abe']);
+        $carl = $this->user(User::ROLE_SUPERVISOR, ['name' => 'Carl']);
+        $this->user(User::ROLE_SUPERVISOR, ['name' => 'Bea', 'status' => 'inactive']);
+        $abe = $this->user(User::ROLE_SUPERVISOR, ['name' => 'Abe']);
         $this->user(User::ROLE_COORDINATOR, ['name' => 'Aaron']);
         $this->user(User::ROLE_STUDENT, ['name' => 'Aaliyah']);
-        $company->supervisors()->attach($onRoster->id);
-        Company::factory()->create()->supervisors()->attach($free->id);
+        // Already covering a company: still offered (one may cover several).
+        Company::factory()->create(['supervisor_id' => $carl->id]);
 
-        $this->api('GET', "/api/v1/companies/{$company->id}/supervisors/available", $coordinator)
+        $this->api('GET', '/api/v1/companies/supervisor-options', $coordinator)
             ->assertOk()
             ->assertExactJson(['data' => [
-                ['id' => $free->id, 'name' => 'Abe', 'email' => $free->email, 'status' => 'active'],
-                ['id' => $inactive->id, 'name' => 'Bea', 'email' => $inactive->email, 'status' => 'inactive'],
+                ['id' => $abe->id, 'name' => 'Abe', 'email' => $abe->email],
+                ['id' => $carl->id, 'name' => 'Carl', 'email' => $carl->email],
             ]]);
     }
 
-    public function test_attach_is_retry_safe(): void
+    public function test_create_with_a_supervisor_and_a_numeric_string_id(): void
+    {
+        $supervisor = $this->user(User::ROLE_SUPERVISOR, ['name' => 'Maria']);
+
+        $this->api('POST', '/api/v1/companies', $this->user(User::ROLE_ADMIN), $this->form(['supervisor_id' => (string) $supervisor->id]))
+            ->assertCreated()
+            ->assertJsonPath('company.supervisor_id', $supervisor->id)
+            ->assertJsonPath('company.supervisor.name', 'Maria')
+            ->assertJsonPath('company.supervisor_issue', null);
+    }
+
+    public function test_changing_the_supervisor_moves_the_students_and_is_retry_safe(): void
     {
         $coordinator = $this->user(User::ROLE_COORDINATOR);
-        $company = Company::factory()->create();
-        $supervisor = $this->user(User::ROLE_SUPERVISOR);
+        $old = $this->user(User::ROLE_SUPERVISOR);
+        $new = $this->user(User::ROLE_SUPERVISOR, ['name' => 'Nina']);
+        $company = Company::factory()->create(['slots' => 5, 'supervisor_id' => $old->id]);
+        $this->assign($company, 2, $old);
 
-        foreach ([1, 2] as $attempt) {
-            $this->api('POST', "/api/v1/companies/{$company->id}/supervisors", $coordinator, ['user_id' => $supervisor->id])
-                ->assertOk()
-                ->assertJsonPath('message', 'Supervisor added to company roster.')
-                ->assertJsonPath('company.supervisors_count', 1)
-                ->assertJsonPath('company.supervisors.0.id', $supervisor->id);
-        }
+        $this->api('PATCH', "/api/v1/companies/{$company->id}", $coordinator, $this->form(['supervisor_id' => $new->id]))
+            ->assertOk()
+            ->assertJsonPath('message', 'Company updated successfully. 2 student(s) moved to Nina.')
+            ->assertJsonPath('students_reassigned', 2)
+            ->assertJsonPath('company.supervisor.id', $new->id);
 
-        $this->assertSame(1, DB::table('company_supervisors')->count());
+        $this->api('PATCH', "/api/v1/companies/{$company->id}", $coordinator, $this->form(['supervisor_id' => $new->id]))
+            ->assertOk()
+            ->assertJsonPath('message', 'Company updated successfully.')
+            ->assertJsonPath('students_reassigned', 0);
+
+        $this->assertSame(2, Student::where('company_id', $company->id)->where('supervisor_id', $new->id)->count());
     }
 
-    public function test_attach_accepts_a_numeric_string_id(): void
+    public function test_clearing_the_supervisor_leaves_the_students_without_one(): void
     {
-        $company = Company::factory()->create();
+        $admin = $this->user(User::ROLE_ADMIN);
         $supervisor = $this->user(User::ROLE_SUPERVISOR);
+        $company = Company::factory()->create(['slots' => 5, 'supervisor_id' => $supervisor->id]);
+        $this->assign($company, 2, $supervisor);
 
-        $this->api('POST', "/api/v1/companies/{$company->id}/supervisors", $this->user(User::ROLE_ADMIN), ['user_id' => (string) $supervisor->id])
-            ->assertOk();
+        $this->api('PATCH', "/api/v1/companies/{$company->id}", $admin, $this->form(['supervisor_id' => null]))
+            ->assertOk()
+            ->assertJsonPath('message', 'Company updated successfully. 2 student(s) no longer have a supervisor.')
+            ->assertJsonPath('company.supervisor', null)
+            ->assertJsonPath('company.supervisor_issue', 'no_supervisor');
+
+        $this->assertSame(2, Student::where('company_id', $company->id)->whereNull('supervisor_id')->count());
     }
 
-    public function test_attach_refuses_anyone_who_is_not_a_supervisor(): void
+    public function test_an_omitted_supervisor_keeps_the_current_one(): void
+    {
+        $supervisor = $this->user(User::ROLE_SUPERVISOR);
+        $company = Company::factory()->create(['supervisor_id' => $supervisor->id]);
+
+        $this->api('PATCH', "/api/v1/companies/{$company->id}", $this->user(User::ROLE_ADMIN), $this->form(['company_name' => 'Renamed']))
+            ->assertOk()
+            ->assertJsonPath('company.supervisor.id', $supervisor->id);
+    }
+
+    public function test_anyone_who_is_not_an_active_supervisor_is_refused(): void
     {
         $admin = $this->user(User::ROLE_ADMIN);
         $company = Company::factory()->create();
@@ -539,9 +563,8 @@ class CompanyManagementApiTest extends TestCase
             $this->user(User::ROLE_COORDINATOR)->id,
             $admin->id,
             User::factory()->create(['role_id' => null])->id,
+            $this->user(User::ROLE_SUPERVISOR, ['status' => 'inactive'])->id,
             999999,
-            null,
-            '',
             'abc',
             0,
             -1,
@@ -550,65 +573,26 @@ class CompanyManagementApiTest extends TestCase
         ];
 
         foreach ($ids as $id) {
-            $this->api('POST', "/api/v1/companies/{$company->id}/supervisors", $admin, ['user_id' => $id])
+            $this->api('PATCH', "/api/v1/companies/{$company->id}", $admin, $this->form(['supervisor_id' => $id]))
                 ->assertStatus(422)
-                ->assertJsonValidationErrors('user_id');
+                ->assertJsonValidationErrors('supervisor_id');
         }
 
-        $this->assertSame(0, DB::table('company_supervisors')->count());
+        $this->assertNull($company->fresh()->supervisor_id);
     }
 
-    public function test_attach_rechecks_the_role_under_the_lock(): void
+    public function test_the_supervisor_is_rechecked_under_the_lock(): void
     {
-        $company = Company::factory()->create();
         $user = $this->user(User::ROLE_COORDINATOR);
 
         try {
-            app(CompanyManagementService::class)->attachSupervisor($company, $user->id);
+            app(CompanyManagementService::class)->create($this->form(['supervisor_id' => $user->id]));
             $this->fail('Expected a validation error.');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            $this->assertArrayHasKey('user_id', $e->errors());
+            $this->assertArrayHasKey('supervisor_id', $e->errors());
         }
 
-        $this->assertSame(0, DB::table('company_supervisors')->count());
-    }
-
-    public function test_detach_is_idempotent_and_keeps_supervised_students(): void
-    {
-        $admin = $this->user(User::ROLE_ADMIN);
-        $company = Company::factory()->create();
-        $supervisor = $this->user(User::ROLE_SUPERVISOR);
-        $company->supervisors()->attach($supervisor->id);
-        $this->assign($company, 2, $supervisor);
-
-        $this->api('GET', "/api/v1/companies/{$company->id}", $admin)
-            ->assertJsonPath('data.supervisors.0.students_count', 2);
-
-        foreach ([1, 2] as $attempt) {
-            $this->api('DELETE', "/api/v1/companies/{$company->id}/supervisors/{$supervisor->id}", $admin)
-                ->assertOk()
-                ->assertJsonPath('message', 'Supervisor removed from company roster.')
-                ->assertJsonPath('company.supervisors', [])
-                ->assertJsonPath('company.students_count', 2);
-        }
-
-        $this->assertSame(0, DB::table('company_supervisors')->count());
-        $this->assertSame(2, Student::where('company_id', $company->id)->where('supervisor_id', $supervisor->id)->count());
-    }
-
-    public function test_detach_only_touches_the_given_company(): void
-    {
-        $admin = $this->user(User::ROLE_ADMIN);
-        $a = Company::factory()->create();
-        $b = Company::factory()->create();
-        $supervisor = $this->user(User::ROLE_SUPERVISOR);
-        $a->supervisors()->attach($supervisor->id);
-        $b->supervisors()->attach($supervisor->id);
-
-        $this->api('DELETE', "/api/v1/companies/{$a->id}/supervisors/{$supervisor->id}", $admin)->assertOk();
-
-        $this->assertDatabaseMissing('company_supervisors', ['company_id' => $a->id, 'user_id' => $supervisor->id]);
-        $this->assertDatabaseHas('company_supervisors', ['company_id' => $b->id, 'user_id' => $supervisor->id]);
+        $this->assertSame(0, Company::count());
     }
 
     // ---- web / API parity -----------------------------------------------
@@ -659,17 +643,17 @@ class CompanyManagementApiTest extends TestCase
         }
     }
 
-    public function test_web_roster_attach_refuses_non_supervisors_like_the_api(): void
+    public function test_web_supervisor_pick_refuses_non_supervisors_like_the_api(): void
     {
         $coordinator = $this->user(User::ROLE_COORDINATOR);
         $company = Company::factory()->create();
 
         foreach ([$this->user(User::ROLE_STUDENT)->id, 'abc', 999999] as $id) {
-            $this->web('POST', "/company-management/{$company->id}/supervisors", $coordinator, ['user_id' => $id])
-                ->assertSessionHasErrors('user_id');
+            $this->web('PATCH', "/company-management/{$company->id}", $coordinator, $this->form(['supervisor_id' => $id]))
+                ->assertSessionHasErrors('supervisor_id');
         }
 
-        $this->assertSame(0, DB::table('company_supervisors')->count());
+        $this->assertNull($company->fresh()->supervisor_id);
     }
 
     public function test_web_delete_and_toggle_still_work(): void

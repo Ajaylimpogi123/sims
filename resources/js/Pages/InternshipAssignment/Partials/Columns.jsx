@@ -33,7 +33,12 @@ const handleToggleStatus =(student, needsSupervisorOnly) => {
 
 // needsSupervisorOnly is sent with saves so the redirect keeps the
 // "Needs supervisor" filter (?needs_supervisor=1) on.
-export function getColumns(companies, { needsSupervisorOnly = false } = {}) {
+// canWrite = false (archived term, non-Admin) hides the row actions; the
+// server refuses those writes anyway.
+export function getColumns(
+    companies,
+    { needsSupervisorOnly = false, canWrite = true } = {},
+) {
     return [
         {
             accessorKey: "name",
@@ -122,6 +127,8 @@ export function getColumns(companies, { needsSupervisorOnly = false } = {}) {
             id: "actions",
             cell: ({ row }) => {
                 const student = row.original;
+
+                if (!canWrite) return null;
 
                 return (
                     <RowActionsMenu

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Concerns;
 
 use App\Models\Student;
 use App\Support\RequiredHours;
+use App\Support\TermGuard;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -90,6 +91,9 @@ trait ValidatesAttendanceMonitoring
 
         DB::transaction(function () use ($student, $requiredHours) {
             $current = Student::query()->lockForUpdate()->findOrFail($student->id);
+
+            // Past terms are read-only but for the Administrator.
+            TermGuard::ensureWritable($current);
 
             if ($requiredHours === null && $current->internship_status === Student::SUBMITTING_STATUS) {
                 throw ValidationException::withMessages([

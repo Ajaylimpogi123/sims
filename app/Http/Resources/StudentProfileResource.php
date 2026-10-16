@@ -25,6 +25,8 @@ class StudentProfileResource extends JsonResource
             // Attendance and reports can be submitted only while ongoing.
             'can_submit' => $this->resource->canSubmitWork(),
             'required_hours' => $this->required_hours === null ? null : (int) $this->required_hours,
+            // The term this enrollment belongs to.
+            'term' => $this->term?->summary(),
             'company' => $this->company ? [
                 'id' => $this->company->id,
                 'name' => $this->company->company_name,

@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\InternshipReport;
 use App\Models\Notification;
 use App\Models\Student;
+use App\Models\Term;
 use App\Models\User;
 use App\Support\AppScreen;
 use Illuminate\Support\Collection;
@@ -314,6 +315,21 @@ class NotificationService
     }
 
     /**
+     * A new current term: every active Coordinator, Administrator and
+     * Supervisor is told (their lists now default to it).
+     */
+    public function termChanged(Term $term): void
+    {
+        $this->notifyMany(
+            $this->activeUsers(self::COORDINATOR_ROLE_ID, self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID),
+            'term_changed',
+            'New internship term',
+            "{$term->label} is now the current term.",
+            ['term_id' => $term->id],
+        );
+    }
+
+    /**
      * Mark one notification read. Idempotent: an already-read notification
      * keeps its original read_at. Ownership is the caller's job.
      */
@@ -377,7 +393,7 @@ class NotificationService
      * Admin/Coordinator: their own notification inbox.
      * Supervisor: their own inbox, unioned with notifications belonging to
      * their supervised students' user accounts — scoped via
-     * supervisedStudents(), never the company_supervisors roster pivot, so
+     * supervisedStudents(), never the company's supervisor_id, so
      * a supervisor never sees another supervisor's students' events.
      *
      * @return Collection<int, Notification>
@@ -489,6 +505,7 @@ class NotificationService
             'report_submitted', 'report_reviewed' => 'report_id',
             'assignment_updated' => 'student_id',
             'student_registered' => 'user_id',
+            'term_changed' => 'term_id',
             default => null,
         };
 
@@ -529,6 +546,10 @@ class NotificationService
             },
             'student_registered' => match ($roleId) {
                 self::COORDINATOR_ROLE_ID, self::ADMIN_ROLE_ID => ['students', false],
+                default => null,
+            },
+            'term_changed' => match ($roleId) {
+                self::COORDINATOR_ROLE_ID, self::SUPERVISOR_ROLE_ID, self::ADMIN_ROLE_ID => ['home', false],
                 default => null,
             },
             default => null,

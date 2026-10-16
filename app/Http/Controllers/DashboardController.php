@@ -9,6 +9,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Services\DashboardAnalyticsService;
 use App\Services\NotificationService;
+use App\Support\TermContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -57,6 +58,8 @@ class DashboardController extends Controller
                 'can_submit' => $student->canSubmitWork(),
                 'company_name' => $summary['company']?->company_name,
                 'supervisor_name' => $summary['supervisor']?->name,
+                // {id, label, is_current}: the term this enrollment is in.
+                'term' => $student->term?->summary(),
             ],
             'hours' => $summary['hours'],
             'todayAttendance' => $summary['todayAttendance'],
@@ -72,14 +75,15 @@ class DashboardController extends Controller
             // Legacy shape kept for backward compatibility with anything
             // still reading `counts` directly.
             'counts' => [
-                'students' => Student::count(),
+                'students' => Student::query()->inTerm(TermContext::id($request))->count(),
                 'companies' => Company::where('status', 'active')->count(),
                 'pendingApprovals' => Attendance::query()
+                    ->inTerm(TermContext::id($request))
                     ->where(fn ($query) => $query
                         ->where('time_in_status', 'pending')
                         ->orWhere('time_out_status', 'pending'))
                     ->count(),
-                'pendingReportReviews' => InternshipReport::where('status', 'pending')->count(),
+                'pendingReportReviews' => InternshipReport::query()->inTerm(TermContext::id($request))->where('status', 'pending')->count(),
             ],
             'kpis' => $this->analytics->adminKpis(),
             'actionItems' => $this->analytics->actionItems($user),
@@ -94,14 +98,15 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard/Index', [
             'roleId' => 2,
             'counts' => [
-                'students' => Student::count(),
+                'students' => Student::query()->inTerm(TermContext::id($request))->count(),
                 'companies' => Company::where('status', 'active')->count(),
                 'pendingApprovals' => Attendance::query()
+                    ->inTerm(TermContext::id($request))
                     ->where(fn ($query) => $query
                         ->where('time_in_status', 'pending')
                         ->orWhere('time_out_status', 'pending'))
                     ->count(),
-                'pendingReportReviews' => InternshipReport::where('status', 'pending')->count(),
+                'pendingReportReviews' => InternshipReport::query()->inTerm(TermContext::id($request))->where('status', 'pending')->count(),
             ],
             'kpis' => $this->analytics->coordinatorKpis(),
             'actionItems' => $this->analytics->actionItems($user),
@@ -116,6 +121,7 @@ class DashboardController extends Controller
         $supervisedStudents = $this->analytics->supervisedStudentsProgress($user);
 
         $pendingReportReviews = InternshipReport::query()
+            ->inTerm(TermContext::id($request))
             ->whereHas('student', fn ($query) => $query->where('supervisor_id', $user->id))
             ->where('status', 'pending')
             ->count();

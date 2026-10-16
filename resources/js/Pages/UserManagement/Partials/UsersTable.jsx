@@ -145,7 +145,7 @@ export default function UsersTable({ users, roles, filters }) {
                         <select
                             id="filter_role"
                             value={filterData.role_id}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            className="mt-1 block w-full rounded-lg border-input text-sm shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 focus:border-primary focus:ring-[3px] focus:ring-primary/20"
                             onChange={(e) => {
                                 const role_id = e.target.value;
                                 setFilterData("role_id", role_id);
@@ -169,7 +169,7 @@ export default function UsersTable({ users, roles, filters }) {
                         <select
                             id="filter_status"
                             value={filterData.status}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            className="mt-1 block w-full rounded-lg border-input text-sm shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 focus:border-primary focus:ring-[3px] focus:ring-primary/20"
                             onChange={(e) => {
                                 const status = e.target.value;
                                 setFilterData("status", status);

@@ -41,7 +41,6 @@ class ShiftUtcToManila extends Command
         'roles' => ['created_at', 'updated_at'],
         'users' => ['email_verified_at', 'created_at', 'updated_at'],
         'companies' => ['created_at', 'updated_at'],
-        'company_supervisors' => ['created_at', 'updated_at'],
         'students' => ['created_at', 'updated_at'],
         'attendances' => ['created_at', 'updated_at'],
         'internship_reports' => ['reviewed_at', 'created_at', 'updated_at'],

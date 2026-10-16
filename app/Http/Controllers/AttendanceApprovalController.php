@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\AttendanceRuleException;
 use App\Models\Attendance;
 use App\Services\AttendanceService;
+use App\Support\TermContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,6 +22,7 @@ class AttendanceApprovalController extends Controller
             ->with('student.user:id,name')
             ->awaitingReview()
             ->visibleTo(Auth::user())
+            ->inTerm(TermContext::id())
             ->orderBy('date')
             ->get();
 

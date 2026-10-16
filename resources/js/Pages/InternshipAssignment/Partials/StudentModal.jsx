@@ -21,6 +21,7 @@ import InputError from "@/Components/InputError";
 import useManageStudent from "../Hooks/useManageStudent";
 import { useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
+import useTerm from "@/hooks/useTerm";
 
 const UNASSIGNED = "unassigned";
 
@@ -112,18 +113,39 @@ export default function StudentModal({
     // The student's supervisor is always the company's supervisor (set in
     // Company Management); the server assigns it on save. Shown read-only.
     const companySupervisor = selectedCompany?.supervisor ?? null;
-    const keepsCurrentCompany =
-        selectedCompany != null && isCurrentCompany(selectedCompany);
-    // supervisor_issue (server) only describes the student's saved company;
-    // for another company only the account status is known here.
-    const supervisorIssue = !companySupervisor
-        ? "no_supervisor"
-        : keepsCurrentCompany &&
-            student?.supervisor_issue === "not_a_supervisor"
-          ? "not_a_supervisor"
-          : companySupervisor.status !== "active"
-            ? "inactive"
-            : null;
+    // companies[].supervisor_issue (server): no_supervisor | not_a_supervisor
+    // | inactive | null. Older payloads without it fall back to what the
+    // account status shows.
+    const supervisorIssue =
+        selectedCompany && "supervisor_issue" in selectedCompany
+            ? selectedCompany.supervisor_issue ?? null
+            : !companySupervisor
+              ? "no_supervisor"
+              : companySupervisor.status !== "active"
+                ? "inactive"
+                : null;
+
+    // Only a Not Started student (as saved) can move to another term; the
+    // server enforces the same rule (error on term_id).
+    const { terms } = useTerm();
+    const canChangeTerm = student?.internship_status === "not_started";
+    const termOptions = useMemo(() => {
+        if (
+            student?.term_id == null ||
+            terms.some((t) => String(t.id) === String(student.term_id))
+        ) {
+            return terms;
+        }
+        // Keep the student's own term selectable even if it isn't listed.
+        return [
+            {
+                id: student.term_id,
+                label: student.term_label ?? "Current term",
+                is_current: false,
+            },
+            ...terms,
+        ];
+    }, [terms, student?.term_id, student?.term_label]);
 
     const handleCompanyChange = (value) =>
         setData("company_id", value === UNASSIGNED ? "" : value);
@@ -145,6 +167,15 @@ export default function StudentModal({
                         </DialogHeader>
 
                         <div className="grid gap-4 max-h-[65vh] overflow-y-auto pr-1 py-2">
+                            {errors.term && (
+                                <p
+                                    role="alert"
+                                    className="flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                                >
+                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                    {errors.term}
+                                </p>
+                            )}
                             <div className="space-y-3">
                                 <h4 className="text-sm font-semibold text-muted-foreground">
                                     Profile
@@ -221,6 +252,40 @@ export default function StudentModal({
                                 <h4 className="text-sm font-semibold text-muted-foreground">
                                     Internship Assignment
                                 </h4>
+
+                                <div className="grid gap-3">
+                                    <Label>Term</Label>
+                                    <Select
+                                        value={data.term_id || undefined}
+                                        onValueChange={(value) =>
+                                            setData("term_id", value)
+                                        }
+                                        disabled={!canChangeTerm}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a term" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {termOptions.map((term) => (
+                                                <SelectItem
+                                                    key={term.id}
+                                                    value={String(term.id)}
+                                                >
+                                                    {term.label}
+                                                    {term.is_current &&
+                                                        " (current)"}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {!canChangeTerm && (
+                                        <p className="text-xs text-muted-foreground">
+                                            Only students who haven't started
+                                            can move to another term.
+                                        </p>
+                                    )}
+                                    <InputError message={errors.term_id} />
+                                </div>
 
                                 <div className="grid gap-3">
                                     <Label>Company</Label>

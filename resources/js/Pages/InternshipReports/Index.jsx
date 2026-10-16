@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import AttachmentLink from "@/Components/AttachmentLink";
 import { Head, useForm, usePage } from "@inertiajs/react";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
@@ -216,7 +217,7 @@ export default function Index({ reports, submission }) {
                                                 e.target.value,
                                             )
                                         }
-                                        className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-[border-color,box-shadow] duration-150 placeholder:text-muted-foreground hover:border-foreground/25 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60"
                                     />
                                     <InputError message={errors.content} />
                                 </div>
@@ -293,18 +294,15 @@ export default function Index({ reports, submission }) {
                                                 </TableCell>
                                                 <TableCell>
                                                     {report.attachment_path ? (
-                                                        <a
+                                                        <AttachmentLink
                                                             href={route(
                                                                 "reports.attachment",
                                                                 report.id,
                                                             )}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="text-blue-600 underline"
-                                                        >
-                                                            {report.attachment_original_name ||
-                                                                "Download"}
-                                                        </a>
+                                                            name={
+                                                                report.attachment_original_name
+                                                            }
+                                                        />
                                                     ) : (
                                                         "-"
                                                     )}

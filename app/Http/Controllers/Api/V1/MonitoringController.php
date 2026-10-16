@@ -11,6 +11,7 @@ use App\Http\Resources\MonitoringAttendanceResource;
 use App\Models\Attendance;
 use App\Models\Student;
 use App\Services\AttendanceService;
+use App\Support\TermContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -141,6 +142,7 @@ class MonitoringController extends Controller
         $page = Student::query()
             ->with(self::STUDENT_RELATIONS)
             ->monitoredBy($request->user())
+            ->inTerm(TermContext::id($request))
             ->orderByDesc('id')
             ->when($search !== null, fn (Builder $query) => $query->whereHas(
                 'user',

@@ -15,6 +15,7 @@ class Student extends Model
 
     protected $fillable = [
         'user_id',
+        'term_id',
         'student_number',
         'course',
         'section',
@@ -32,12 +33,39 @@ class Student extends Model
      */
     public const SUBMITTING_STATUS = 'ongoing';
 
+    /** Refusal for a student whose term is no longer the current one. */
+    public const TERM_ENDED_MESSAGE = 'Your internship term has ended.';
+
     /**
-     * Whether the student may submit attendance and reports right now.
+     * Whether the student may submit attendance and reports right now:
+     * an Ongoing internship in the current term.
      */
     public function canSubmitWork(): bool
     {
-        return $this->internship_status === self::SUBMITTING_STATUS;
+        return $this->submissionRefusal('') === null;
+    }
+
+    /**
+     * Why the student can't submit right now (null when they can): their
+     * term has ended, or the internship isn't Ongoing ($notOngoingMessage).
+     */
+    public function submissionRefusal(string $notOngoingMessage): ?string
+    {
+        return match (true) {
+            ! $this->inCurrentTerm() => self::TERM_ENDED_MESSAGE,
+            $this->internship_status !== self::SUBMITTING_STATUS => $notOngoingMessage,
+            default => null,
+        };
+    }
+
+    /**
+     * Whether this enrollment belongs to the current term.
+     */
+    public function inCurrentTerm(): bool
+    {
+        $currentId = Term::currentId();
+
+        return $currentId !== null && (int) $this->term_id === $currentId;
     }
 
     /**
@@ -49,18 +77,23 @@ class Student extends Model
      */
     public function submissionState(string $refusalMessage): array
     {
-        $canSubmit = $this->canSubmitWork();
+        $reason = $this->submissionRefusal($refusalMessage);
 
         return [
-            'can_submit' => $canSubmit,
+            'can_submit' => $reason === null,
             'internship_status' => $this->internship_status,
-            'reason' => $canSubmit ? null : $refusalMessage,
+            'reason' => $reason,
         ];
     }
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function term()
+    {
+        return $this->belongsTo(Term::class);
     }
 
     public function company()
@@ -104,12 +137,29 @@ class Student extends Model
     }
 
     /**
+     * Enrollments in the given term; a null term (none exists yet) leaves
+     * the query unscoped.
+     */
+    public function scopeInTerm(Builder $query, ?int $termId): Builder
+    {
+        return $termId === null ? $query : $query->where($this->qualifyColumn('term_id'), $termId);
+    }
+
+    /**
+     * Enrollments in the current term (company slots count only these).
+     */
+    public function scopeInCurrentTerm(Builder $query): Builder
+    {
+        return $query->inTerm(Term::currentId());
+    }
+
+    /**
      * Students placed at a company who have no working supervisor: none
-     * assigned, one whose account no longer holds the Supervisor role (a
-     * role change in User Management leaves supervisor_id and the roster
-     * row behind), one whose account is inactive, or one who is no longer
-     * on that company's roster (company_supervisors). The same rows as the
-     * `needs_supervisor` flag InternshipAssignmentService::loadRosterFlags()
+     * assigned (the company has no Company Supervisor), one whose account
+     * no longer holds the Supervisor role (a role change in User Management
+     * leaves supervisor_id behind), or one whose account is inactive. The
+     * same rows as the
+     * `needs_supervisor` flag InternshipAssignmentService::loadSupervisorFlags()
      * sets; the dashboard's "need a supervisor" action item counts these.
      */
     public function scopeNeedsSupervisor(Builder $query): Builder
@@ -120,19 +170,15 @@ class Student extends Model
                 ->whereNull($this->qualifyColumn('supervisor_id'))
                 ->orWhereDoesntHave('supervisor', fn (Builder $user) => $user
                     ->where('role_id', User::ROLE_SUPERVISOR)
-                    ->where('status', 'active'))
-                ->orWhereNotExists(fn ($roster) => $roster
-                    ->selectRaw('1')
-                    ->from('company_supervisors')
-                    ->whereColumn('company_supervisors.company_id', $this->qualifyColumn('company_id'))
-                    ->whereColumn('company_supervisors.user_id', $this->qualifyColumn('supervisor_id'))));
+                    ->where('status', 'active')));
     }
 
     /**
      * The Attendance / Progress Monitoring list for the given user (website
      * and mobile API): the students they may see, newest profile first,
      * each with `total_rendered_hours` (sum of credited hours, null when
-     * none).
+     * none). The lists add ->inTerm() for the viewed term; single-student
+     * reads don't (a past term's student stays readable).
      */
     public function scopeMonitoredBy(Builder $query, User $user): Builder
     {

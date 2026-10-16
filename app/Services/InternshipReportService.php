@@ -6,6 +6,7 @@ use App\Exceptions\ReportRuleException;
 use App\Models\InternshipReport;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\TermGuard;
 use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -245,6 +246,11 @@ class InternshipReportService
      */
     public function delete(InternshipReport $report): void
     {
+        // A past term's reports are read-only.
+        if (! $report->student->inCurrentTerm()) {
+            throw ReportRuleException::notOngoing(Student::TERM_ENDED_MESSAGE);
+        }
+
         $path = DB::transaction(function () use ($report) {
             $current = $this->lockPending($report);
             $current->delete();
@@ -265,6 +271,9 @@ class InternshipReportService
      */
     public function review(InternshipReport $report, User $reviewer, ?string $comment): InternshipReport
     {
+        // Past terms are read-only but for the Administrator.
+        TermGuard::ensureWritable($report->student, $reviewer);
+
         DB::transaction(function () use ($report, $reviewer, $comment) {
             $current = InternshipReport::query()->lockForUpdate()->find($report->id)
                 ?? throw (new ModelNotFoundException)->setModel(InternshipReport::class, [$report->id]);
@@ -315,8 +324,10 @@ class InternshipReportService
      */
     private static function guardSubmitting(Student $student): void
     {
-        if (! $student->canSubmitWork()) {
-            throw ReportRuleException::notOngoing();
+        $refusal = $student->submissionRefusal(self::NOT_ONGOING_MESSAGE);
+
+        if ($refusal !== null) {
+            throw ReportRuleException::notOngoing($refusal);
         }
     }
 

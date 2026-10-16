@@ -8,6 +8,7 @@ use App\Models\EvaluationCriteria;
 use App\Models\EvaluationResponse;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\TermGuard;
 use App\Policies\EvaluationPolicy;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -128,6 +129,9 @@ class EvaluationService
      */
     public function createDraft(Student $student, array $data): Evaluation
     {
+        // Past terms are read-only but for the Administrator.
+        TermGuard::ensureWritable($student);
+
         return DB::transaction(function () use ($student, $data) {
             $evaluation = Evaluation::create([
                 'student_id' => $student->id,
@@ -251,6 +255,12 @@ class EvaluationService
      */
     private function underLock(Evaluation $evaluation, callable $change): Evaluation
     {
+        // Every evaluation write (save, submit, lock, reopen) comes through
+        // here: past terms are read-only but for the Administrator.
+        if ($evaluation->student !== null) {
+            TermGuard::ensureWritable($evaluation->student);
+        }
+
         DB::transaction(function () use ($evaluation, $change) {
             $current = Evaluation::query()->lockForUpdate()->find($evaluation->id)
                 ?? throw (new ModelNotFoundException)->setModel(Evaluation::class, [$evaluation->id]);

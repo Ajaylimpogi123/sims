@@ -1,6 +1,6 @@
 import { useState } from "react";
 import useControllableOpen from "@/hooks/useControllableOpen";
-import { router } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { Button } from "@/Components/ui/button";
 import {
     Dialog,
@@ -148,6 +148,10 @@ export default function LogModal({
 
     const { data, setData, errors, processing, handleSubmit } =
         useAddAttendanceEntry(student.id);
+    // Archived-term refusal from the add form, or from a row's delete
+    // (plain router.delete, so it lands in the page's errors).
+    const pageErrors = usePage().props.errors;
+    const termError = errors.term || pageErrors?.term;
 
     return (
         <>
@@ -165,6 +169,15 @@ export default function LogModal({
                                 : "Read-only view of this student's attendance records"}
                         </DialogDescription>
                     </DialogHeader>
+
+                    {termError && (
+                        <p
+                            role="alert"
+                            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                        >
+                            {termError}
+                        </p>
+                    )}
 
                     {canWrite && (
                         <form

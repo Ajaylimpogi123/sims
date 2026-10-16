@@ -19,7 +19,6 @@ class CompanyFactory extends Factory
         return [
             'company_name' => fake()->unique()->company(),
             'address' => fake()->address(),
-            'contact_person' => fake()->name(),
             'contact_number' => fake()->phoneNumber(),
             'email' => fake()->unique()->companyEmail(),
             'industry' => fake()->word(),

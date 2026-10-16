@@ -6,6 +6,8 @@ use App\Exceptions\EvaluationRuleException;
 use App\Models\Evaluation;
 use App\Models\Student;
 use App\Services\EvaluationService;
+use App\Support\TermContext;
+use App\Support\TermGuard;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -25,12 +27,15 @@ class EvaluationController extends Controller
                 'supervisor:id,name',
             ])
             ->visibleTo(Auth::user())
+            ->inTerm(TermContext::id())
             ->orderByDesc('evaluation_period_start')
             ->get();
 
+        // The new-evaluation picker: the viewed term's students.
         $students = Student::query()
             ->with('user:id,name')
             ->visibleTo(Auth::user())
+            ->inTerm(TermContext::id())
             ->orderBy('created_at', 'desc')
             ->get(['id', 'user_id', 'student_number', 'supervisor_id']);
 
@@ -59,7 +64,9 @@ class EvaluationController extends Controller
         return Inertia::render('SupervisorEvaluations/Show', [
             'evaluation' => $evaluation,
             'criteria' => $this->evaluations->activeCriteria(),
-            'canEdit' => Auth::user()->can('update', $evaluation),
+            // Past terms are read-only but for the Administrator.
+            'canEdit' => Auth::user()->can('update', $evaluation)
+                && ($evaluation->student === null || TermGuard::isWritable($evaluation->student)),
         ]);
     }
 

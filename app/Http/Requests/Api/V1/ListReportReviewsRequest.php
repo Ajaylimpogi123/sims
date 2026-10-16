@@ -30,6 +30,9 @@ class ListReportReviewsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // The term to list (App\Support\TermContext); the current one
+            // when omitted. Ignored for Students (always their own term).
+            'term_id' => ['bail', 'sometimes', 'nullable', 'integer', 'min:1', 'exists:terms,id'],
             'type' => ['sometimes', 'nullable', 'string', 'in:daily,weekly'],
             'status' => ['sometimes', 'nullable', 'string', 'in:pending,reviewed'],
             'student_id' => ['sometimes', 'nullable', new NotBoolean, 'integer', 'min:1'],

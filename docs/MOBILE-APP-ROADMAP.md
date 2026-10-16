@@ -55,7 +55,9 @@ React Native (Expo) Android app — **the full SIMS system on mobile, for all fo
 - [ ] Deploy the SIMS website; `APP_TIMEZONE=Asia/Manila`, `APP_DEBUG=false`, upload limits ≥ 6 MB, writable `storage/`
 - [ ] Run `php artisan config:cache` (and `route:cache`) after each deploy — without it, Apache with threaded PHP on Windows can occasionally lose `.env` values under parallel requests (seen in Module 10 QA)
 - [ ] Production security (Module 17 QA): `APP_DEBUG=false`; cap request size (nginx `client_max_body_size` ~10M, PHP `post_max_size`/`upload_max_filesize` ~10M — locally 2G); `expose_php=Off`; restrict CORS (app needs none; currently `*`); `TRUSTED_PROXIES` = only the real proxy; multi-worker PHP (php-fpm), not `artisan serve`
-- [ ] Daily backups of the database and `storage/`
+- [ ] Daily backups of the database and `storage/` (e.g. nightly `mysqldump` + copy of `storage/app/private`)
+- [ ] Real email: set `MAIL_MAILER=smtp` and the `MAIL_*` keys (locally it is `log`, so "Forgot password" emails are only written to `storage/logs`)
+- [ ] Scheduler: run `php artisan schedule:run` every minute (cron, or Windows Task Scheduler on XAMPP) — needed for the reminders in the Oct 2026 feature plan (`routes/console.php`); check with `php artisan schedule:list`
 - [ ] Queue worker (`php artisan queue:work` under Supervisor or cron) — needed for push (Module 16)
 - [ ] Free accounts: Expo (expo.dev) and Firebase (Android push credentials)
 - [ ] On your PC: Node.js 20 LTS, Git, an Android phone with USB debugging (or Android Studio emulator)

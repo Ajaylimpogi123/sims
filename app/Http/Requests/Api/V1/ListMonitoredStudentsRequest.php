@@ -25,6 +25,9 @@ class ListMonitoredStudentsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // The term to list (App\Support\TermContext); the current one
+            // when omitted. Ignored for Students (always their own term).
+            'term_id' => ['bail', 'sometimes', 'nullable', 'integer', 'min:1', 'exists:terms,id'],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],

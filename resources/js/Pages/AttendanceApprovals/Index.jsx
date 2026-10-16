@@ -12,6 +12,7 @@ import {
 import { formatLongDate, formatTime } from "@/lib/dates";
 import AttendanceEvidence from "@/Components/AttendanceEvidence";
 import useHighlightRow from "@/hooks/useHighlightRow";
+import useTerm from "@/hooks/useTerm";
 
 function buildRequests(attendances) {
     const requests = [];
@@ -50,6 +51,8 @@ function buildRequests(attendances) {
 export default function Index({ attendances }) {
     const requests = buildRequests(attendances);
     const { getRowProps } = useHighlightRow();
+    // Archived terms are read-only (except for Admins); see useTerm.
+    const { canWrite } = useTerm();
 
     const handleApprove = (request) => {
         const routeName =
@@ -158,6 +161,8 @@ export default function Index({ attendances }) {
                                                     {request.note || "-"}
                                                 </TableCell>
                                                 <TableCell className="flex gap-2">
+                                                    {canWrite ? (
+                                                    <>
                                                     <Button
                                                         size="sm"
                                                         onClick={() =>
@@ -179,6 +184,12 @@ export default function Index({ attendances }) {
                                                     >
                                                         Reject
                                                     </Button>
+                                                    </>
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            Read-only
+                                                        </span>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         ))

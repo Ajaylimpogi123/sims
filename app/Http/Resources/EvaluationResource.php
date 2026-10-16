@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\EvaluationResponse;
 use App\Services\EvaluationService;
+use App\Support\TermGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Gate;
@@ -38,6 +39,7 @@ class EvaluationResource extends JsonResource
     {
         $gate = Gate::forUser($request->user());
         $student = $this->student;
+        $writable = $student === null || TermGuard::isWritable($student, $request->user());
 
         $summary = [
             'id' => $this->id,
@@ -59,10 +61,11 @@ class EvaluationResource extends JsonResource
             'locked_by' => $this->lockedBy ? ['id' => $this->lockedBy->id, 'name' => $this->lockedBy->name] : null,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
-            'can_edit' => $gate->allows('update', $this->resource),
-            'can_submit' => $gate->allows('submit', $this->resource),
-            'can_lock' => $gate->allows('lock', $this->resource),
-            'can_reopen' => $gate->allows('reopen', $this->resource),
+            // Past terms are read-only but for the Administrator.
+            'can_edit' => $gate->allows('update', $this->resource) && $writable,
+            'can_submit' => $gate->allows('submit', $this->resource) && $writable,
+            'can_lock' => $gate->allows('lock', $this->resource) && $writable,
+            'can_reopen' => $gate->allows('reopen', $this->resource) && $writable,
         ];
 
         if (! $this->detail) {

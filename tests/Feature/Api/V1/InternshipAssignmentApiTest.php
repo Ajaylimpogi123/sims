@@ -67,7 +67,6 @@ class InternshipAssignmentApiTest extends TestCase
             'course' => $student->course,
             'section' => $student->section,
             'company_id' => $student->company_id,
-            'supervisor_id' => $student->supervisor_id,
             'internship_status' => $student->internship_status,
             'internship_schedule' => $student->internship_schedule,
         ], $overrides);
@@ -76,7 +75,7 @@ class InternshipAssignmentApiTest extends TestCase
     private function supervisorAt(Company $company, array $attributes = []): User
     {
         $supervisor = $this->user(User::ROLE_SUPERVISOR, $attributes);
-        $company->supervisors()->attach($supervisor->id);
+        $company->update(['supervisor_id' => $supervisor->id]);
 
         return $supervisor;
     }
@@ -189,7 +188,6 @@ class InternshipAssignmentApiTest extends TestCase
             'section' => $student->section,
             'company' => ['id' => $company->id, 'company_name' => 'Acme Corp', 'status' => 'active'],
             'supervisor' => ['id' => $supervisor->id, 'name' => 'Maria Santos', 'email' => $supervisor->email, 'status' => 'active'],
-            'supervisor_on_roster' => true,
             'needs_supervisor' => false,
             'supervisor_issue' => null,
             'internship_status' => 'ongoing',
@@ -205,21 +203,15 @@ class InternshipAssignmentApiTest extends TestCase
         $this->assertCount(2, $response->json('data'));
     }
 
-    public function test_drifted_supervisor_is_flagged_off_roster(): void
+    public function test_an_unplaced_student_has_no_company_or_supervisor_and_is_not_flagged(): void
     {
-        $company = Company::factory()->create();
-        $supervisor = $this->supervisorAt($company);
-        $student = $this->student(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
-        $company->supervisors()->detach($supervisor->id);
         $unassigned = $this->student();
 
-        $admin = $this->user(User::ROLE_ADMIN);
-
-        $this->api('GET', "/api/v1/assignments/{$student->id}", $admin)->assertJsonPath('data.supervisor_on_roster', false);
-        $this->api('GET', "/api/v1/assignments/{$unassigned->id}", $admin)
-            ->assertJsonPath('data.supervisor_on_roster', null)
+        $this->api('GET', "/api/v1/assignments/{$unassigned->id}", $this->user(User::ROLE_ADMIN))
             ->assertJsonPath('data.company', null)
-            ->assertJsonPath('data.supervisor', null);
+            ->assertJsonPath('data.supervisor', null)
+            ->assertJsonPath('data.needs_supervisor', false)
+            ->assertJsonPath('data.supervisor_issue', null);
     }
 
     public function test_list_filters(): void
@@ -228,7 +220,7 @@ class InternshipAssignmentApiTest extends TestCase
         $supervisor = $this->supervisorAt($company);
         $a = $this->student(['company_id' => $company->id, 'supervisor_id' => $supervisor->id, 'internship_status' => 'ongoing', 'student_number' => 'SN-100'], ['name' => 'Alice Reyes', 'email' => 'alice@example.com']);
         $b = $this->student(['internship_status' => 'completed', 'student_number' => 'SN-200'], ['name' => 'Bob 100% Tan', 'email' => 'bob@example.com', 'status' => 'inactive']);
-        $c = $this->student(['company_id' => $company->id, 'internship_status' => 'not_started', 'student_number' => 'SN-300'], ['name' => 'Carla', 'email' => 'carla@example.com']);
+        $c = $this->student(['company_id' => Company::factory()->create()->id, 'internship_status' => 'not_started', 'student_number' => 'SN-300'], ['name' => 'Carla', 'email' => 'carla@example.com']);
 
         $coordinator = $this->user(User::ROLE_COORDINATOR);
         $ids = fn (string $query) => collect($this->api('GET', '/api/v1/assignments?'.$query, $coordinator)->assertOk()->json('data'))->pluck('id')->sort()->values()->all();
@@ -239,7 +231,7 @@ class InternshipAssignmentApiTest extends TestCase
         $this->assertSame([$b->id], $ids('search='.urlencode('100%')));
         $this->assertSame([$a->id], $ids('internship_status=ongoing'));
         $this->assertSame([$b->id], $ids('status=inactive'));
-        $this->assertSame([$a->id, $c->id], $ids('company_id='.$company->id));
+        $this->assertSame([$a->id], $ids('company_id='.$company->id));
         $this->assertSame([$b->id], $ids('company_id=none'));
         $this->assertSame([$a->id], $ids('supervisor_id='.$supervisor->id));
         $this->assertSame([$b->id, $c->id], $ids('supervisor_id=none'));
@@ -265,12 +257,11 @@ class InternshipAssignmentApiTest extends TestCase
         }
     }
 
-    public function test_options_list_every_company_with_roster_and_statuses(): void
+    public function test_options_list_every_company_with_its_supervisor_and_statuses(): void
     {
         $acme = Company::factory()->create(['company_name' => 'Acme', 'slots' => 2]);
         $zeta = Company::factory()->inactive()->create(['company_name' => 'Zeta', 'slots' => 1]);
-        $maria = $this->supervisorAt($acme, ['name' => 'Maria']);
-        $ana = $this->supervisorAt($acme, ['name' => 'Ana', 'status' => 'inactive']);
+        $maria = $this->supervisorAt($acme, ['name' => 'Maria', 'status' => 'inactive']);
         $this->student(['company_id' => $acme->id]);
         $this->student(['company_id' => $zeta->id]);
 
@@ -281,15 +272,12 @@ class InternshipAssignmentApiTest extends TestCase
                     [
                         'id' => $acme->id, 'company_name' => 'Acme', 'status' => 'active',
                         'slots' => 2, 'students_count' => 1, 'slots_available' => 1,
-                        'supervisors' => [
-                            ['id' => $ana->id, 'name' => 'Ana', 'email' => $ana->email, 'status' => 'inactive'],
-                            ['id' => $maria->id, 'name' => 'Maria', 'email' => $maria->email, 'status' => 'active'],
-                        ],
+                        'supervisor' => ['id' => $maria->id, 'name' => 'Maria', 'email' => $maria->email, 'status' => 'inactive'],
                     ],
                     [
                         'id' => $zeta->id, 'company_name' => 'Zeta', 'status' => 'inactive',
                         'slots' => 1, 'students_count' => 1, 'slots_available' => 0,
-                        'supervisors' => [],
+                        'supervisor' => null,
                     ],
                 ],
                 'internship_statuses' => [
@@ -302,7 +290,7 @@ class InternshipAssignmentApiTest extends TestCase
 
     // ---- Update ------------------------------------------------------
 
-    public function test_coordinator_assigns_company_and_supervisor_and_both_are_notified(): void
+    public function test_coordinator_assigns_a_company_the_student_gets_its_supervisor_and_both_are_notified(): void
     {
         $company = Company::factory()->create(['slots' => 2]);
         $supervisor = $this->supervisorAt($company);
@@ -310,7 +298,6 @@ class InternshipAssignmentApiTest extends TestCase
 
         $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, [
             'company_id' => $company->id,
-            'supervisor_id' => $supervisor->id,
             'internship_status' => 'ongoing',
             'internship_schedule' => 'Mon-Fri 8-5',
             'name' => 'New Name',
@@ -327,6 +314,22 @@ class InternshipAssignmentApiTest extends TestCase
         $this->assertSame(1, Notification::where('type', 'assignment_updated')->where('user_id', $supervisor->id)->count());
     }
 
+    public function test_a_sent_supervisor_id_is_ignored(): void
+    {
+        $company = Company::factory()->create(['slots' => 5]);
+        $supervisor = $this->supervisorAt($company);
+        $outsider = $this->user(User::ROLE_SUPERVISOR);
+        $student = $this->student(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
+
+        foreach ([$outsider->id, null, 'abc', [1], true] as $sent) {
+            $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['supervisor_id' => $sent]))
+                ->assertOk()
+                ->assertJsonPath('student.supervisor.id', $supervisor->id);
+        }
+
+        $this->assertSame(0, Notification::count());
+    }
+
     public function test_profile_only_edit_notifies_nobody_and_blank_ids_mean_none(): void
     {
         $student = $this->student();
@@ -334,7 +337,6 @@ class InternshipAssignmentApiTest extends TestCase
         $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_ADMIN), $this->payload($student, [
             'section' => 'Q',
             'company_id' => '',
-            'supervisor_id' => null,
         ]))->assertOk()->assertJsonPath('student.section', 'Q')->assertJsonPath('student.company', null);
 
         $this->assertSame(0, Notification::count());
@@ -351,15 +353,14 @@ class InternshipAssignmentApiTest extends TestCase
             'student_number' => $other->student_number,
             'internship_status' => 'done',
             'company_id' => 999999,
-            'supervisor_id' => $coordinator->id,
             'internship_schedule' => str_repeat('x', 256),
         ])->assertUnprocessable()->assertJsonValidationErrors([
-            'name', 'email', 'student_number', 'course', 'section', 'internship_status', 'company_id', 'supervisor_id', 'internship_schedule',
+            'name', 'email', 'student_number', 'course', 'section', 'internship_status', 'company_id', 'internship_schedule',
         ]);
 
         $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator, $this->payload($student, [
-            'company_id' => [1], 'supervisor_id' => ['x'], 'email' => ['a@b.test'], 'student_number' => ['1'], 'internship_status' => ['ongoing'],
-        ]))->assertUnprocessable()->assertJsonValidationErrors(['company_id', 'supervisor_id', 'email', 'student_number', 'internship_status']);
+            'company_id' => [1], 'email' => ['a@b.test'], 'student_number' => ['1'], 'internship_status' => ['ongoing'],
+        ]))->assertUnprocessable()->assertJsonValidationErrors(['company_id', 'email', 'student_number', 'internship_status']);
 
         // Keeping your own email / student number is fine.
         $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator, $this->payload($student))->assertOk();
@@ -378,63 +379,30 @@ class InternshipAssignmentApiTest extends TestCase
         }
     }
 
-    public function test_supervisor_not_on_roster_is_refused(): void
-    {
-        $company = Company::factory()->create(['slots' => 5]);
-        $outsider = $this->user(User::ROLE_SUPERVISOR);
-        $student = $this->student(['company_id' => $company->id]);
-
-        $this->assertRefused(
-            $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['supervisor_id' => $outsider->id])),
-            'supervisor_not_on_roster', 'supervisor_id', "This supervisor is not on the selected company's roster.",
-        );
-
-        $this->assertNull($student->fresh()->supervisor_id);
-        $this->assertSame(0, Notification::count());
-    }
-
-    public function test_supervisor_from_another_companys_roster_is_refused_when_moving_company(): void
+    public function test_moving_company_switches_to_the_new_companys_supervisor(): void
     {
         $old = Company::factory()->create(['slots' => 5]);
         $new = Company::factory()->create(['slots' => 5]);
-        $supervisor = $this->supervisorAt($old);
-        $student = $this->student(['company_id' => $old->id, 'supervisor_id' => $supervisor->id]);
+        $oldSupervisor = $this->supervisorAt($old);
+        $newSupervisor = $this->supervisorAt($new);
+        $student = $this->student(['company_id' => $old->id, 'supervisor_id' => $oldSupervisor->id]);
 
-        $this->assertRefused(
-            $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => $new->id])),
-            'supervisor_not_on_roster', 'supervisor_id',
-        );
-
-        $this->assertSame($old->id, $student->fresh()->company_id);
+        $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => $new->id]))
+            ->assertOk()
+            ->assertJsonPath('student.company.id', $new->id)
+            ->assertJsonPath('student.supervisor.id', $newSupervisor->id);
     }
 
-    public function test_supervisor_without_company_is_refused(): void
+    public function test_clearing_the_company_clears_the_supervisor(): void
     {
         $company = Company::factory()->create(['slots' => 5]);
         $supervisor = $this->supervisorAt($company);
         $student = $this->student(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
 
-        $this->assertRefused(
-            $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => null])),
-            'supervisor_needs_company', 'supervisor_id', 'Assign a company before assigning a supervisor.',
-        );
-
-        $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => null, 'supervisor_id' => null]))
+        $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => null]))
             ->assertOk()
             ->assertJsonPath('student.company', null)
             ->assertJsonPath('student.supervisor', null);
-    }
-
-    public function test_drifted_unchanged_supervisor_does_not_block_other_edits(): void
-    {
-        $company = Company::factory()->create(['slots' => 5]);
-        $supervisor = $this->supervisorAt($company);
-        $student = $this->student(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
-        $company->supervisors()->detach($supervisor->id);
-
-        $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['internship_status' => 'completed']))
-            ->assertOk()
-            ->assertJsonPath('student.supervisor_on_roster', false);
     }
 
     public function test_full_company_is_refused_but_staying_there_is_fine(): void
@@ -457,7 +425,6 @@ class InternshipAssignmentApiTest extends TestCase
     public function test_inactive_company_is_refused_for_new_assignments_only(): void
     {
         $company = Company::factory()->inactive()->create(['company_name' => 'Dormant Inc', 'slots' => 5]);
-        $supervisor = $this->supervisorAt($company);
         $student = $this->student();
         $resident = $this->student(['company_id' => $company->id]);
         $coordinator = $this->user(User::ROLE_COORDINATOR);
@@ -465,12 +432,6 @@ class InternshipAssignmentApiTest extends TestCase
         $this->assertRefused(
             $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator, $this->payload($student, ['company_id' => $company->id])),
             'company_inactive', 'company_id', 'Dormant Inc is inactive. Activate it in Company Management before assigning students to it.',
-        );
-
-        // A new supervisor at an inactive company is a new assignment too.
-        $this->assertRefused(
-            $this->api('PATCH', "/api/v1/assignments/{$resident->id}", $coordinator, $this->payload($resident, ['supervisor_id' => $supervisor->id])),
-            'company_inactive', 'company_id',
         );
 
         // Unchanged re-save works.
@@ -486,11 +447,9 @@ class InternshipAssignmentApiTest extends TestCase
         $coordinator = $this->user(User::ROLE_COORDINATOR);
 
         foreach ([true, false, [], [$company->id], 0, '0', -1, 1.5, 'abc'] as $bad) {
-            foreach (['company_id', 'supervisor_id'] as $field) {
-                $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator, $this->payload($student, [$field => $bad]))
-                    ->assertUnprocessable()
-                    ->assertJsonValidationErrors($field);
-            }
+            $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator, $this->payload($student, ['company_id' => $bad]))
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('company_id');
         }
 
         $this->assertDatabaseHas('students', ['id' => $student->id, 'company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
@@ -499,45 +458,20 @@ class InternshipAssignmentApiTest extends TestCase
         // Numeric strings are ids, as the website sends them.
         $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator, $this->payload($student, [
             'company_id' => (string) $company->id,
-            'supervisor_id' => (string) $supervisor->id,
         ]))->assertOk();
     }
 
-    public function test_an_inactive_supervisor_cannot_be_taken_along_to_a_new_company(): void
-    {
-        $old = Company::factory()->create(['slots' => 5]);
-        $new = Company::factory()->create(['slots' => 5]);
-        $inactive = $this->supervisorAt($old, ['status' => 'inactive']);
-        $new->supervisors()->attach($inactive->id);
-        $student = $this->student(['company_id' => $old->id, 'supervisor_id' => $inactive->id]);
-
-        $this->assertRefused(
-            $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => $new->id])),
-            'supervisor_inactive', 'supervisor_id',
-        );
-
-        $this->assertSame($old->id, $student->fresh()->company_id);
-
-        // Moving without them works.
-        $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => $new->id, 'supervisor_id' => null]))
-            ->assertOk();
-    }
-
-    public function test_inactive_supervisor_is_refused_for_new_assignments_only(): void
+    public function test_a_company_with_an_inactive_supervisor_still_takes_students_who_are_flagged(): void
     {
         $company = Company::factory()->create(['slots' => 5]);
         $inactive = $this->supervisorAt($company, ['status' => 'inactive']);
-        $student = $this->student(['company_id' => $company->id]);
-        $kept = $this->student(['company_id' => $company->id, 'supervisor_id' => $inactive->id]);
-        $coordinator = $this->user(User::ROLE_COORDINATOR);
+        $student = $this->student();
 
-        $this->assertRefused(
-            $this->api('PATCH', "/api/v1/assignments/{$student->id}", $coordinator, $this->payload($student, ['supervisor_id' => $inactive->id])),
-            'supervisor_inactive', 'supervisor_id', "This supervisor's account is inactive. Activate it in User Management before assigning students to them.",
-        );
-
-        $this->api('PATCH', "/api/v1/assignments/{$kept->id}", $coordinator, $this->payload($kept, ['section' => 'Z']))
-            ->assertOk();
+        $this->api('PATCH', "/api/v1/assignments/{$student->id}", $this->user(User::ROLE_COORDINATOR), $this->payload($student, ['company_id' => $company->id]))
+            ->assertOk()
+            ->assertJsonPath('student.supervisor.id', $inactive->id)
+            ->assertJsonPath('student.needs_supervisor', true)
+            ->assertJsonPath('student.supervisor_issue', 'inactive');
     }
 
     public function test_company_deleted_meanwhile_is_a_validation_error(): void
@@ -589,25 +523,21 @@ class InternshipAssignmentApiTest extends TestCase
         }
     }
 
-    public function test_supervisor_demoted_meanwhile_is_refused_under_the_lock(): void
+    public function test_the_supervisor_is_read_from_the_company_under_the_lock(): void
     {
         $company = Company::factory()->create(['slots' => 5]);
-        $supervisor = $this->supervisorAt($company);
-        $student = $this->student(['company_id' => $company->id]);
-        $data = $this->payload($student, ['supervisor_id' => $supervisor->id]);
-        $supervisor->update(['role_id' => User::ROLE_COORDINATOR]);
+        $this->supervisorAt($company);
+        $student = $this->student();
+        $data = $this->payload($student, ['company_id' => $company->id]);
 
-        try {
-            app(InternshipAssignmentService::class)->update($student, $data);
-            $this->fail('Expected a validation error.');
-        } catch (ValidationException $e) {
-            $this->assertArrayHasKey('supervisor_id', $e->errors());
-        }
+        // The company's supervisor changes after the form was loaded.
+        $replacement = $this->user(User::ROLE_SUPERVISOR);
+        $company->update(['supervisor_id' => $replacement->id]);
 
-        $this->assertNull($student->fresh()->supervisor_id);
+        app(InternshipAssignmentService::class)->update($student, $data);
+
+        $this->assertSame($replacement->id, $student->fresh()->supervisor_id);
     }
-
-    // ---- Activate / deactivate --------------------------------------
 
     public function test_deactivate_revokes_tokens_and_both_are_idempotent(): void
     {

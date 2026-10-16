@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { DataTable } from "./Partials/DataTable";
 import { getColumns } from "./Partials/Columns";
 import ExportButtons from "@/Components/ExportButtons";
+import useTerm from "@/hooks/useTerm";
 
 const EXPORT_COLUMNS = [
     { header: "Name", accessor: "name" },
@@ -15,7 +16,9 @@ const EXPORT_COLUMNS = [
 
 export default function Index({ students }) {
     const { auth } = usePage().props;
-    const canWrite = [3, 4].includes(auth?.user?.role_id);
+    const { canWrite: termWritable } = useTerm();
+    // Archived terms are read-only (except for Admins); see useTerm.
+    const canWrite = [3, 4].includes(auth?.user?.role_id) && termWritable;
     const columns = useMemo(() => getColumns(canWrite), [canWrite]);
 
     const studentData =

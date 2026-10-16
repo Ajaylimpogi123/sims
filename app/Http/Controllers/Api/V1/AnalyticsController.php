@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\DashboardAnalyticsService;
+use App\Support\TermContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -61,7 +62,8 @@ class AnalyticsController extends Controller
         $charts = $this->analytics->charts($user, $filters);
 
         return response()->json([
-            'filters' => $filters,
+            // term_id: the term the charts cover (TermContext).
+            'filters' => $filters + ['term_id' => TermContext::id($request)],
             'internship' => [
                 'status_breakdown' => self::series($charts['internship']['statusBreakdown'], 'status', 'total', self::INTERNSHIP_STATUS_LABELS),
                 'students_by_company' => self::series($charts['internship']['studentsByCompany'], 'company', 'total'),

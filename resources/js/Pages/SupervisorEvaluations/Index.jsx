@@ -13,6 +13,7 @@ import {
 import { formatLongDate } from "@/lib/dates";
 import EvaluationFormFields from "./Partials/EvaluationFormFields";
 import useCreateEvaluation from "./Hooks/useCreateEvaluation";
+import useTerm from "@/hooks/useTerm";
 
 const SUPERVISOR_ROLE_ID = 3;
 
@@ -37,7 +38,9 @@ function StatusBadge({ status }) {
 export default function Index({ evaluations, students, criteria }) {
     const { auth, flash } = usePage().props;
     const [showForm, setShowForm] = useState(false);
-    const canCreate = auth?.user?.role_id === SUPERVISOR_ROLE_ID;
+    // Archived terms are read-only (supervisors are never Admins); see useTerm.
+    const { canWrite } = useTerm();
+    const canCreate = auth?.user?.role_id === SUPERVISOR_ROLE_ID && canWrite;
 
     const {
         data,

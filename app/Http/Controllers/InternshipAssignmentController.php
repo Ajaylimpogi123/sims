@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Company;
 use App\Models\Student;
-use App\Models\User;
 use App\Services\InternshipAssignmentService;
+use App\Support\TermContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -24,28 +23,21 @@ class InternshipAssignmentController extends Controller
 
     public function index(Request $request): Response
     {
+        // The term picked in the header switcher (current by default).
         $students = Student::query()
-            ->with(['user:id,name,email,status', 'company:id,company_name', 'supervisor:id,name,status'])
+            ->with(['user:id,name,email,status', 'company:id,company_name', 'supervisor:id,name,status', 'term'])
+            ->inTerm(TermContext::id($request))
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Adds supervisor_on_roster, needs_supervisor and supervisor_issue to
-        // each student.
-        $this->assignments->loadRosterFlags($students);
+        // Adds needs_supervisor and supervisor_issue to each student.
+        $this->assignments->loadSupervisorFlags($students);
 
-        // `status` on companies and roster supervisors lets the form keep
-        // inactive ones out of new picks (the save refuses them). Roster
-        // accounts no longer holding the Supervisor role are left out (a
-        // role change leaves the roster row behind; the save refuses them as
-        // a new pick); the page shows a student's current one from the
-        // student's own supervisor fields.
-        $companies = Company::query()
-            ->withCount('students')
-            ->with(['supervisors' => fn ($q) => $q
-                ->select('users.id', 'users.name', 'users.email', 'users.status')
-                ->where('users.role_id', User::ROLE_SUPERVISOR)])
-            ->orderBy('company_name')
-            ->get(['id', 'company_name', 'slots', 'status']);
+        // `status` on companies lets the form keep inactive ones out of new
+        // picks (the save refuses them); `supervisor` is whom a student
+        // placed there gets, `supervisor_issue` why that one isn't a
+        // working supervisor; students_count is the current term's.
+        $companies = $this->assignments->companyOptions();
 
         return Inertia::render('InternshipAssignment/Index', [
             'students' => $students,
@@ -58,13 +50,14 @@ class InternshipAssignmentController extends Controller
 
     /**
      * Single consolidated save covering the student's profile fields and
-     * their internship assignment (company/supervisor/status/schedule).
+     * their internship assignment (company/status/schedule/required hours).
+     * The supervisor follows the company.
      */
     public function update(Request $request, Student $student): RedirectResponse
     {
         $this->assignments->prepare($request);
 
-        $this->assignments->update($student, $request->validate($this->assignments->rules($student, $request)));
+        $this->assignments->update($student, $request->validate($this->assignments->rules($student)));
 
         return $this->backToIndex($request)->with('success', 'Student updated successfully.');
     }

@@ -99,3 +99,32 @@ export function formatLongDateWithWeekday(value, empty = "—") {
 
     return format(date, "EEEE, MMMM d, yyyy");
 }
+
+/** Display format: Just now / 5 min ago / 3 hr ago / Yesterday / 4 days ago, then dd/MM/yyyy */
+export function formatRelativeTime(value, empty = "—") {
+    const date = toDate(value);
+    if (!date) {
+        return empty;
+    }
+
+    const minutes = Math.floor((Date.now() - date.getTime()) / 60000);
+    if (minutes < 1) {
+        return "Just now";
+    }
+    if (minutes < 60) {
+        return `${minutes} min ago`;
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+        return `${hours} hr ago`;
+    }
+    const days = Math.floor(hours / 24);
+    if (days === 1) {
+        return "Yesterday";
+    }
+    if (days < 7) {
+        return `${days} days ago`;
+    }
+
+    return formatDate(date);
+}

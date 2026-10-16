@@ -19,7 +19,9 @@ const ITEM_CLASS =
  * it. The menu is non-modal so it doesn't fight the dialog over body
  * pointer-events / focus.
  *
- * actions: [{ label, dialog?, onSelect?, className? }] (falsy entries skipped)
+ * actions: [{ label, dialog?, onSelect?, className?, disabled?, hint? }]
+ *   (falsy entries skipped; `hint` is a muted line under the label, e.g.
+ *   why a disabled action is unavailable)
  * renderDialogs: ({ isOpen(key), onOpenChange }) => dialogs
  */
 export default function RowActionsMenu({ actions, renderDialogs }) {
@@ -71,10 +73,20 @@ export default function RowActionsMenu({ actions, renderDialogs }) {
                     {actions.filter(Boolean).map((action) => (
                         <DropdownMenuItem
                             key={action.label}
+                            disabled={action.disabled}
                             onSelect={() => handleSelect(action)}
                             className={action.className ?? ITEM_CLASS}
                         >
-                            {action.label}
+                            {action.hint ? (
+                                <span className="flex flex-col">
+                                    <span>{action.label}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {action.hint}
+                                    </span>
+                                </span>
+                            ) : (
+                                action.label
+                            )}
                         </DropdownMenuItem>
                     ))}
                 </DropdownMenuContent>

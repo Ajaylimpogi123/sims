@@ -11,6 +11,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Rules\NotBoolean;
 use App\Support\AppScreen;
+use App\Support\TermContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -116,6 +117,7 @@ class DashboardAnalyticsService
     public function filterOptions(User $user): array
     {
         $studentsQuery = Student::query()->with('user:id,name')
+            ->inTerm($this->termId())
             ->when(
                 (int) $user->role_id === self::SUPERVISOR_ROLE_ID,
                 fn (Builder $q) => $q->where('supervisor_id', $user->id),
@@ -126,7 +128,7 @@ class DashboardAnalyticsService
         $companiesQuery = Company::query()
             ->when(
                 (int) $user->role_id === self::SUPERVISOR_ROLE_ID,
-                fn (Builder $q) => $q->whereHas('students', fn (Builder $sq) => $sq->where('supervisor_id', $user->id)),
+                fn (Builder $q) => $q->whereHas('students', fn (Builder $sq) => $sq->where('supervisor_id', $user->id)->inTerm($this->termId())),
             )
             ->orderBy('company_name')
             ->get(['id', 'company_name']);
@@ -146,9 +148,26 @@ class DashboardAnalyticsService
     // Scoped base queries
     // -----------------------------------------------------------------
 
+    /**
+     * The term every query below is scoped to: the one the request views
+     * (App\Support\TermContext; the current term by default).
+     */
+    private function termId(): ?int
+    {
+        return TermContext::id();
+    }
+
+    /**
+     * Students in the viewed term.
+     */
+    private function termStudents(): Builder
+    {
+        return Student::query()->inTerm($this->termId());
+    }
+
     private function scopedStudentQuery(User $user, array $filters = []): Builder
     {
-        return Student::query()
+        return $this->termStudents()
             ->when(
                 (int) $user->role_id === self::SUPERVISOR_ROLE_ID,
                 fn (Builder $q) => $q->where('students.supervisor_id', $user->id),
@@ -165,7 +184,7 @@ class DashboardAnalyticsService
     {
         return Attendance::query()
             ->whereHas('student', function (Builder $q) use ($user, $filters) {
-                $q->when(
+                $q->inTerm($this->termId())->when(
                     (int) $user->role_id === self::SUPERVISOR_ROLE_ID,
                     fn (Builder $sq) => $sq->where('supervisor_id', $user->id),
                 )
@@ -184,7 +203,7 @@ class DashboardAnalyticsService
     {
         return InternshipReport::query()
             ->whereHas('student', function (Builder $q) use ($user, $filters) {
-                $q->when(
+                $q->inTerm($this->termId())->when(
                     (int) $user->role_id === self::SUPERVISOR_ROLE_ID,
                     fn (Builder $sq) => $sq->where('supervisor_id', $user->id),
                 )
@@ -202,6 +221,7 @@ class DashboardAnalyticsService
     private function scopedEvaluationQuery(User $user, array $filters = []): Builder
     {
         return Evaluation::query()
+            ->inTerm($this->termId())
             ->when(
                 (int) $user->role_id === self::SUPERVISOR_ROLE_ID,
                 fn (Builder $q) => $q->where('supervisor_id', $user->id),
@@ -222,7 +242,7 @@ class DashboardAnalyticsService
 
     private function pendingApprovalsCountFor(?User $user = null): int
     {
-        $query = Attendance::query()->where(fn (Builder $q) => $q
+        $query = Attendance::query()->inTerm($this->termId())->where(fn (Builder $q) => $q
             ->where('time_in_status', 'pending')
             ->orWhere('time_out_status', 'pending'));
 
@@ -235,7 +255,7 @@ class DashboardAnalyticsService
 
     private function attendanceSummaryFor(?User $user = null): array
     {
-        $query = Attendance::query();
+        $query = Attendance::query()->inTerm($this->termId());
 
         if ($user && (int) $user->role_id === self::SUPERVISOR_ROLE_ID) {
             $query->whereHas('student', fn (Builder $q) => $q->where('supervisor_id', $user->id));
@@ -255,7 +275,7 @@ class DashboardAnalyticsService
      */
     private function nearingCompletionStudentIds(?User $user = null): \Illuminate\Support\Collection
     {
-        return Student::query()
+        return $this->termStudents()
             ->when($user && (int) $user->role_id === self::SUPERVISOR_ROLE_ID, fn (Builder $q) => $q->where('supervisor_id', $user->id))
             ->whereNotNull('required_hours')
             ->where('required_hours', '>', 0)
@@ -278,7 +298,7 @@ class DashboardAnalyticsService
      */
     private function frequentRejectionStudentIds(?User $user = null): \Illuminate\Support\Collection
     {
-        return Student::query()
+        return $this->termStudents()
             ->when($user && (int) $user->role_id === self::SUPERVISOR_ROLE_ID, fn (Builder $q) => $q->where('supervisor_id', $user->id))
             ->withCount([
                 'attendances as rejection_count' => fn (Builder $q) => $q
@@ -322,36 +342,35 @@ class DashboardAnalyticsService
     public function adminKpis(): array
     {
         return [
-            'totalStudents' => ['value' => Student::count(), 'trend' => $this->monthlyCreationTrend(Student::query())],
+            'totalStudents' => ['value' => $this->termStudents()->count(), 'trend' => $this->monthlyCreationTrend($this->termStudents())],
             'totalCompanies' => ['value' => Company::where('status', 'active')->count(), 'trend' => null],
             'totalSupervisors' => ['value' => User::where('role_id', self::SUPERVISOR_ROLE_ID)->where('status', 'active')->count(), 'trend' => null],
-            'activeInternshipAssignments' => ['value' => Student::where('internship_status', 'ongoing')->count(), 'trend' => null],
-            'completedInternships' => ['value' => Student::where('internship_status', 'completed')->count(), 'trend' => null],
+            'activeInternshipAssignments' => ['value' => $this->termStudents()->where('internship_status', 'ongoing')->count(), 'trend' => null],
+            'completedInternships' => ['value' => $this->termStudents()->where('internship_status', 'completed')->count(), 'trend' => null],
             'pendingApprovals' => ['value' => $this->pendingApprovalsCountFor(), 'trend' => null],
             'attendanceSummary' => $this->attendanceSummaryFor(),
-            'studentsCurrentlyOnInternship' => ['value' => Student::where('internship_status', 'ongoing')->count(), 'trend' => null],
+            'studentsCurrentlyOnInternship' => ['value' => $this->termStudents()->where('internship_status', 'ongoing')->count(), 'trend' => null],
             'studentsNearingCompletion' => ['value' => $this->nearingCompletionStudentIds()->count(), 'trend' => null],
             'studentsWithAttendanceIssues' => ['value' => $this->frequentRejectionStudentIds()->count(), 'trend' => null],
-            'pendingSupervisorEvaluations' => ['value' => Evaluation::where('status', 'draft')->count(), 'trend' => null],
+            'pendingSupervisorEvaluations' => ['value' => Evaluation::query()->inTerm($this->termId())->where('status', 'draft')->count(), 'trend' => null],
         ];
     }
 
     public function coordinatorKpis(): array
     {
-        $activeStudents = Student::where('internship_status', 'ongoing')->get(['id', 'required_hours']);
-        $progress = $this->averageCompletionProgress();
+                $progress = $this->averageCompletionProgress();
 
         return [
-            'totalStudents' => ['value' => Student::count(), 'trend' => $this->monthlyCreationTrend(Student::query())],
-            'activeInternshipAssignments' => ['value' => Student::where('internship_status', 'ongoing')->count(), 'trend' => null],
+            'totalStudents' => ['value' => $this->termStudents()->count(), 'trend' => $this->monthlyCreationTrend($this->termStudents())],
+            'activeInternshipAssignments' => ['value' => $this->termStudents()->where('internship_status', 'ongoing')->count(), 'trend' => null],
             'companies' => ['value' => Company::where('status', 'active')->count(), 'trend' => null],
             'activeSupervisors' => ['value' => User::where('role_id', self::SUPERVISOR_ROLE_ID)->where('status', 'active')->count(), 'trend' => null],
-            'studentsCurrentlyOnInternship' => ['value' => Student::where('internship_status', 'ongoing')->count(), 'trend' => null],
-            'studentsWithoutCompany' => ['value' => Student::whereNull('company_id')->count(), 'trend' => null],
+            'studentsCurrentlyOnInternship' => ['value' => $this->termStudents()->where('internship_status', 'ongoing')->count(), 'trend' => null],
+            'studentsWithoutCompany' => ['value' => $this->termStudents()->whereNull('company_id')->count(), 'trend' => null],
             'pendingApprovals' => ['value' => $this->pendingApprovalsCountFor(), 'trend' => null],
             'attendanceSummary' => $this->attendanceSummaryFor(),
             'internshipCompletionProgress' => ['value' => $progress, 'trend' => null],
-            'reportsAwaitingReview' => ['value' => InternshipReport::where('status', 'pending')->count(), 'trend' => null],
+            'reportsAwaitingReview' => ['value' => InternshipReport::query()->inTerm($this->termId())->where('status', 'pending')->count(), 'trend' => null],
             'studentsRequiringAttention' => ['value' => $this->frequentRejectionStudentIds()->count(), 'trend' => null],
         ];
     }
@@ -375,9 +394,9 @@ class DashboardAnalyticsService
             'presentCount' => ['value' => $attendanceSummary['present'], 'trend' => null],
             'rejectedCount' => ['value' => $attendanceSummary['rejected'], 'trend' => null],
             'pendingAttendanceApprovals' => ['value' => $this->pendingApprovalsCountFor($user), 'trend' => null],
-            'reportsAwaitingReview' => ['value' => InternshipReport::whereHas('student', fn (Builder $q) => $q->where('supervisor_id', $user->id))->where('status', 'pending')->count(), 'trend' => null],
-            'pendingEvaluations' => ['value' => Evaluation::where('supervisor_id', $user->id)->where('status', 'draft')->count(), 'trend' => null],
-            'completedEvaluations' => ['value' => Evaluation::where('supervisor_id', $user->id)->whereIn('status', ['submitted', 'locked'])->count(), 'trend' => null],
+            'reportsAwaitingReview' => ['value' => InternshipReport::query()->inTerm($this->termId())->whereHas('student', fn (Builder $q) => $q->where('supervisor_id', $user->id))->where('status', 'pending')->count(), 'trend' => null],
+            'pendingEvaluations' => ['value' => Evaluation::query()->inTerm($this->termId())->where('supervisor_id', $user->id)->where('status', 'draft')->count(), 'trend' => null],
+            'completedEvaluations' => ['value' => Evaluation::query()->inTerm($this->termId())->where('supervisor_id', $user->id)->whereIn('status', ['submitted', 'locked'])->count(), 'trend' => null],
             'studentsRequiringAttention' => ['value' => $this->frequentRejectionStudentIds($user)->count(), 'trend' => null],
         ];
     }
@@ -441,6 +460,7 @@ class DashboardAnalyticsService
     public function supervisedStudentsProgress(User $user): \Illuminate\Support\Collection
     {
         return $user->supervisedStudents()
+            ->inTerm($this->termId())
             ->with('user:id,name')
             ->withSum('attendances as total_rendered_hours', 'rendered_hours')
             ->get()
@@ -455,7 +475,7 @@ class DashboardAnalyticsService
 
     private function averageCompletionProgress(): float
     {
-        $students = Student::whereNotNull('required_hours')
+        $students = $this->termStudents()->whereNotNull('required_hours')
             ->where('required_hours', '>', 0)
             ->withSum('attendances as total_rendered_hours', 'rendered_hours')
             ->get();
@@ -529,24 +549,24 @@ class DashboardAnalyticsService
                 }
             }
 
-            $withoutCompany = Student::whereNull('company_id')->count();
+            $withoutCompany = $this->termStudents()->whereNull('company_id')->count();
             if ($withoutCompany > 0) {
                 $items[] = $this->item('students_without_company', "{$withoutCompany} student(s) without a company assignment", $withoutCompany, 'students');
             }
 
             // Placed at a company but nobody (on its roster) supervises
             // them: their attendance and reports reach no supervisor.
-            $withoutSupervisor = Student::query()->needsSupervisor()->count();
+            $withoutSupervisor = $this->termStudents()->needsSupervisor()->count();
             if ($withoutSupervisor > 0) {
                 $items[] = $this->item('students_without_supervisor', "{$withoutSupervisor} student(s) need a supervisor", $withoutSupervisor, 'students', ['needs_supervisor' => 1]);
             }
 
-            $reportsAwaiting = InternshipReport::where('status', 'pending')->count();
+            $reportsAwaiting = InternshipReport::query()->inTerm($this->termId())->where('status', 'pending')->count();
             if ($reportsAwaiting > 0) {
                 $items[] = $this->item('reports_awaiting_review', "{$reportsAwaiting} report(s) awaiting review", $reportsAwaiting, 'report-reviews');
             }
 
-            $evalDrafts = Evaluation::where('status', 'draft')->count();
+            $evalDrafts = Evaluation::query()->inTerm($this->termId())->where('status', 'draft')->count();
             if ($evalDrafts > 0) {
                 $items[] = $this->item('evaluations_awaiting_completion', "{$evalDrafts} evaluation(s) still in draft", $evalDrafts, 'evaluations');
             }
@@ -568,12 +588,12 @@ class DashboardAnalyticsService
                 $items[] = $this->item('pending_approvals', "{$pending} attendance approval(s) awaiting your action", $pending, 'approvals');
             }
 
-            $reportsAwaiting = InternshipReport::whereHas('student', fn (Builder $q) => $q->where('supervisor_id', $user->id))->where('status', 'pending')->count();
+            $reportsAwaiting = InternshipReport::query()->inTerm($this->termId())->whereHas('student', fn (Builder $q) => $q->where('supervisor_id', $user->id))->where('status', 'pending')->count();
             if ($reportsAwaiting > 0) {
                 $items[] = $this->item('reports_awaiting_review', "{$reportsAwaiting} report(s) awaiting your review", $reportsAwaiting, 'report-reviews');
             }
 
-            $evalDrafts = Evaluation::where('supervisor_id', $user->id)->where('status', 'draft')->count();
+            $evalDrafts = Evaluation::query()->inTerm($this->termId())->where('supervisor_id', $user->id)->where('status', 'draft')->count();
             if ($evalDrafts > 0) {
                 $items[] = $this->item('evaluations_awaiting_completion', "{$evalDrafts} evaluation(s) still in draft", $evalDrafts, 'evaluations');
             }

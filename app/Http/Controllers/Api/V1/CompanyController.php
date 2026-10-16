@@ -13,11 +13,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Company Management and the supervisor roster (Coordinator,
+ * Company Management with the Company Supervisor (Coordinator,
  * Administrator by the route's role:2,4): the website's CompanyController
  * through CompanyManagementService, same rules and messages. Activate /
- * deactivate are explicit (idempotent) where the website toggles; roster
- * attach / detach are idempotent too.
+ * deactivate are explicit (idempotent) where the website toggles.
  */
 class CompanyController extends Controller
 {
@@ -51,6 +50,8 @@ class CompanyController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->companies->prepare($request);
+
         $company = $this->companies->create($request->validate($this->companies->rules()));
 
         return response()->json([
@@ -63,13 +64,19 @@ class CompanyController extends Controller
     {
         $model = $this->find($company);
 
+        $this->companies->prepare($request);
+
         $validated = $request->validate($this->companies->rules($model));
 
-        $this->guard(fn () => $this->companies->update($model, $validated));
+        $moved = 0;
+        $this->guard(function () use ($model, $validated, &$moved) {
+            $moved = $this->companies->update($model, $validated);
+        });
 
         return response()->json([
-            'message' => 'Company updated successfully.',
+            'message' => 'Company updated successfully.'.CompanyManagementService::movedMessage($moved, $model->load('supervisor')),
             'company' => $this->present($request, $model),
+            'students_reassigned' => $moved,
         ]);
     }
 
@@ -97,45 +104,17 @@ class CompanyController extends Controller
         return response()->json(['message' => 'Company deleted successfully.']);
     }
 
-    public function availableSupervisors(int $company): JsonResponse
+    /**
+     * The supervisor picker: active Supervisor accounts, by name.
+     */
+    public function supervisorOptions(): JsonResponse
     {
-        $supervisors = $this->companies->availableSupervisors($this->find($company));
-
         return response()->json([
-            'data' => $supervisors->map(fn (User $user) => [
+            'data' => $this->companies->supervisorOptions()->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'status' => $user->status === 'inactive' ? 'inactive' : 'active',
             ])->values()->all(),
-        ]);
-    }
-
-    public function attachSupervisor(Request $request, int $company): JsonResponse
-    {
-        $model = $this->find($company);
-
-        $validated = $request->validate($this->companies->attachRules());
-
-        $this->guard(fn () => $this->companies->attachSupervisor($model, (int) $validated['user_id']));
-
-        return response()->json([
-            'message' => 'Supervisor added to company roster.',
-            'company' => $this->present($request, $model),
-        ]);
-    }
-
-    public function detachSupervisor(Request $request, int $company, int $user): JsonResponse
-    {
-        $model = $this->find($company);
-        $supervisor = User::query()->find($user);
-        abort_if($supervisor === null, 404);
-
-        $this->companies->detachSupervisor($model, $supervisor);
-
-        return response()->json([
-            'message' => 'Supervisor removed from company roster.',
-            'company' => $this->present($request, $model),
         ]);
     }
 

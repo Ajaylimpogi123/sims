@@ -41,41 +41,39 @@ class BooleanIdInputTest extends TestCase
         ])->json($method, $uri, $data);
     }
 
-    public function test_roster_attach_refuses_booleans_and_arrays_but_takes_whole_floats(): void
+    public function test_company_supervisor_refuses_booleans_and_arrays_but_takes_whole_floats(): void
     {
-        $company = Company::factory()->create();
         $supervisor = $this->user(User::ROLE_SUPERVISOR);
         $coordinator = $this->user(User::ROLE_COORDINATOR);
 
         foreach ([true, false, [$supervisor->id], []] as $bad) {
-            $response = $this->api('POST', "/api/v1/companies/{$company->id}/supervisors", $coordinator, ['user_id' => $bad])
+            $response = $this->api('POST', '/api/v1/companies', $coordinator, ['company_name' => 'Acme', 'slots' => 1, 'supervisor_id' => $bad])
                 ->assertUnprocessable()
-                ->assertJsonValidationErrors('user_id');
+                ->assertJsonValidationErrors('supervisor_id');
 
             if (is_bool($bad)) {
-                $response->assertJsonPath('errors.user_id.0', 'The user id field must be an integer.');
+                $response->assertJsonPath('errors.supervisor_id.0', 'The supervisor id field must be an integer.');
             }
         }
 
-        $this->assertSame(0, $company->supervisors()->count());
+        $this->assertSame(0, Company::count());
 
-        $this->api('POST', "/api/v1/companies/{$company->id}/supervisors", $coordinator, ['user_id' => (float) $supervisor->id])
-            ->assertOk();
+        $this->api('POST', '/api/v1/companies', $coordinator, ['company_name' => 'Acme', 'slots' => 1, 'supervisor_id' => (float) $supervisor->id])
+            ->assertCreated();
 
-        $this->assertTrue($company->supervisors()->whereKey($supervisor->id)->exists());
+        $this->assertDatabaseHas('companies', ['company_name' => 'Acme', 'supervisor_id' => $supervisor->id]);
     }
 
-    public function test_web_roster_attach_refuses_booleans(): void
+    public function test_web_company_supervisor_refuses_booleans(): void
     {
-        $company = Company::factory()->create();
         $this->user(User::ROLE_SUPERVISOR);
 
         $this->actingAs($this->user(User::ROLE_ADMIN))
-            ->postJson("/company-management/{$company->id}/supervisors", ['user_id' => true])
+            ->postJson('/company-management', ['company_name' => 'Acme', 'slots' => 1, 'supervisor_id' => true])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['user_id' => 'The user id field must be an integer.']);
+            ->assertJsonValidationErrors(['supervisor_id' => 'The supervisor id field must be an integer.']);
 
-        $this->assertSame(0, $company->supervisors()->count());
+        $this->assertSame(0, Company::count());
     }
 
     public function test_user_role_id_refuses_booleans(): void

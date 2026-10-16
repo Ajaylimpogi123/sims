@@ -19,6 +19,7 @@ export default function useManageStudent(
             internship_status: "not_started",
             internship_schedule: "",
             required_hours: "",
+            term_id: "",
         });
 
     useEffect(() => {
@@ -38,6 +39,8 @@ export default function useManageStudent(
                 Number(student.required_hours) > 0
                     ? String(student.required_hours)
                     : "",
+            // Always sent; an unchanged term is a no-op on the server.
+            term_id: student.term_id != null ? String(student.term_id) : "",
         });
         // Seed only when the dialog opens: a validation (422) response re-sends
         // the props as new objects and must not overwrite what was typed.
@@ -55,11 +58,12 @@ export default function useManageStudent(
 
         // Not a form field: tells the server to redirect back to the
         // "Needs supervisor" filter (?needs_supervisor=1) after saving.
-        transform((formData) =>
-            needsSupervisorOnly
-                ? { ...formData, needs_supervisor: 1 }
-                : formData,
-        );
+        transform(({ term_id, ...formData }) => ({
+            ...formData,
+            // Never send an empty term (a student row always has one).
+            ...(term_id ? { term_id } : {}),
+            ...(needsSupervisorOnly ? { needs_supervisor: 1 } : {}),
+        }));
 
         patch(route("internship-assignment.update", student.id), {
             preserveScroll: true,

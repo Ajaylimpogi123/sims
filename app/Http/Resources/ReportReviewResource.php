@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\TermGuard;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Gate;
@@ -36,8 +37,10 @@ class ReportReviewResource extends JsonResource
                 'section' => $student->section,
                 'company' => $company ? ['id' => $company->id, 'name' => $company->company_name] : null,
             ] : null,
+            // Past terms are read-only but for the Administrator.
             'can_review' => $this->status === 'pending'
-                && Gate::forUser($request->user())->allows('review', $this->resource),
+                && Gate::forUser($request->user())->allows('review', $this->resource)
+                && ($student === null || TermGuard::isWritable($student, $request->user())),
         ];
     }
 }

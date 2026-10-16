@@ -32,3 +32,4 @@ require __DIR__.'/report-reviews.php';
 require __DIR__.'/progress-monitoring.php';
 require __DIR__.'/evaluations.php';
 require __DIR__.'/notifications.php';
+require __DIR__.'/terms.php';

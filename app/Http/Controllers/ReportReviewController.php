@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\ReportRuleException;
 use App\Models\InternshipReport;
 use App\Services\InternshipReportService;
+use App\Support\TermContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,7 @@ class ReportReviewController extends Controller
         $reports = InternshipReport::query()
             ->with('student.user:id,name')
             ->visibleTo(Auth::user())
+            ->inTerm(TermContext::id())
             ->orderByRaw("status = 'pending' desc")
             ->orderByDesc('period_start')
             ->get();

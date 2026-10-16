@@ -47,7 +47,7 @@ class User extends Authenticatable
 
     /**
      * Supervisor scoping: students.supervisor_id is the source of truth for
-     * who supervises whom (company_supervisors is only an eligibility roster).
+     * who supervises whom (kept in step with companies.supervisor_id).
      */
     public function supervises(?Student $student): bool
     {
@@ -129,9 +129,12 @@ class User extends Authenticatable
         return $this->hasMany(Student::class, 'supervisor_id');
     }
 
+    /**
+     * Companies this user is the Company Supervisor of.
+     */
     public function supervisedCompanies()
     {
-        return $this->belongsToMany(Company::class, 'company_supervisors')->withTimestamps();
+        return $this->hasMany(Company::class, 'supervisor_id');
     }
 
     /**

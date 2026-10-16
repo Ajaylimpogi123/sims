@@ -25,6 +25,9 @@ class AnalyticsFiltersRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // The term to list (App\Support\TermContext); the current one
+            // when omitted. Ignored for Students (always their own term).
+            'term_id' => ['bail', 'sometimes', 'nullable', 'integer', 'min:1', 'exists:terms,id'],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             // Compared only against a string date_from: the date comparison
             // throws a TypeError (500) on an array.

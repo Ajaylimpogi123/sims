@@ -284,7 +284,7 @@ class DashboardApiTest extends TestCase
             ->assertJsonPath('kpis.attendance_summary', ['present' => 2, 'rejected' => 6]);
 
         $this->assertSame(
-            ['students_without_company', 'students_without_supervisor', 'reports_awaiting_review', 'evaluations_awaiting_completion', 'nearing_completion', 'frequent_rejections'],
+            ['students_without_company', 'reports_awaiting_review', 'evaluations_awaiting_completion', 'nearing_completion', 'frequent_rejections'],
             collect($response->json('action_items'))->pluck('key')->all(),
             'Coordinators never get the approvals action item.',
         );

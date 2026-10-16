@@ -2,7 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Term;
+use App\Models\User;
 use App\Services\NotificationService;
+use App\Support\TermContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -51,8 +54,28 @@ class HandleInertiaRequests extends Middleware
                             fn ($q) => $q->where('supervisor_id', $request->user()->id),
                         ),
                     )
+                    ->inTerm(TermContext::id($request))
                     ->count()
                 : 0,
+            // Terms (owner feature, 2026-10-16): every term for the header
+            // switcher (newest first), the current one, the one the lists
+            // show (a Student's own term) and whether that one is archived
+            // (termReadOnly: archived and not an Administrator, so edit
+            // actions are hidden).
+            'terms' => fn () => $request->user()
+                ? Term::query()->newestFirst()->get()->map(fn (Term $term) => $term->summary())->values()
+                : [],
+            'currentTerm' => fn () => ($current = Term::current())
+                ? ['id' => $current->id, 'label' => $current->label]
+                : null,
+            'selectedTerm' => fn () => ($selected = $this->selectedTerm($request))
+                ? $selected->summary()
+                : null,
+            'termArchived' => fn () => $this->selectedTerm($request) !== null
+                && ! $this->selectedTerm($request)->isCurrent(),
+            'termReadOnly' => fn () => $this->selectedTerm($request) !== null
+                && ! $this->selectedTerm($request)->isCurrent()
+                && ! $request->user()?->hasRole(User::ROLE_ADMIN),
             'unreadNotificationsCount' => fn () => $request->user()
                 ? $request->user()->notifications()->unread()->count()
                 : 0,
@@ -63,5 +86,20 @@ class HandleInertiaRequests extends Middleware
                 )
                 : [],
         ];
+    }
+
+    /**
+     * The term the signed-in user's lists show; null for guests and for a
+     * Student without a student record.
+     */
+    private function selectedTerm(Request $request): ?Term
+    {
+        $user = $request->user();
+
+        if ($user === null || ($user->hasRole(User::ROLE_STUDENT) && $user->student === null)) {
+            return null;
+        }
+
+        return TermContext::term($request);
     }
 }

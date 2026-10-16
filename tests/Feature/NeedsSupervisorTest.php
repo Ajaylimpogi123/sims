@@ -12,11 +12,10 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /**
- * A student placed at a company with no supervisor, one no longer on
- * that company's roster, one no longer a Supervisor, or an inactive one,
- * "needs a supervisor": flagged on Internship
- * Assignment (website + API), filterable, and counted as a Coordinator /
- * Admin dashboard action item.
+ * A student placed at a company with no Company Supervisor, one no longer
+ * a Supervisor, or an inactive one, "needs a supervisor": flagged on
+ * Internship Assignment (website + API), filterable, and counted as a
+ * Coordinator / Admin dashboard action item.
  */
 class NeedsSupervisorTest extends TestCase
 {
@@ -38,36 +37,33 @@ class NeedsSupervisorTest extends TestCase
     }
 
     /**
+     * A student placed at a new company whose Company Supervisor is theirs.
+     */
+    private function placed(?User $supervisor): Student
+    {
+        $company = Company::factory()->create(['slots' => 10, 'supervisor_id' => $supervisor?->id]);
+
+        return Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $supervisor?->id]);
+    }
+
+    /**
      * no_company: no company, no supervisor (not flagged)
-     * no_supervisor: company, no supervisor (flagged)
-     * off_roster: company, supervisor dropped from its roster (flagged)
-     * on_roster: company, roster supervisor (not flagged)
-     * inactive_supervisor: company, inactive roster supervisor (flagged)
-     * demoted: company, roster "supervisor" whose account became a
-     *   Coordinator in User Management (flagged)
+     * no_supervisor: company without a supervisor (flagged)
+     * supervised: company with an active supervisor (not flagged)
+     * inactive_supervisor: company with an inactive supervisor (flagged)
+     * demoted: company whose "supervisor" account became a Coordinator in
+     *   User Management (flagged)
      */
     private function fixture(): void
     {
-        $company = Company::factory()->create(['slots' => 10]);
-        $other = Company::factory()->create(['slots' => 10]);
-
-        $onRoster = $this->user(User::ROLE_SUPERVISOR);
-        $inactive = $this->user(User::ROLE_SUPERVISOR, ['status' => 'inactive']);
-        // Still on the roster and still students.supervisor_id, but no longer
-        // a Supervisor: a role change leaves both behind.
         $demoted = $this->user(User::ROLE_SUPERVISOR);
-        $company->supervisors()->attach([$onRoster->id, $inactive->id, $demoted->id]);
-        // On another company's roster only.
-        $dropped = $this->user(User::ROLE_SUPERVISOR);
-        $other->supervisors()->attach($dropped->id);
 
         $this->students = [
             'no_company' => Student::factory()->create(),
-            'no_supervisor' => Student::factory()->create(['company_id' => $company->id]),
-            'off_roster' => Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $dropped->id]),
-            'on_roster' => Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $onRoster->id]),
-            'inactive_supervisor' => Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $inactive->id]),
-            'demoted' => Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $demoted->id]),
+            'no_supervisor' => $this->placed(null),
+            'supervised' => $this->placed($this->user(User::ROLE_SUPERVISOR)),
+            'inactive_supervisor' => $this->placed($this->user(User::ROLE_SUPERVISOR, ['status' => 'inactive'])),
+            'demoted' => $this->placed($demoted),
         ];
 
         $demoted->update(['role_id' => User::ROLE_COORDINATOR]);
@@ -77,7 +73,6 @@ class NeedsSupervisorTest extends TestCase
     {
         return [
             $this->students['no_supervisor']->id,
-            $this->students['off_roster']->id,
             $this->students['demoted']->id,
             $this->students['inactive_supervisor']->id,
         ];
@@ -95,7 +90,7 @@ class NeedsSupervisorTest extends TestCase
 
     // ------------------------------------------------------------ scope
 
-    public function test_the_scope_matches_company_without_a_roster_supervisor(): void
+    public function test_the_scope_matches_students_without_a_working_supervisor(): void
     {
         $this->fixture();
 
@@ -105,10 +100,8 @@ class NeedsSupervisorTest extends TestCase
     public function test_a_supervisor_demoted_in_user_management_leaves_their_students_needing_one(): void
     {
         $admin = $this->user(User::ROLE_ADMIN);
-        $company = Company::factory()->create(['slots' => 5]);
         $supervisor = $this->user(User::ROLE_SUPERVISOR);
-        $company->supervisors()->attach($supervisor->id);
-        $student = Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
+        $student = $this->placed($supervisor);
 
         $this->assertSame(0, Student::query()->needsSupervisor()->count());
 
@@ -118,16 +111,15 @@ class NeedsSupervisorTest extends TestCase
             'role_id' => User::ROLE_COORDINATOR,
         ])->assertSessionHasNoErrors();
 
-        // The role change leaves supervisor_id and the roster row behind.
+        // The role change leaves supervisor_id behind.
         $this->assertDatabaseHas('students', ['id' => $student->id, 'supervisor_id' => $supervisor->id]);
-        $this->assertDatabaseHas('company_supervisors', ['company_id' => $company->id, 'user_id' => $supervisor->id]);
 
         $this->assertSame([$student->id], Student::query()->needsSupervisor()->pluck('id')->all());
 
         $this->api('GET', "/api/v1/assignments/{$student->id}", $admin)
             ->assertOk()
             ->assertJsonPath('data.needs_supervisor', true)
-            ->assertJsonPath('data.supervisor_on_roster', true);
+            ->assertJsonPath('data.supervisor_issue', 'not_a_supervisor');
 
         $item = collect($this->api('GET', '/api/v1/dashboard', $admin)->json('action_items'))->firstWhere('key', 'students_without_supervisor');
         $this->assertSame(1, $item['count']);
@@ -143,23 +135,21 @@ class NeedsSupervisorTest extends TestCase
         $response = $this->actingAs($coordinator)->get('/internship-assignment')->assertOk();
         $response->assertInertia(fn (Assert $page) => $page
             ->component('InternshipAssignment/Index')
-            ->has('students', 6)
+            ->has('students', 5)
             ->where('filters', ['needs_supervisor' => false]));
 
         $students = collect($response->viewData('page')['props']['students'])->keyBy('id');
 
         $expected = [
-            'no_company' => [null, false, null],
-            'no_supervisor' => [null, true, 'no_supervisor'],
-            'off_roster' => [false, true, 'not_on_roster'],
-            'on_roster' => [true, false, null],
-            'inactive_supervisor' => [true, true, 'inactive'],
-            'demoted' => [true, true, 'not_a_supervisor'],
+            'no_company' => [false, null],
+            'no_supervisor' => [true, 'no_supervisor'],
+            'supervised' => [false, null],
+            'inactive_supervisor' => [true, 'inactive'],
+            'demoted' => [true, 'not_a_supervisor'],
         ];
 
-        foreach ($expected as $name => [$onRoster, $needs, $issue]) {
+        foreach ($expected as $name => [$needs, $issue]) {
             $row = $students[$this->students[$name]->id];
-            $this->assertSame($onRoster, $row['supervisor_on_roster'], "{$name}: supervisor_on_roster");
             $this->assertSame($needs, $row['needs_supervisor'], "{$name}: needs_supervisor");
             $this->assertSame($issue, $row['supervisor_issue'], "{$name}: supervisor_issue");
             // Existing keys are untouched.
@@ -176,7 +166,7 @@ class NeedsSupervisorTest extends TestCase
         $this->actingAs($admin)->get('/internship-assignment?needs_supervisor=1')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->has('students', 6)
+                ->has('students', 5)
                 ->where('filters.needs_supervisor', true));
 
         $this->actingAs($admin)->get('/internship-assignment?needs_supervisor=0')
@@ -239,8 +229,8 @@ class NeedsSupervisorTest extends TestCase
 
             $this->assertSame([
                 'key' => 'students_without_supervisor',
-                'label' => '4 student(s) need a supervisor',
-                'count' => 4,
+                'label' => '3 student(s) need a supervisor',
+                'count' => 3,
                 'href' => route('internship-assignment.index', ['needs_supervisor' => 1]),
             ], $items['students_without_supervisor'], "role {$roleId}");
 
@@ -252,18 +242,17 @@ class NeedsSupervisorTest extends TestCase
 
     public function test_the_action_item_is_absent_when_nobody_needs_a_supervisor_and_for_supervisors(): void
     {
-        $company = Company::factory()->create(['slots' => 5]);
         $supervisor = $this->user(User::ROLE_SUPERVISOR);
-        $company->supervisors()->attach($supervisor->id);
-        Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
+        $student = $this->placed($supervisor);
         Student::factory()->create();
 
         $keys = collect($this->actingAs($this->user(User::ROLE_COORDINATOR))->get('/dashboard')->viewData('page')['props']['actionItems'])->pluck('key');
         $this->assertNotContains('students_without_supervisor', $keys);
         $this->assertContains('students_without_company', $keys);
 
-        // Drift the roster: a supervisor never gets the item.
-        $company->supervisors()->detach($supervisor->id);
+        // Clear the company's supervisor: a supervisor never gets the item.
+        $student->company->update(['supervisor_id' => null]);
+        $student->update(['supervisor_id' => null]);
         $keys = collect($this->actingAs($supervisor)->get('/dashboard')->viewData('page')['props']['actionItems'])->pluck('key');
         $this->assertNotContains('students_without_supervisor', $keys);
     }
@@ -277,15 +266,15 @@ class NeedsSupervisorTest extends TestCase
 
         $rows = collect($this->api('GET', '/api/v1/assignments?per_page=50', $coordinator)->assertOk()->json('data'))->keyBy('id');
 
-        $this->assertCount(6, $rows);
+        $this->assertCount(5, $rows);
         foreach ($this->students as $name => $student) {
             $this->assertSame(in_array($student->id, $this->flagged(), true), $rows[$student->id]['needs_supervisor'], $name);
         }
 
-        $this->api('GET', "/api/v1/assignments/{$this->students['off_roster']->id}", $coordinator)
+        $this->api('GET', "/api/v1/assignments/{$this->students['inactive_supervisor']->id}", $coordinator)
             ->assertOk()
             ->assertJsonPath('data.needs_supervisor', true)
-            ->assertJsonPath('data.supervisor_on_roster', false);
+            ->assertJsonPath('data.supervisor_issue', 'inactive');
     }
 
     public function test_api_needs_supervisor_filter_matches_the_flag(): void
@@ -296,11 +285,11 @@ class NeedsSupervisorTest extends TestCase
         foreach (['1', 'true'] as $value) {
             $response = $this->api('GET', "/api/v1/assignments?needs_supervisor={$value}", $admin)->assertOk();
             $this->assertEqualsCanonicalizing($this->flagged(), collect($response->json('data'))->pluck('id')->all());
-            $response->assertJsonPath('meta.total', 4);
+            $response->assertJsonPath('meta.total', 3);
         }
 
         foreach (['0', 'false', ''] as $value) {
-            $this->api('GET', "/api/v1/assignments?needs_supervisor={$value}", $admin)->assertOk()->assertJsonPath('meta.total', 6);
+            $this->api('GET', "/api/v1/assignments?needs_supervisor={$value}", $admin)->assertOk()->assertJsonPath('meta.total', 5);
         }
 
         // ANDed with the other filters; supervisor_id=none is unchanged.
@@ -342,8 +331,8 @@ class NeedsSupervisorTest extends TestCase
 
             $this->assertSame([
                 'key' => 'students_without_supervisor',
-                'label' => '4 student(s) need a supervisor',
-                'count' => 4,
+                'label' => '3 student(s) need a supervisor',
+                'count' => 3,
                 'target' => ['screen' => 'students', 'params' => ['needs_supervisor' => 1]],
             ], $item);
             $this->assertStringContainsString('"params":{"needs_supervisor":1}', $response->getContent());

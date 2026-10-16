@@ -165,8 +165,7 @@ class NotificationTriggersTest extends TestCase
     {
         $coordinator = User::factory()->create(['role_id' => 2]);
         $supervisor = User::factory()->create(['role_id' => 3]);
-        $company = Company::factory()->create(['slots' => 5]);
-        $company->supervisors()->attach($supervisor->id);
+        $company = Company::factory()->create(['slots' => 5, 'supervisor_id' => $supervisor->id]);
         $student = $this->studentWithUser();
 
         $this->actingAs($coordinator)->patch("/internship-assignment/{$student->id}", [
@@ -176,7 +175,6 @@ class NotificationTriggersTest extends TestCase
             'course' => $student->course,
             'section' => $student->section,
             'company_id' => $company->id,
-            'supervisor_id' => $supervisor->id,
             'internship_status' => 'ongoing',
         ]);
 

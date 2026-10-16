@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\ListReportReviewsRequest;
 use App\Http\Resources\ReportReviewResource;
 use App\Models\InternshipReport;
 use App\Services\InternshipReportService;
+use App\Support\TermContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
@@ -44,6 +45,7 @@ class ReportReviewController extends Controller
         $page = InternshipReport::query()
             ->with(self::RELATIONS)
             ->visibleTo($request->user())
+            ->inTerm(TermContext::id($request))
             ->when($request->type(), fn (Builder $query, string $type) => $query->where('type', $type))
             ->when($request->status(), fn (Builder $query, string $status) => $query->where('status', $status))
             ->when($request->studentId(), fn (Builder $query, int $id) => $query->where('student_id', $id))

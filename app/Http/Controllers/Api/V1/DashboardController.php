@@ -10,6 +10,7 @@ use App\Models\Notification;
 use App\Models\User;
 use App\Services\DashboardAnalyticsService;
 use App\Services\NotificationService;
+use App\Support\TermContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -54,6 +55,10 @@ class DashboardController extends Controller
                 : null,
             'action_items' => $isStaffOrSupervisor ? $this->analytics->appActionItems($user) : [],
             'recent_activity' => $isStaffOrSupervisor ? $this->recentActivity($request, $user) : [],
+            // {id, label, is_current}: the term the figures cover (the
+            // `term_id` asked for, the current term by default, a
+            // Student's own term); null when no term exists.
+            'term' => TermContext::term($request)?->summary(),
         ]);
     }
 
@@ -75,6 +80,7 @@ class DashboardController extends Controller
             'internship' => [
                 'status' => $summary['internship_status'],
                 'can_submit' => $student->canSubmitWork(),
+                'term' => $student->term?->summary(),
                 'company' => $summary['company']
                     ? ['id' => $summary['company']->id, 'name' => $summary['company']->company_name]
                     : null,

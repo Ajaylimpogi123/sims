@@ -15,10 +15,12 @@ use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
- * When Internship Assignment gives a student a (new) supervisor, that
- * supervisor is told about the student's attendance and reports still
- * awaiting review: submissions made while nobody (or someone else)
- * supervised the student only reached whoever was responsible then.
+ * When a student gets a (new) supervisor — Company Management sets their
+ * company's Company Supervisor, or Internship Assignment moves them to a
+ * company with one — that supervisor is told about the student's
+ * attendance and reports still awaiting review: submissions made while
+ * nobody (or someone else) supervised the student only reached whoever was
+ * responsible then.
  */
 class SupervisorCatchUpNotificationsTest extends TestCase
 {
@@ -40,17 +42,22 @@ class SupervisorCatchUpNotificationsTest extends TestCase
         return User::factory()->create($attributes + ['role_id' => $roleId, 'status' => 'active']);
     }
 
-    private function rosterSupervisor(array $attributes = []): User
+    private function supervisor(array $attributes = []): User
     {
-        $supervisor = $this->user(User::ROLE_SUPERVISOR, $attributes);
-        $this->company->supervisors()->attach($supervisor->id);
-
-        return $supervisor;
+        return $this->user(User::ROLE_SUPERVISOR, $attributes);
     }
 
+    /**
+     * A student at the company; a given supervisor_id becomes the
+     * company's supervisor too.
+     */
     private function student(array $attributes = []): Student
     {
         $user = $this->user(User::ROLE_STUDENT, ['name' => 'Juan Dela Cruz']);
+
+        if (isset($attributes['supervisor_id'])) {
+            $this->company->update(['supervisor_id' => $attributes['supervisor_id']]);
+        }
 
         return Student::factory()->create($attributes + [
             'user_id' => $user->id,
@@ -70,20 +77,34 @@ class SupervisorCatchUpNotificationsTest extends TestCase
             'course' => $student->course,
             'section' => $student->section,
             'company_id' => $student->company_id,
-            'supervisor_id' => $student->supervisor_id,
             'internship_status' => $student->internship_status,
             'internship_schedule' => $student->internship_schedule,
         ], $overrides);
     }
 
-    private function webAssign(Student $student, ?int $supervisorId, array $overrides = []): TestResponse
+    private function companyPayload(?int $supervisorId): array
     {
-        $coordinator = $this->user(User::ROLE_COORDINATOR);
+        $this->company->refresh();
 
-        return $this->actingAs($coordinator)->patch(
-            "/internship-assignment/{$student->id}",
-            $this->payload($student, ['supervisor_id' => $supervisorId] + $overrides),
-        );
+        return [
+            'company_name' => $this->company->company_name,
+            'slots' => $this->company->slots,
+            'supervisor_id' => $supervisorId,
+        ];
+    }
+
+    /** Company Management sets the company's supervisor (website). */
+    private function webAssign(?int $supervisorId): TestResponse
+    {
+        return $this->actingAs($this->user(User::ROLE_COORDINATOR))
+            ->patch("/company-management/{$this->company->id}", $this->companyPayload($supervisorId));
+    }
+
+    /** Internship Assignment saves the student (website). */
+    private function webSave(Student $student, array $overrides = []): TestResponse
+    {
+        return $this->actingAs($this->user(User::ROLE_COORDINATOR))
+            ->patch("/internship-assignment/{$student->id}", $this->payload($student, $overrides));
     }
 
     /**
@@ -130,9 +151,9 @@ class SupervisorCatchUpNotificationsTest extends TestCase
     {
         $student = $this->student();
         $items = $this->backlog($student);
-        $supervisor = $this->rosterSupervisor();
+        $supervisor = $this->supervisor();
 
-        $this->webAssign($student, $supervisor->id)->assertSessionHasNoErrors();
+        $this->webAssign($supervisor->id)->assertSessionHasNoErrors();
 
         $attendance = $this->notificationsOf($supervisor, 'attendance_pending');
         $this->assertSame(
@@ -160,9 +181,9 @@ class SupervisorCatchUpNotificationsTest extends TestCase
     {
         $student = $this->student();
         $items = $this->backlog($student);
-        $supervisor = $this->rosterSupervisor();
+        $supervisor = $this->supervisor();
 
-        $this->webAssign($student, $supervisor->id);
+        $this->webAssign($supervisor->id);
 
         $service = app(NotificationService::class);
 
@@ -189,8 +210,8 @@ class SupervisorCatchUpNotificationsTest extends TestCase
         app(NotificationService::class)->attendanceSubmitted($attendance->load('student.user', 'student.supervisor'), 'time_in');
         $this->assertSame([$admin->id], Notification::where('type', 'attendance_pending')->pluck('user_id')->all());
 
-        $supervisor = $this->rosterSupervisor();
-        $this->webAssign($student, $supervisor->id)->assertSessionHasNoErrors();
+        $supervisor = $this->supervisor();
+        $this->webAssign($supervisor->id)->assertSessionHasNoErrors();
 
         $this->assertSame([$attendance->id], $this->notificationsOf($supervisor, 'attendance_pending')->pluck('data.attendance_id')->all());
         $this->assertCount(1, $this->notificationsOf($admin, 'attendance_pending'), 'The admin is not notified again.');
@@ -200,7 +221,7 @@ class SupervisorCatchUpNotificationsTest extends TestCase
     {
         $student = $this->student();
         $items = $this->backlog($student);
-        $supervisor = $this->rosterSupervisor();
+        $supervisor = $this->supervisor();
         $service = app(NotificationService::class);
 
         // Unread for the time-in and the report; read for the time-out.
@@ -209,7 +230,7 @@ class SupervisorCatchUpNotificationsTest extends TestCase
         $service->notifyAttendanceSubmitted($supervisor, $items['time_out']->load('student.user'), 'time_out')
             ->update(['read_at' => now()]);
 
-        $this->webAssign($student, $supervisor->id)->assertSessionHasNoErrors();
+        $this->webAssign($supervisor->id)->assertSessionHasNoErrors();
 
         $this->assertSame(
             [$items['time_in']->id, $items['time_out']->id, $items['time_out']->id],
@@ -220,12 +241,12 @@ class SupervisorCatchUpNotificationsTest extends TestCase
 
     public function test_switching_supervisors_catches_up_only_the_new_one(): void
     {
-        $old = $this->rosterSupervisor();
+        $old = $this->supervisor();
         $student = $this->student(['supervisor_id' => $old->id]);
         $this->backlog($student);
-        $new = $this->rosterSupervisor();
+        $new = $this->supervisor();
 
-        $this->webAssign($student, $new->id)->assertSessionHasNoErrors();
+        $this->webAssign($new->id)->assertSessionHasNoErrors();
 
         $this->assertCount(2, $this->notificationsOf($new, 'attendance_pending'));
         $this->assertCount(1, $this->notificationsOf($new, 'report_submitted'));
@@ -235,14 +256,14 @@ class SupervisorCatchUpNotificationsTest extends TestCase
 
     public function test_keeping_the_same_supervisor_sends_no_catch_up(): void
     {
-        $supervisor = $this->rosterSupervisor();
+        $supervisor = $this->supervisor();
         $student = $this->student(['supervisor_id' => $supervisor->id]);
         $this->backlog($student);
 
         // An assignment change (status) that keeps the supervisor.
-        $this->webAssign($student, $supervisor->id, ['internship_status' => 'completed'])->assertSessionHasNoErrors();
+        $this->webSave($student, ['internship_status' => 'completed'])->assertSessionHasNoErrors();
         // A profile-only edit.
-        $this->webAssign($student, $supervisor->id, ['course' => 'BSCS'])->assertSessionHasNoErrors();
+        $this->webSave($student, ['course' => 'BSCS'])->assertSessionHasNoErrors();
 
         $this->assertCount(1, $this->notificationsOf($supervisor, 'assignment_updated'));
         $this->assertCount(0, $this->notificationsOf($supervisor, 'attendance_pending'));
@@ -251,39 +272,48 @@ class SupervisorCatchUpNotificationsTest extends TestCase
 
     public function test_clearing_the_supervisor_sends_no_catch_up(): void
     {
-        $supervisor = $this->rosterSupervisor();
+        $supervisor = $this->supervisor();
         $student = $this->student(['supervisor_id' => $supervisor->id]);
         $this->backlog($student);
 
-        $this->webAssign($student, null)->assertSessionHasNoErrors();
+        $this->webAssign(null)->assertSessionHasNoErrors();
 
         $this->assertSame(0, Notification::whereIn('type', ['attendance_pending', 'report_submitted'])->count());
     }
 
-    public function test_only_this_students_items_are_included(): void
+    public function test_moving_a_student_to_a_supervised_company_catches_up_only_their_items(): void
     {
         $student = $this->student();
+        $items = $this->backlog($student);
+        // Left behind at the unsupervised company.
         $other = $this->student();
         $this->backlog($other);
-        $supervisor = $this->rosterSupervisor();
 
-        $this->webAssign($student, $supervisor->id)->assertSessionHasNoErrors();
+        $supervisor = $this->supervisor();
+        $target = Company::factory()->create(['slots' => 10, 'status' => 'active', 'supervisor_id' => $supervisor->id]);
 
-        $this->assertSame(0, Notification::where('user_id', $supervisor->id)->whereIn('type', ['attendance_pending', 'report_submitted'])->count());
+        $this->webSave($student, ['company_id' => $target->id])->assertSessionHasNoErrors();
+
+        $this->assertSame($supervisor->id, $student->fresh()->supervisor_id);
+        $this->assertSame(
+            [$items['time_out']->id, $items['time_in']->id],
+            $this->notificationsOf($supervisor, 'attendance_pending')->pluck('data.attendance_id')->all(),
+        );
+        $this->assertSame([$items['report']->id], $this->notificationsOf($supervisor, 'report_submitted')->pluck('data.report_id')->all());
     }
 
     public function test_an_inactive_or_non_supervisor_account_gets_no_catch_up(): void
     {
         $service = app(NotificationService::class);
 
-        $inactive = $this->rosterSupervisor(['status' => 'inactive']);
+        $inactive = $this->supervisor(['status' => 'inactive']);
         $student = $this->student(['supervisor_id' => $inactive->id]);
         $this->backlog($student);
 
         $this->assertSame(0, $service->supervisorCatchUp($student->fresh()));
 
         // Supervisor role removed after the assignment.
-        $demoted = $this->rosterSupervisor();
+        $demoted = $this->supervisor();
         $demoted->update(['role_id' => User::ROLE_COORDINATOR]);
         $student->update(['supervisor_id' => $demoted->id]);
 
@@ -295,17 +325,18 @@ class SupervisorCatchUpNotificationsTest extends TestCase
     {
         $student = $this->student();
         $items = $this->backlog($student);
-        $supervisor = $this->rosterSupervisor();
+        $supervisor = $this->supervisor();
         $coordinator = $this->user(User::ROLE_COORDINATOR);
 
         $this->withHeaders([
             'Accept' => 'application/json',
             'Authorization' => 'Bearer '.$coordinator->createToken('test')->plainTextToken,
-        ])->patchJson("/api/v1/assignments/{$student->id}", $this->payload($student, ['supervisor_id' => $supervisor->id]))
+        ])->patchJson("/api/v1/companies/{$this->company->id}", $this->companyPayload($supervisor->id))
             ->assertOk()
-            ->assertJsonPath('student.supervisor.id', $supervisor->id)
-            ->assertJsonPath('student.needs_supervisor', false);
+            ->assertJsonPath('company.supervisor.id', $supervisor->id)
+            ->assertJsonPath('students_reassigned', 1);
 
+        $this->assertSame($supervisor->id, $student->fresh()->supervisor_id);
         $this->assertSame(
             [$items['time_out']->id, $items['time_in']->id],
             $this->notificationsOf($supervisor, 'attendance_pending')->pluck('data.attendance_id')->all(),
@@ -317,10 +348,11 @@ class SupervisorCatchUpNotificationsTest extends TestCase
     {
         $student = $this->student();
         $this->backlog($student);
-        $offRoster = $this->user(User::ROLE_SUPERVISOR);
+        $inactive = $this->supervisor(['status' => 'inactive']);
 
-        $this->webAssign($student, $offRoster->id)->assertSessionHasErrors('supervisor_id');
+        $this->webAssign($inactive->id)->assertSessionHasErrors('supervisor_id');
 
-        $this->assertSame(0, Notification::where('user_id', $offRoster->id)->count());
+        $this->assertNull($student->fresh()->supervisor_id);
+        $this->assertSame(0, Notification::where('user_id', $inactive->id)->count());
     }
 }

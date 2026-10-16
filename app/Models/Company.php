@@ -12,10 +12,10 @@ class Company extends Model
     protected $fillable = [
         'company_name',
         'address',
-        'contact_person',
         'contact_number',
         'email',
         'industry',
+        'supervisor_id',
         'slots',
         'status',
     ];
@@ -30,8 +30,12 @@ class Company extends Model
         return $this->hasMany(Evaluation::class);
     }
 
-    public function supervisors()
+    /**
+     * The Company Supervisor: every student placed here is supervised by
+     * them (students.supervisor_id follows companies.supervisor_id).
+     */
+    public function supervisor()
     {
-        return $this->belongsToMany(User::class, 'company_supervisors')->withTimestamps();
+        return $this->belongsTo(User::class, 'supervisor_id');
     }
 }

@@ -9,6 +9,7 @@ use App\Http\Resources\ApprovalResource;
 use App\Models\Attendance;
 use App\Models\User;
 use App\Services\AttendanceService;
+use App\Support\TermContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -95,7 +96,7 @@ class ApprovalController extends Controller
      */
     private function pending(User $user): Builder
     {
-        return Attendance::query()->awaitingReview()->visibleTo($user);
+        return Attendance::query()->awaitingReview()->visibleTo($user)->inTerm(TermContext::id());
     }
 
     private function authorizeReview(Request $request, Attendance $attendance): void

@@ -5,8 +5,11 @@ import { AlertTriangle } from "lucide-react";
 import { Button } from "@/Components/ui/button";
 import { DataTable } from "./Partials/DataTable";
 import { getColumns } from "./Partials/Columns";
+import useTerm from "@/hooks/useTerm";
 
 export default function Index({ students, companies, filters }) {
+    const { canWrite } = useTerm();
+
     // `students` is always the full list; the "Needs supervisor" filter is
     // applied here, seeded from ?needs_supervisor=1 (the dashboard's link).
     const [needsSupervisorOnly, setNeedsSupervisorOnly] = useState(
@@ -14,8 +17,8 @@ export default function Index({ students, companies, filters }) {
     );
 
     const columns = useMemo(
-        () => getColumns(companies, { needsSupervisorOnly }),
-        [companies, needsSupervisorOnly],
+        () => getColumns(companies, { needsSupervisorOnly, canWrite }),
+        [companies, needsSupervisorOnly, canWrite],
     );
 
     const studentData = useMemo(
@@ -37,6 +40,8 @@ export default function Index({ students, companies, filters }) {
                 internship_status: student.internship_status,
                 internship_schedule: student.internship_schedule,
                 required_hours: student.required_hours ?? null,
+                term_id: student.term_id ?? student.term?.id ?? null,
+                term_label: student.term?.label ?? null,
             })),
         [students],
     );

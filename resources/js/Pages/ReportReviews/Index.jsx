@@ -1,4 +1,5 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import AttachmentLink from "@/Components/AttachmentLink";
 import { Head } from "@inertiajs/react";
 import { Button } from "@/Components/ui/button";
 import {
@@ -14,6 +15,7 @@ import { formatLongDate } from "@/lib/dates";
 import ExportButtons from "@/Components/ExportButtons";
 import { usePage } from "@inertiajs/react";
 import useHighlightRow from "@/hooks/useHighlightRow";
+import useTerm from "@/hooks/useTerm";
 
 const SUPERVISOR_ROLE_ID = 3;
 
@@ -56,7 +58,9 @@ function capitalize(value) {
 
 export default function Index({ reports }) {
     const { auth } = usePage().props;
-    const canReview = auth?.user?.role_id !== SUPERVISOR_ROLE_ID;
+    const { canWrite } = useTerm();
+    // Archived terms are read-only (except for Admins); see useTerm.
+    const canReview = auth?.user?.role_id !== SUPERVISOR_ROLE_ID && canWrite;
     const { getRowProps } = useHighlightRow();
 
     const exportData = reports.map((report) => ({
@@ -134,17 +138,15 @@ export default function Index({ reports }) {
                                                 </TableCell>
                                                 <TableCell>
                                                     {report.attachment_path ? (
-                                                        <a
+                                                        <AttachmentLink
                                                             href={route(
                                                                 "report-reviews.attachment",
                                                                 report.id,
                                                             )}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="text-blue-600 underline"
-                                                        >
-                                                            View
-                                                        </a>
+                                                            name={
+                                                                report.attachment_original_name
+                                                            }
+                                                        />
                                                     ) : (
                                                         "-"
                                                     )}

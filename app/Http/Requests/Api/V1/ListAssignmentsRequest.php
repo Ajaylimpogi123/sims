@@ -30,6 +30,9 @@ class ListAssignmentsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // The term to list (App\Support\TermContext); the current one
+            // when omitted. Ignored for Students (always their own term).
+            'term_id' => ['bail', 'sometimes', 'nullable', 'integer', 'min:1', 'exists:terms,id'],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'internship_status' => ['sometimes', 'nullable', 'string', Rule::in(array_keys(InternshipAssignmentService::STATUSES))],
             'status' => ['sometimes', 'nullable', 'string', 'in:active,inactive'],

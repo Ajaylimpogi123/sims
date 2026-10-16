@@ -84,7 +84,7 @@ export default function RegistrationForm({ roles }) {
                             id="role_id"
                             name="role_id"
                             value={data.role_id}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            className="mt-1 block w-full rounded-lg border-input text-sm shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 focus:border-primary focus:ring-[3px] focus:ring-primary/20"
                             onChange={(e) => setData("role_id", e.target.value)}
                             required
                         >

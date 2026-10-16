@@ -6,6 +6,7 @@ use App\Exceptions\AttendanceRuleException;
 use App\Models\Attendance;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\TermGuard;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -89,7 +90,7 @@ class AttendanceService
      */
     public static function refusals(Student $student, ?Attendance $today): array
     {
-        $closed = $student->canSubmitWork() ? null : self::NOT_ONGOING_MESSAGE;
+        $closed = $student->submissionRefusal(self::NOT_ONGOING_MESSAGE);
 
         return [
             'time_in' => $closed ?? self::timeInRefusal($today),
@@ -254,6 +255,10 @@ class AttendanceService
      */
     private function review(Attendance $attendance, string $leg, string $decision, ?string $reason = null): Attendance
     {
+        // Past terms are read-only but for the Administrator (the signed-in
+        // reviewer).
+        TermGuard::ensureWritable($attendance->student);
+
         DB::transaction(function () use ($attendance, $leg, $decision, $reason) {
             $current = Attendance::query()->lockForUpdate()->findOrFail($attendance->id);
 
@@ -309,6 +314,8 @@ class AttendanceService
      */
     public function createEntry(Student $student, User $actor, array $entry): Attendance
     {
+        TermGuard::ensureWritable($student, $actor);
+
         try {
             return $student->attendances()->create($this->entryAttributes($entry, $actor));
         } catch (UniqueConstraintViolationException) {
@@ -334,6 +341,8 @@ class AttendanceService
      */
     public function updateEntry(Attendance $attendance, User $actor, array $entry): Attendance
     {
+        TermGuard::ensureWritable($attendance->student, $actor);
+
         $attributes = $this->entryAttributes($entry, $actor);
 
         try {
@@ -378,6 +387,8 @@ class AttendanceService
      */
     public function deleteEntry(Attendance $attendance): void
     {
+        TermGuard::ensureWritable($attendance->student);
+
         $photoPaths = DB::transaction(function () use ($attendance) {
             $current = Attendance::query()->lockForUpdate()->findOrFail($attendance->id);
 
@@ -470,8 +481,8 @@ class AttendanceService
     private function submitLeg(Student $student, string $leg, UploadedFile $photo, array $capture, callable $refusal, callable $apply): Attendance
     {
         // Unlocked first check: an obvious refusal never writes a file.
-        if (! $student->canSubmitWork()) {
-            throw new AttendanceRuleException(self::NOT_ONGOING_MESSAGE);
+        if ($closed = $student->submissionRefusal(self::NOT_ONGOING_MESSAGE)) {
+            throw new AttendanceRuleException($closed);
         }
 
         if ($reason = $refusal($this->todayRecord($student))) {
@@ -486,8 +497,8 @@ class AttendanceService
                 $current = Student::query()->lockForUpdate()->find($student->id)
                     ?? throw (new ModelNotFoundException)->setModel(Student::class, [$student->id]);
 
-                if (! $current->canSubmitWork()) {
-                    throw new AttendanceRuleException(self::NOT_ONGOING_MESSAGE);
+                if ($closed = $current->submissionRefusal(self::NOT_ONGOING_MESSAGE)) {
+                    throw new AttendanceRuleException($closed);
                 }
 
                 $date = today()->toDateString();

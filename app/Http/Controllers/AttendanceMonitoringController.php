@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Services\AttendanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use App\Support\TermContext;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,6 +28,7 @@ class AttendanceMonitoringController extends Controller
                 'attendances' => fn ($query) => $query->orderByDesc('date'),
             ])
             ->monitoredBy(Auth::user())
+            ->inTerm(TermContext::id())
             ->get();
 
         return Inertia::render('AttendanceMonitoring/Index', [

@@ -20,9 +20,13 @@ class ReportRuleException extends RuntimeException
 
     public string $apiCode = self::NOT_PENDING;
 
-    public static function notOngoing(): self
+    /**
+     * The student can't submit: their internship isn't ongoing, or (with
+     * Student::TERM_ENDED_MESSAGE) their term has ended.
+     */
+    public static function notOngoing(?string $message = null): self
     {
-        $exception = new self(InternshipReportService::NOT_ONGOING_MESSAGE);
+        $exception = new self($message ?? InternshipReportService::NOT_ONGOING_MESSAGE);
         $exception->apiCode = self::RULE;
 
         return $exception;

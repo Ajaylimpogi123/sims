@@ -260,26 +260,26 @@ class RequiredHoursBeforeOngoingTest extends TestCase
 
     public function test_supervisor_issue_follows_the_precedence_and_matches_the_scope(): void
     {
-        $company = Company::factory()->create(['slots' => 10]);
-        $other = Company::factory()->create(['slots' => 10]);
         $admin = $this->user(User::ROLE_ADMIN);
 
         // Inactive AND demoted: not_a_supervisor wins.
         $demotedInactive = $this->user(User::ROLE_SUPERVISOR, ['status' => 'inactive']);
-        // Inactive AND off this company's roster: not_on_roster wins.
-        $offRosterInactive = $this->user(User::ROLE_SUPERVISOR, ['status' => 'inactive']);
         $inactive = $this->user(User::ROLE_SUPERVISOR, ['status' => 'inactive']);
         $active = $this->user(User::ROLE_SUPERVISOR);
-        $company->supervisors()->attach([$demotedInactive->id, $inactive->id, $active->id]);
-        $other->supervisors()->attach($offRosterInactive->id);
+
+        // Each student at a company whose Company Supervisor is theirs.
+        $placed = function (?User $supervisor): Student {
+            $company = Company::factory()->create(['slots' => 10, 'supervisor_id' => $supervisor?->id]);
+
+            return Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $supervisor?->id]);
+        };
 
         $students = [
-            'not_a_supervisor' => Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $demotedInactive->id]),
-            'not_on_roster' => Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $offRosterInactive->id]),
-            'inactive' => Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $inactive->id]),
-            'no_supervisor' => Student::factory()->create(['company_id' => $company->id]),
+            'not_a_supervisor' => $placed($demotedInactive),
+            'inactive' => $placed($inactive),
+            'no_supervisor' => $placed(null),
         ];
-        $fine = Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $active->id]);
+        $fine = $placed($active);
         // No company: never flagged, even with an inactive supervisor.
         $unplaced = Student::factory()->create(['supervisor_id' => $inactive->id]);
         $demotedInactive->update(['role_id' => User::ROLE_COORDINATOR]);
@@ -306,7 +306,7 @@ class RequiredHoursBeforeOngoingTest extends TestCase
         $this->assertSame($flagged, $filtered);
 
         $item = collect($this->api('GET', '/api/v1/dashboard', $admin)->json('action_items'))->firstWhere('key', 'students_without_supervisor');
-        $this->assertSame(4, $item['count']);
+        $this->assertSame(3, $item['count']);
 
         $this->actingAs($admin)->get('/internship-assignment')
             ->assertInertia(fn (Assert $page) => $page
@@ -318,9 +318,8 @@ class RequiredHoursBeforeOngoingTest extends TestCase
 
     public function test_reactivating_the_supervisor_clears_the_flag(): void
     {
-        $company = Company::factory()->create(['slots' => 10]);
         $supervisor = $this->user(User::ROLE_SUPERVISOR, ['status' => 'inactive']);
-        $company->supervisors()->attach($supervisor->id);
+        $company = Company::factory()->create(['slots' => 10, 'supervisor_id' => $supervisor->id]);
         $student = Student::factory()->create(['company_id' => $company->id, 'supervisor_id' => $supervisor->id]);
 
         $this->assertSame([$student->id], Student::query()->needsSupervisor()->pluck('id')->all());

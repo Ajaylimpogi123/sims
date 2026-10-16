@@ -37,7 +37,7 @@ export default function FilterBar({ filters, filterOptions, roleId }) {
                 <select
                     id="filter_company"
                     value={data.company_id}
-                    className="mt-1 block w-full min-w-[10rem] rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    className="mt-1 block w-full min-w-[10rem] rounded-lg border-input text-sm shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 focus:border-primary focus:ring-[3px] focus:ring-primary/20"
                     onChange={(e) => {
                         setData((prev) => ({ ...prev, company_id: e.target.value }));
                         apply({ company_id: e.target.value });
@@ -58,7 +58,7 @@ export default function FilterBar({ filters, filterOptions, roleId }) {
                     <select
                         id="filter_supervisor"
                         value={data.supervisor_id}
-                        className="mt-1 block w-full min-w-[10rem] rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        className="mt-1 block w-full min-w-[10rem] rounded-lg border-input text-sm shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 focus:border-primary focus:ring-[3px] focus:ring-primary/20"
                         onChange={(e) => {
                             setData((prev) => ({
                                 ...prev,
@@ -82,7 +82,7 @@ export default function FilterBar({ filters, filterOptions, roleId }) {
                 <select
                     id="filter_student"
                     value={data.student_id}
-                    className="mt-1 block w-full min-w-[10rem] rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    className="mt-1 block w-full min-w-[10rem] rounded-lg border-input text-sm shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-foreground/25 focus:border-primary focus:ring-[3px] focus:ring-primary/20"
                     onChange={(e) => {
                         setData((prev) => ({ ...prev, student_id: e.target.value }));
                         apply({ student_id: e.target.value });

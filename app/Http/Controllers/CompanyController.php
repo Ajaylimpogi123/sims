@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
-use App\Models\User;
 use App\Services\CompanyManagementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,21 +19,22 @@ class CompanyController extends Controller
 
     public function index(Request $request): Response
     {
-        $companies = $this->companies->query($request->only(['search', 'status']))
-            ->with('supervisors:id,name,email')
-            ->get();
+        $companies = $this->companies->query($request->only(['search', 'status']))->get();
 
-        $availableSupervisors = $this->companies->supervisors()->get(['id', 'name', 'email']);
+        // Adds supervisor_issue (and the delete blocker) to each company.
+        $this->companies->loadDetails($companies);
 
         return Inertia::render('CompanyManagement/Index', [
             'companies' => $companies,
-            'availableSupervisors' => $availableSupervisors,
+            'supervisorOptions' => $this->companies->supervisorOptions(),
             'filters' => $request->only(['search', 'status']),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $this->companies->prepare($request);
+
         $this->companies->create($request->validate($this->companies->rules()));
 
         return redirect()->route('company-management.index')
@@ -43,10 +43,12 @@ class CompanyController extends Controller
 
     public function update(Request $request, Company $company): RedirectResponse
     {
-        $this->companies->update($company, $request->validate($this->companies->rules($company)));
+        $this->companies->prepare($request);
+
+        $moved = $this->companies->update($company, $request->validate($this->companies->rules($company)));
 
         return redirect()->route('company-management.index')
-            ->with('success', 'Company updated successfully.');
+            ->with('success', 'Company updated successfully.'.CompanyManagementService::movedMessage($moved, $company->load('supervisor')));
     }
 
     public function toggleStatus(Company $company): RedirectResponse
@@ -68,23 +70,5 @@ class CompanyController extends Controller
 
         return redirect()->route('company-management.index')
             ->with('success', 'Company deleted successfully.');
-    }
-
-    public function attachSupervisor(Request $request, Company $company): RedirectResponse
-    {
-        $validated = $request->validate($this->companies->attachRules());
-
-        $this->companies->attachSupervisor($company, (int) $validated['user_id']);
-
-        return redirect()->route('company-management.index')
-            ->with('success', 'Supervisor added to company roster.');
-    }
-
-    public function detachSupervisor(Company $company, User $user): RedirectResponse
-    {
-        $this->companies->detachSupervisor($company, $user);
-
-        return redirect()->route('company-management.index')
-            ->with('success', 'Supervisor removed from company roster.');
     }
 }
